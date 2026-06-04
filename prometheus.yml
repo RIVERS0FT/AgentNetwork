@@ -1,0 +1,53 @@
+# Agent Network — Prometheus 配置
+# 对应架构文档 第七节：Docker运行环境 / Runtime Metrics
+#
+# 服务端口说明:
+#   message-bus       :9000 → /metrics
+#   packet-monitor    :9100 → /metrics
+#   log-collector     :9200 → /metrics
+#   scout-a           :8000 → /metrics (容器内)
+#   scout-b           :8000 → /metrics (容器内)
+#   commander         :8000 → /metrics (容器内)
+#   analyst           :8000 → /metrics (容器内)
+#   server (host)     :8000 → /metrics
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # ── 消息总线 ──
+  - job_name: 'message-bus'
+    static_configs:
+      - targets: ['message-bus:9000']
+    metrics_path: '/metrics'
+
+  # ── 数据包监控 ──
+  - job_name: 'packet-monitor'
+    static_configs:
+      - targets: ['packet-monitor:9100']
+    metrics_path: '/metrics'
+
+  # ── 日志收集器 ──
+  - job_name: 'log-collector'
+    static_configs:
+      - targets: ['log-collector:9200']
+    metrics_path: '/metrics'
+
+  # ── Agent 容器 ──
+  - job_name: 'agents'
+    static_configs:
+      - targets:
+        - 'scout-a:8000'
+        - 'scout-b:8000'
+        - 'commander:8000'
+        - 'analyst:8000'
+    metrics_path: '/metrics'
+
+  # ── Web API 服务器 (host mode) ──
+  - job_name: 'server'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: '/metrics'
+    # 如果 host.docker.internal 不可用，注释掉此项

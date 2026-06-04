@@ -1,0 +1,74 @@
+{
+  "persisted_at": "2026-06-04T11:11:28",
+  "task_count": 3,
+  "tasks": [
+    {
+      "task_id": "task-a5f34eae",
+      "action": "探测敌军位置并分析地形",
+      "target_agent_id": "scout-001",
+      "priority": "NORMAL",
+      "status": "PENDING",
+      "created_at": "2026-06-04T11:11:27",
+      "scheduled_at": "2026-06-04T11:11:27",
+      "started_at": null,
+      "completed_at": null,
+      "params": {
+        "action": "探测敌军位置并分析地形"
+      },
+      "result": "{'agent_id': 'scout-001', 'agent_role': 'scout', 'task': '探测敌军位置并分析地形', 'steps': [{'step': '搜索敌军', 'tool': 'search', 'result': {'keyword': '敌军', 'results_count': 1, 'results': [{'source': '敌军', 'data': {'count': 500, 'position': '北纬35° 东经120°', 'type': '机械化步兵'}, 'relevance': 0.742896486754817}], 'search_time_ms': 201}}, {'step': '地形分析', 'tool': 'map', 'result': {'grid_size': '3x3', 'total_cells': 9, 'cell_types': {'河流': 1, '高地': 1, '丘陵': 1, '平原': 3, '森林': 1, '山地': 1, '城市': 1}, 'grid': {'A1': {'t",
+      "error": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "source_script": "test-battle",
+      "wait_time_ms": null,
+      "duration_ms": null
+    },
+    {
+      "task_id": "task-ae4cd533",
+      "action": "接收并分析情报报告",
+      "target_agent_id": "commander-001",
+      "priority": "NORMAL",
+      "status": "PENDING",
+      "created_at": "2026-06-04T11:11:27",
+      "scheduled_at": "2026-06-04T11:11:27",
+      "started_at": null,
+      "completed_at": null,
+      "params": {
+        "action": "接收并分析情报报告"
+      },
+      "result": "{'agent_id': 'commander-001', 'agent_role': 'commander', 'task': 'intel_received', 'status': 'completed', 'output': '情报已接收并存储: ✅ 低风险 — 区域安全，可执行推进方案', 'intel_report': {'enemy_forces': {'count': 500, 'position': '北纬35° 东经120°', 'type': '机械化步兵'}, 'terrain_analysis': {'河流': 1, '高地': 1, '丘陵': 1, '平原': 3, '森林': 1, '山地': 1, '城市': 1}, 'total_cells_scanned': 9, 'recommendation': '✅ 低风险 — 区域安全，可执行推进方案'}}",
+      "error": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "source_script": "test-battle",
+      "wait_time_ms": null,
+      "duration_ms": null
+    },
+    {
+      "task_id": "task-a0655f44",
+      "action": "制定攻击方案并下达指令",
+      "target_agent_id": "commander-001",
+      "priority": "NORMAL",
+      "status": "PENDING",
+      "created_at": "2026-06-04T11:11:27",
+      "scheduled_at": "2026-06-04T11:11:27",
+      "started_at": null,
+      "completed_at": null,
+      "params": {
+        "action": "制定攻击方案并下达指令"
+      },
+      "result": "{'agent_id': 'commander-001', 'agent_role': 'commander', 'task': '接收并分析情报报告', 'steps': [], 'output': '情报已分析: '}",
+      "error": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "source_script": "test-battle",
+      "wait_time_ms": null,
+      "duration_ms": null
+    }
+  ],
+  "affinity_map": {
+    "探测敌军位置并分析地形": "scout-001",
+    "接收并分析情报报告": "commander-001",
+    "制定攻击方案并下达指令": "commander-001"
+  }
+}

@@ -1,0 +1,144 @@
+# Agent 部署 — 侦察兵 (可横向扩展)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scout
+  namespace: agent-network
+  labels:
+    app: scout
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: scout
+  template:
+    metadata:
+      labels:
+        app: scout
+    spec:
+      containers:
+      - name: scout
+        image: agent-network:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "agent_server.py"]
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: AGENT_ROLE
+          value: "scout"
+        - name: PORT
+          value: "8000"
+        - name: LLM_MODEL
+          value: "deepseek-chat"
+        envFrom:
+        - configMapRef:
+            name: agent-network-config
+        - secretRef:
+            name: agent-network-secrets
+            optional: true
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /status
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      # 每个 Pod 有唯一的 AGENT_ID (通过 Downward API)
+      # 简化版本中，每个 Pod 使用 Pod 名作为 Agent 名
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: commander
+  namespace: agent-network
+  labels:
+    app: commander
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: commander
+  template:
+    metadata:
+      labels:
+        app: commander
+    spec:
+      containers:
+      - name: commander
+        image: agent-network:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "agent_server.py"]
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: AGENT_ROLE
+          value: "commander"
+        - name: PORT
+          value: "8000"
+        - name: LLM_MODEL
+          value: "deepseek-chat"
+        envFrom:
+        - configMapRef:
+            name: agent-network-config
+        - secretRef:
+            name: agent-network-secrets
+            optional: true
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analyst
+  namespace: agent-network
+  labels:
+    app: analyst
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analyst
+  template:
+    metadata:
+      labels:
+        app: analyst
+    spec:
+      containers:
+      - name: analyst
+        image: agent-network:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "agent_server.py"]
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: AGENT_ROLE
+          value: "analyst"
+        - name: PORT
+          value: "8000"
+        - name: LLM_MODEL
+          value: "deepseek-chat"
+        envFrom:
+        - configMapRef:
+            name: agent-network-config
+        - secretRef:
+            name: agent-network-secrets
+            optional: true
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10

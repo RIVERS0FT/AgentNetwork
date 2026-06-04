@@ -1,0 +1,16 @@
+# 共享配置 ConfigMap
+# 所有 Agent 容器通过 envFrom 引用
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-network-config
+  namespace: agent-network
+  labels:
+    app: agent-network
+data:
+  MESSAGE_BUS_URL: "http://message-bus:9000"
+  LOG_COLLECTOR_URL: "http://log-collector:9200"
+  PACKET_MONITOR_URL: "http://packet-monitor:9100"
+  PROMETHEUS_URL: "http://prometheus:9090"
+  ES_HOSTS: "http://elasticsearch:9200"

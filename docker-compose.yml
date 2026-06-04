@@ -1,0 +1,226 @@
+# Agent Network - 多 Agent Docker 编队
+# 对应架构文档完整部署
+#
+# 启动: docker-compose up -d
+# 查看: docker-compose logs -f
+# 停止: docker-compose down
+#
+# 服务一览:
+#   message-bus       :9000   消息总线
+#   packet-monitor    :9100   数据包监控
+#   log-collector     :9201   日志收集器 (host:9201 -> container:9200)
+#   elasticsearch     :9200   Elasticsearch 日志存储
+#   prometheus        :9090   监控指标收集
+#   grafana           :3000   监控面板 (admin/admin)
+#   scout-a           :8101   侦察兵 Alpha
+#   scout-b           :8102   侦察兵 Bravo
+#   commander         :8103   指挥官
+#   analyst           :8104   分析员
+
+version: "3.8"
+
+services:
+  # ═══════════════════════════════════════════════
+  # 消息总线
+  # ═══════════════════════════════════════════════
+  message-bus:
+    build: .
+    container_name: agent-bus
+    command: python message_bus.py
+    ports:
+      - "9000:9000"
+    environment:
+      - BUS_PORT=9000
+      - LOG_COLLECTOR_URL=http://log-collector:9200
+      - PACKET_MONITOR_URL=http://packet-monitor:9100
+    networks:
+      - agent-net
+
+  # ═══════════════════════════════════════════════
+  # 数据包监控 — 对应架构文档第九节
+  # ═══════════════════════════════════════════════
+  packet-monitor:
+    build: .
+    container_name: agent-packet-monitor
+    command: python packet_monitor_server.py
+    ports:
+      - "9100:9100"
+    environment:
+      - PACKET_MONITOR_PORT=9100
+      - PACKET_BUFFER_SIZE=10000
+      - MESSAGE_BUS_URL=http://message-bus:9000
+    depends_on:
+      - message-bus
+    networks:
+      - agent-net
+
+  # ═══════════════════════════════════════════════
+  # 日志收集器 — 对应架构文档第十节
+  # ═══════════════════════════════════════════════
+  log-collector:
+    build: .
+    container_name: agent-log-collector
+    command: python log_collector_server.py
+    ports:
+      - "9201:9200"     # host:9201 -> container:9200 (避免与 ES 冲突)
+    environment:
+      - LOG_COLLECTOR_PORT=9200
+      - LOG_BUFFER_SIZE=5000
+      - ES_ENABLED=false
+      - ES_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - message-bus
+    networks:
+      - agent-net
+
+  # ═══════════════════════════════════════════════
+  # Elasticsearch — 日志持久化存储
+  # ═══════════════════════════════════════════════
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+    container_name: agent-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      - agent-net
+
+  # ═══════════════════════════════════════════════
+  # Prometheus — 监控指标收集
+  # ═══════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: agent-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - agent-net
+
+  # ═══════════════════════════════════════════════
+  # Grafana — 监控面板
+  # ═══════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agent-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/dashboards/dashboard.yml:/etc/grafana/provisioning/dashboards/dashboard.yml:ro
+    depends_on:
+      - prometheus
+    networks:
+      - agent-net
+
+  # ═══════════════════════════════════════════════
+  # Agent 容器
+  # ═══════════════════════════════════════════════
+
+  # 侦察兵 A
+  scout-a:
+    build: .
+    container_name: agent-scout-a
+    command: python agent_server.py
+    ports:
+      - "8101:8000"
+    environment:
+      - AGENT_ID=scout-a
+      - AGENT_ROLE=scout
+      - AGENT_NAME=侦察兵-Alpha
+      - PORT=8000
+      - MESSAGE_BUS_URL=http://message-bus:9000
+      - LOG_COLLECTOR_URL=http://log-collector:9200
+      - PACKET_MONITOR_URL=http://packet-monitor:9100
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+    depends_on:
+      - message-bus
+    networks:
+      - agent-net
+
+  # 侦察兵 B
+  scout-b:
+    build: .
+    container_name: agent-scout-b
+    command: python agent_server.py
+    ports:
+      - "8102:8000"
+    environment:
+      - AGENT_ID=scout-b
+      - AGENT_ROLE=scout
+      - AGENT_NAME=侦察兵-Bravo
+      - PORT=8000
+      - MESSAGE_BUS_URL=http://message-bus:9000
+      - LOG_COLLECTOR_URL=http://log-collector:9200
+      - PACKET_MONITOR_URL=http://packet-monitor:9100
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+    depends_on:
+      - message-bus
+    networks:
+      - agent-net
+
+  # 指挥官
+  commander:
+    build: .
+    container_name: agent-commander
+    command: python agent_server.py
+    ports:
+      - "8103:8000"
+    environment:
+      - AGENT_ID=commander
+      - AGENT_ROLE=commander
+      - AGENT_NAME=指挥官
+      - PORT=8000
+      - MESSAGE_BUS_URL=http://message-bus:9000
+      - LOG_COLLECTOR_URL=http://log-collector:9200
+      - PACKET_MONITOR_URL=http://packet-monitor:9100
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+    depends_on:
+      - message-bus
+    networks:
+      - agent-net
+
+  # 分析员
+  analyst:
+    build: .
+    container_name: agent-analyst
+    command: python agent_server.py
+    ports:
+      - "8104:8000"
+    environment:
+      - AGENT_ID=analyst
+      - AGENT_ROLE=analyst
+      - AGENT_NAME=分析员
+      - PORT=8000
+      - MESSAGE_BUS_URL=http://message-bus:9000
+      - LOG_COLLECTOR_URL=http://log-collector:9200
+      - PACKET_MONITOR_URL=http://packet-monitor:9100
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+    depends_on:
+      - message-bus
+    networks:
+      - agent-net
+
+networks:
+  agent-net:
+    driver: bridge

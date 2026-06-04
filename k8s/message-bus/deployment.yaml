@@ -1,0 +1,62 @@
+# 消息总线 Deployment + Service
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-bus
+  namespace: agent-network
+  labels:
+    app: message-bus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: message-bus
+  template:
+    metadata:
+      labels:
+        app: message-bus
+    spec:
+      containers:
+      - name: message-bus
+        image: agent-network:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "message_bus.py"]
+        ports:
+        - containerPort: 9000
+          name: http
+        env:
+        - name: BUS_PORT
+          value: "9000"
+        envFrom:
+        - configMapRef:
+            name: agent-network-config
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+          initialDelaySeconds: 10
+          periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: message-bus
+  namespace: agent-network
+  labels:
+    app: message-bus
+spec:
+  type: ClusterIP
+  selector:
+    app: message-bus
+  ports:
+  - port: 9000
+    targetPort: 9000
+    protocol: TCP
+    name: http

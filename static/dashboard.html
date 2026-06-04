@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Agent 仿真运行平台</title>
+<link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+<div class="header">
+<h1><span class="dot"></span>AI Agent 仿真运行平台</h1>
+<div style="display:flex;align-items:center;gap:0.8rem">
+<button class="btn ghost" onclick="toggleSettings()" title="API 配置" style="font-size:0.7rem;">API 配置</button>
+<div class="stats">Agent: <span id="stat-agents">0</span> | 消息包: <span id="stat-packets">0</span> | 仿真: <span id="stat-sims">0</span></div>
+</div>
+</div>
+
+<div id="settings-panel" style="display:none;background:var(--panel);border-bottom:1px solid var(--border);padding:0.8rem 1rem">
+<div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:2px"><label>API Key</label><input id="cfg-apikey" type="password" placeholder="sk-ant-... 或 sk-..." style="width:300px;font-family:monospace;font-size:0.75rem"></div>
+<div style="display:flex;flex-direction:column;gap:2px"><label>Provider</label><select id="cfg-provider" style="width:100px;font-size:0.75rem" onchange="onProviderChange()"><option value="auto">Auto</option><option value="anthropic">Anthropic</option><option value="openai">OpenAI</option><option value="deepseek">DeepSeek</option></select></div>
+<div style="display:flex;flex-direction:column;gap:2px"><label>API Base</label><input id="cfg-apibase" placeholder="https://api.deepseek.com/v1" style="width:200px;font-size:0.75rem"></div>
+<div style="display:flex;flex-direction:column;gap:2px"><label>Model</label><input id="cfg-model" placeholder="deepseek-chat" style="width:150px;font-size:0.75rem"></div>
+<button class="btn accent" onclick="saveSettings()" style="height:30px">保存</button>
+<button class="btn ghost" onclick="testSettings()" style="height:30px">测试解析</button>
+<span id="cfg-status" style="font-size:0.7rem;color:var(--red)"></span>
+</div>
+</div>
+
+<div class="app">
+<div class="canvas-panel" id="canvas-panel">
+<canvas id="agent-canvas"></canvas>
+<div class="map-bar" id="map-bar">
+<span class="map-label">地形地图:</span>
+<button class="map-btn accent" onclick="generateMap()">生成地图</button>
+<span class="map-label">尺寸:</span>
+<select id="map-size">
+<option value="8">8x8</option><option value="16" selected>16x16</option><option value="24">24x24</option><option value="32">32x32</option>
+</select>
+<label class="map-toggle"><input type="checkbox" id="map-use-llm" checked> AI生成</label>
+<button class="map-btn" onclick="placeAgentsRandomly()">随机部署</button>
+<button class="map-btn" id="tick-btn" onclick="toggleSimulationTick()">开始推演</button>
+<span class="map-legend" id="map-legend"></span>
+</div>
+<div class="zoom-indicator" id="zoom-indicator">100%</div>
+<div class="tooltip" id="tooltip"></div>
+</div>
+<div class="side-panel">
+<div class="section-title">剧本编辑器 <span class="toggle" onclick="togglePanel('script-editor')">_</span></div>
+<div class="script-editor" id="script-editor">
+<textarea id="script-input" placeholder="用自然语言描述仿真场景...&#10;示例：部署2个侦察兵搜索目标区域，指挥官分析情报制定方案。">部署2个侦察兵搜索敌军位置并分析地形，指挥官汇总情报后制定协同作战方案。</textarea>
+<div class="script-actions">
+<button class="btn green" onclick="runScript()">运行脚本</button>
+<button class="btn blue" onclick="quickScene('battlefield')">战场推演</button>
+<button class="btn blue" onclick="quickScene('fleet')">编队推演</button>
+<button class="btn ghost" onclick="clearAll()">清空</button>
+</div>
+</div>
+<div class="section-title">仿真日志 <span class="toggle" onclick="togglePanel('log-viewer')">_</span></div>
+<div class="log-viewer" id="log-viewer">
+<div class="log-controls">
+<select id="log-filter" onchange="renderLogs()">
+<option value="">全部级别</option><option value="L1">L1 系统</option><option value="L2">L2 Agent</option><option value="L3">L3 Tool</option><option value="L4">L4 Prompt</option><option value="L5">L5 Packet</option>
+</select>
+<label class="chk"><input type="checkbox" id="log-autoscroll" checked>自动</label>
+<button class="btn ghost" onclick="clearLogs()">清空</button>
+<span style="font-size:0.65rem;color:var(--gray);margin-left:auto" id="log-count">0</span>
+</div>
+<div class="log-entries" id="log-entries"><div class="log-entry"><span class="ts">--</span> <span class="lv lv-L1">就绪</span> <span class="ev">等待仿真启动...</span></div></div>
+</div>
+</div>
+</div>
+<script src="/static/dashboard.js"></script>
+</body>
+</html>
