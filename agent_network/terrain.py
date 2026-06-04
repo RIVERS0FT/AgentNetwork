@@ -172,7 +172,7 @@ class TerrainMap:
         return {"type": terrain_type, "passable": t["passable"], "cover": t["cover"],
                 "elevation": base, "color": t["color"]}
 
-    def _smooth_elevation(self, passes: int = 1):
+    def _smooth_elevation(self, passes: int = 4):
         """Box-blur elevation with terrain-aware weighting for realistic contours"""
         h, w = self.size, self.size
         # Terrain weight: mountains/highlands resist change, rivers pull neighbors down

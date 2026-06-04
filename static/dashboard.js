@@ -2,7 +2,7 @@
 const API = '/api';
 let agents = [];
 let connections = [];
-let logs = [];
+let _prevAgents = [];    // 上一帧 Agent 快照，用于位置保持
 let ws = null;
 let canvas, ctx;
 let mouseX = -100, mouseY = -100;
@@ -17,6 +17,7 @@ let isPanning = false, panStartX = 0, panStartY = 0;
 // Map state
 let terrainMap = null;
 let tickRunning = false;
+let tickInterval = null;  // 推演定时器
 
 // ============== Canvas Setup ==============
 canvas = document.getElementById('agent-canvas');
@@ -99,14 +100,14 @@ delete a._targetY;
 
 // Connections
 const N = agents.length;
-if (N <= 200 || zoom > 0.4) {
+if (N <= 200 && zoom > 0.25) {
 connections.forEach(c => drawConnection(c));
 }
 
 // Agents (LOD)
-if (N <= 200 || zoom > 0.4) {
+if (N <= 200 && zoom > 0.25) {
 agents.forEach(a => drawNode(a));
-} else if (N <= 500) {
+} else if (N <= 500 && zoom > 0.15) {
 agents.forEach(a => drawNodeSimple(a));
 } else {
 drawDensityMap(W, H);
@@ -291,17 +292,26 @@ ws.onmessage = (e) => {
 const msg = JSON.parse(e.data);
 if (msg.type === 'status' || msg.type === 'all') {
 agents = msg.data.agents || [];
-agents.forEach((a, i) => { if (agents._prev) { const prev = agents._prev.find(p => p.agent_id === a.agent_id); if (prev) { a._x = prev._x; a._y = prev._y; a._r = prev._r; a._color = prev._color; a._icon = prev._icon; } } });
+// 从持久快照恢复渲染状态
+		if (_prevAgents.length > 0) {
+			agents.forEach(a => {
+				const prev = _prevAgents.find(p => p.agent_id === a.agent_id);
+				if (prev) { a._x = prev._x; a._y = prev._y; a._r = prev._r; a._color = prev._color; a._icon = prev._icon; }
+			});
+		}
 // Process map data from server
 if (msg.data.map && !terrainMap) {
 terrainMap = msg.data.map;
 renderLegend();
 }
 layoutAgents();
-agents._prev = agents.map(a => ({ agent_id: a.agent_id, _x: a._x, _y: a._y, _r: a._r, _color: a._color, _icon: a._icon }));
+_prevAgents = agents.map(a => ({ agent_id: a.agent_id, _x: a._x, _y: a._y, _r: a._r, _color: a._color, _icon: a._icon }));
 document.getElementById('stat-agents').textContent = msg.data.stats?.total_agents || agents.length;
 }
-if (msg.type === 'message') {
+if (msg.type === 'packets' && msg.data) {
+			document.getElementById('stat-packets').textContent = msg.data.total || msg.data.stats?.total || 0;
+		}
+		if (msg.type === 'message') {
 logEntry('L5', '消息包: ' + (msg.data.payload?.action || msg.data.type) + ' [' + msg.data.source + ' → ' + msg.data.target + ']');
 }
 };
@@ -395,7 +405,15 @@ simRunning = false;
 async function clearAll() {
 const agentList = await (await fetch(API + '/agents')).json();
 for (const a of agentList) { await fetch(API + '/agents/' + a.agent_id, { method: 'DELETE' }); }
-agents = []; connections = []; selectedAgent = null; hoveredAgent = null; terrainMap = null; tickRunning = false;
+agents = []; _prevAgents = []; connections = []; selectedAgent = null; hoveredAgent = null; terrainMap = null;
+	// 停止推演定时器
+	if (tickRunning) {
+		tickRunning = false;
+		const btn = document.getElementById('tick-btn');
+		if (btn) { btn.textContent = '开始推演'; btn.classList.remove('accent'); }
+		if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+	}
+	if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
 document.getElementById('stat-agents').textContent = '0';
 document.getElementById('stat-packets').textContent = '0';
 logEntry('L1', '已清空全部 Agent');
