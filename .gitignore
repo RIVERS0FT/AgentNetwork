@@ -6,7 +6,12 @@ data/task_queue.json
 # Tactical Map (React/Node)
 web/tactical-map/node_modules/
 web/tactical-map/dist/
+web/tactical-map/.vite/
 
 # Environment & logs
 .env
 *.log
+
+# IDE
+.vscode/
+.idea/
