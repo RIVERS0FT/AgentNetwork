@@ -101,6 +101,7 @@ service_state = {
 _current_map: Optional[Dict[str, Any]] = None  # 当前地形地图 (TerrainMap.to_dict())
 _current_map_obj: Optional[Any] = None           # TerrainMap 实例 (用于寻路等操作)
 _current_relationships: List[Dict[str, Any]] = []  # 当前关系链
+_termination_config: Dict[str, int] = {"max_rounds": 10, "stalemate_rounds": 3}  # 终止条件默认值
 
 
 # ═══════════════════════════════════════════════
@@ -516,7 +517,7 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
 
 def _launch_containers(config: Dict[str, str]) -> Dict[str, Any]:
     """Step 2: 拉起 Docker — 为已注册 Agent 创建容器并运行仿真"""
-    global _pending_scene_def, _current_relationships
+    global _pending_scene_def, _current_relationships, _termination_config
 
     scene_def = _pending_scene_def
     if not scene_def:
@@ -550,15 +551,18 @@ def _launch_containers(config: Dict[str, str]) -> Dict[str, Any]:
         except Exception:
             ca.status = "error"
 
-    # 运行仿真轮次
+    # 运行仿真轮次（硬上限 + 僵局检测）
     agent_count = len(created_cas)
-    rounds = max(2, min(5, agent_count // 2))
+    max_rounds = _termination_config.get("max_rounds", 10)
+    stalemate_threshold = _termination_config.get("stalemate_rounds", 3)
     results_log = []
+    silent_rounds = 0
+    stop_reason = "hard_limit"
 
-    for round_num in range(rounds):
+    for round_num in range(max_rounds):
         context = {
             "round": round_num + 1,
-            "total_rounds": rounds,
+            "total_rounds": max_rounds,
             "scene": scene_def.scene_name,
             "agents": [{"id": ca.agent_id, "role": ca.role, "name": ca.name}
                        for ca, _ in created_cas],
@@ -566,18 +570,39 @@ def _launch_containers(config: Dict[str, str]) -> Dict[str, Any]:
         }
         round_result = runtime.run_round(context)
         results_log.append(round_result)
+
+        # 僵局检测：本轮是否有实际消息产生
+        decisions = round_result.get("decisions", [])
+        messages_sent = sum(
+            1 for d in decisions
+            if d.get("type") in ("send_message", "broadcast")
+        )
+        if messages_sent == 0:
+            silent_rounds += 1
+        else:
+            silent_rounds = 0
+
+        if silent_rounds >= stalemate_threshold:
+            stop_reason = f"stalemate_{stalemate_threshold}_silent_rounds"
+            break
+
         time.sleep(0.3)
+    else:
+        stop_reason = "hard_limit"
 
     _current_relationships = scene_def.workflow
     registry_agents = [a.get_status() for a in AgentRegistry.list_all()]
+    actual_rounds = len(results_log)
 
     return {
         "simulation_name": scene_def.scene_name,
-        "duration_seconds": round(rounds * 1.5, 2),
+        "duration_seconds": round(actual_rounds * 1.5, 2),
         "agents": registry_agents,
         "agent_stats": AgentRegistry.get_stats(),
         "packet_stats": PacketRecorder.get_stats(),
-        "rounds": rounds,
+        "max_rounds": max_rounds,
+        "rounds": actual_rounds,
+        "stop_reason": stop_reason,
         "results_log": results_log,
         "relationships": scene_def.workflow,
         "container_mode": "docker",
@@ -646,6 +671,14 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
     smeta = meta.get("scenario_metadata", {})
     title = smeta.get("title", scene_name)
     bg = smeta.get("global_rules", "")
+
+    # 保存终止条件（供 _launch_containers 使用）
+    global _termination_config
+    _termination_config = {
+        "max_rounds": smeta.get("max_rounds", 10),
+        "stalemate_rounds": smeta.get("stalemate_rounds", 3),
+    }
+
     roles = meta.get("roles", {})
     containers = instances.get("container_instances", {})
 
