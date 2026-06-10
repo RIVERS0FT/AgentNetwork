@@ -41,22 +41,51 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import uvicorn
 import asyncio
+import uuid
 import time
 
 # 导入平台核心模块
 from agent_network.agent import Agent, AgentRegistry, Message
-from agent_network.agent_hub import AgentHub
+from agent_network.agent_hub import AgentHub, RoutingStrategy, ScalingPolicy
 from agent_network.llm_parser import parse_script, get_api_config, SceneDefinition, AgentDef
 from agent_network.container_runtime import get_runtime, ContainerRuntime
 from agent_network.container_controller import ContainerController
-from agent_network.logger import SimulationLogger, LogLevel
+from agent_network.workflow import WorkflowEngine, WorkflowDAG, WorkflowStep
+from agent_network.agent_scheduler import TaskPriority, TaskStatus
+from agent_network.terrain import TerrainMap
+from agent_network.logger import SimulationLogger, LogLevel, get_logger
 from agent_network.event_bus import PacketRecorder
 from agent_network.tool import ToolRegistry
 from agent_network.skill import SkillRegistry
-from agent_network.workflow import WorkflowEngine
+
+# ── 统一日志器 ──
+logger = get_logger()
+
+# ── 北京时间转换 ──
+_BEIJING_TZ = timezone(timedelta(hours=8))
+
+def _beijing_time(utc_str: str = "") -> str:
+    """将 UTC ISO 时间戳转为北京时间 ISO 格式: YYYY-MM-DDTHH:MM:SS.sss"""
+    if utc_str:
+        try:
+            dt = datetime.fromisoformat(utc_str.replace('Z', '+00:00'))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.astimezone(_BEIJING_TZ)
+        except Exception:
+            dt = datetime.now(_BEIJING_TZ)
+    else:
+        dt = datetime.now(_BEIJING_TZ)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}"
+
+# ── 服务发现 ──
+_MESSAGE_BUS_URL = os.environ.get("MESSAGE_BUS_URL", "http://bus:9000")
+
+# ── WebSocket 连接池 ──
+_ws_clients: set = set()
 
 # ── 统一 Agent 日志缓冲区 ──
 _agent_logs: List[Dict[str, Any]] = []  # 内存/容器模式共用日志
@@ -182,7 +211,12 @@ class LogQueryRequest(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def index():
     """仿真平台控制台首页"""
-    return HTMLResponse(content=_load_dashboard())
+    from fastapi.responses import Response
+    resp = HTMLResponse(content=_load_dashboard())
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 # ═══════════════════════════════════════════════
@@ -190,15 +224,8 @@ async def index():
 # ═══════════════════════════════════════════════
 
 def _inject_runtime_url(status: dict) -> dict:
-    """注入容器运行时的实际 URL（IP直连用）"""
-    try:
-        runtime = get_runtime()
-        ca = runtime.agents.get(status["agent_id"])
-        if ca and ca.url:
-            status["url"] = ca.url
-    except Exception:
-        pass
-    return status
+    """注入容器运行时的实际 URL（get_status 已包含 url 字段）"""
+    return status  # url 已在 Agent.get_status() 中通过 container_url 返回
 
 
 @app.get("/api/agents", response_model=List[AgentStatus])
@@ -241,6 +268,17 @@ async def delete_agent(agent_id: str):
     agent.stop()
     AgentRegistry.unregister(agent_id)
     return {"deleted": agent_id}
+
+
+@app.post("/api/agents/{agent_id}/move")
+async def move_agent(agent_id: str, x: float = Query(...), y: float = Query(...)):
+    """更新 Agent 坐标（前端拖动后上报）"""
+    agent = AgentRegistry.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+    agent.x = x
+    agent.y = y
+    return {"agent_id": agent_id, "x": x, "y": y}
 
 
 @app.get("/api/agents/discover")
@@ -338,9 +376,17 @@ async def list_skills():
     return {"skills": SkillRegistry.list_skills()}
 
 
+_active_skills_module = None  # 当前场景的 skills 模块
+
 @app.post("/api/skills/execute")
 async def execute_skill(req: SkillExecuteRequest):
-    """执行技能"""
+    """执行技能 — 优先用场景 skills，回退到默认 SkillRegistry"""
+    if _active_skills_module:
+        try:
+            result = _active_skills_module.SkillRegistry.execute(req.skill_name, **req.params)
+            return {"skill": req.skill_name, "result": result}
+        except Exception:
+            pass
     try:
         result = SkillRegistry.execute(req.skill_name, **req.params)
         return {"skill": req.skill_name, "result": result}
@@ -473,6 +519,9 @@ _pending_scene_def: Optional[SceneDefinition] = None
 _pending_layout: Dict[str, tuple] = {}
 _pending_config: Dict[str, str] = {}
 
+# 通信基础设施（关系矩阵 → 通信权限）
+_comm_matrix: Dict[str, set] = {}  # agent_id → {allowed_target_ids}
+
 
 def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
     """Step 1: 绘制场景 — 创建 Agent、计算布局、注册，不启动容器"""
@@ -480,9 +529,11 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
 
     AgentRegistry.reset()
     PacketRecorder.reset()
+    _agent_logs.clear()  # 清空上轮仿真日志
+    logger.reset()       # 清空结构化日志
 
     from agent_network.comm import RemoteBus
-    remote_bus = RemoteBus(message_bus_url="http://localhost:9000")
+    remote_bus = RemoteBus(message_bus_url=_MESSAGE_BUS_URL)
 
     # 力导向布局
     layout_pos = _force_layout(scene_def.agents, scene_def.workflow)
@@ -515,58 +566,110 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
     }
 
 
-def _launch_containers(config: Dict[str, str]) -> Dict[str, Any]:
-    """Step 2: 拉起 Docker — 为已注册 Agent 创建容器并运行仿真"""
-    global _pending_scene_def, _current_relationships, _termination_config
+def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]:
+    """Step 2: 拉起 Agent 并运行仿真 — Docker 不可用时回退到直连模式"""
+    global _current_relationships
 
-    scene_def = _pending_scene_def
+    if scene_def is None:
+        scene_def = _pending_scene_def
     if not scene_def:
         return {"error": "No scene setup. Call /api/simulations/setup first."}
 
-    try:
-        runtime = get_runtime()
-    except RuntimeError as e:
-        return {"error": str(e), "container_mode": "docker"}
+    import requests as _req
 
-    runtime.stop_all()
+    runtime = get_runtime()
+    runtime.reset()  # 清理上一轮的容器占用标记，释放池容器
 
     created_cas = []
     for ad in scene_def.agents:
-        ca = runtime.create_agent(
-            agent_id=ad.agent_id,
-            role=ad.role,
-            name=ad.name,
-            llm_config=config if config.get("api_key") else None,
+        ca = runtime.assign_agent(
+            agent_id=ad.agent_id, role=ad.role, name=ad.name,
             extra_meta=ad.extra_meta if ad.extra_meta else None,
         )
         created_cas.append((ca, ad.tasks))
+        # 直接给 AgentRegistry 中的 Agent 设置容器 URL
+        agent = AgentRegistry.get(ca.agent_id)
+        if agent:
+            agent.container_url = ca.url
 
-    time.sleep(2)
+    time.sleep(1)
     for ca, _ in created_cas:
         try:
-            import requests as _req
-            _req.post("http://localhost:9000/register",
+            _req.post(f"{_MESSAGE_BUS_URL}/register",
                       params={"agent_id": ca.agent_id, "url": ca.url, "name": ca.name}, timeout=3)
             ca.status = "running"
         except Exception:
             ca.status = "error"
 
-    # 运行仿真轮次（硬上限 + 僵局检测）
-    agent_count = len(created_cas)
-    max_rounds = _termination_config.get("max_rounds", 10)
-    stalemate_threshold = _termination_config.get("stalemate_rounds", 3)
+    # 获取事件触发器
+    event_triggers = getattr(scene_def, 'event_triggers', []) or []
+
+    # ── 构建通信矩阵（从 workflow edges，双向）──
+    global _comm_matrix
+    _comm_matrix.clear()
+    for edge in (scene_def.workflow or []):
+        src = edge.get("from", "").lower()
+        dst = edge.get("to", "").lower()
+        if src and dst:
+            _comm_matrix.setdefault(src, set()).add(dst)
+            _comm_matrix.setdefault(dst, set()).add(src)
+
+    # ── 初始化 session 日志文件夹（server + message_bus 同步）──
+    logger.start_session(scene_def.scene_name)
+    try:
+        _req.post(f"{_MESSAGE_BUS_URL}/session/start",
+                  params={"session_dir": logger._session_dir}, timeout=3)
+    except Exception:
+        pass  # message_bus 不可达时不阻塞仿真
+
+    # ── 生成会话 ID ──
+    talk_id = f"talk-{uuid.uuid4().hex[:12]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    # ── 构建信道映射: {(from_id, to_id): channel_id} ──
+    channel_map: Dict[str, str] = {}
+    for edge in (scene_def.workflow or []):
+        src = edge.get("from", "")
+        dst = edge.get("to", "")
+        ch = edge.get("channel_id", "")
+        if src and dst:
+            channel_map[f"{src}->{dst}"] = ch
+            channel_map[f"{src.lower()}->{dst.lower()}"] = ch  # 小写别名，方便查找
+
+    # ── 运行仿真轮次: 广播模式 ──
+    workflow_steps = scene_def.workflow if scene_def.workflow else []
+    MAX_ROUNDS = max(2, min(5, len(created_cas) // 2))
     results_log = []
     silent_rounds = 0
     stop_reason = "hard_limit"
 
-    for round_num in range(max_rounds):
+    for round_num in range(MAX_ROUNDS):
+        current_turn = round_num + 1
+
+        # 检查事件触发
+        for trigger in event_triggers:
+            if trigger.get("turn") == current_turn:
+                event_payload = {
+                    "event_name": trigger.get("event_name", "未知事件"),
+                    "impact": trigger.get("impact", ""),
+                    "turn": current_turn,
+                }
+                logger.event_trigger(current_turn, event_payload['event_name'], event_payload['impact'])
+                for ca, _ in created_cas:
+                    try:
+                        _req.post(f"{ca.url}/event", json=event_payload, timeout=5)
+                    except Exception:
+                        pass
+
         context = {
-            "round": round_num + 1,
-            "total_rounds": max_rounds,
+            "round": current_turn,
+            "total_rounds": MAX_ROUNDS,
             "scene": scene_def.scene_name,
             "agents": [{"id": ca.agent_id, "role": ca.role, "name": ca.name}
                        for ca, _ in created_cas],
             "tasks": {ca.agent_id: tasks for ca, tasks in created_cas},
+            "comm_matrix": {k: list(v) for k, v in _comm_matrix.items()},
+            "channel_map": channel_map,
+            "talk": talk_id,
         }
         round_result = runtime.run_round(context)
         results_log.append(round_result)
@@ -586,6 +689,13 @@ def _launch_containers(config: Dict[str, str]) -> Dict[str, Any]:
             stop_reason = f"stalemate_{stalemate_threshold}_silent_rounds"
             break
 
+        # 每轮后更新 Agent 位置（基于决策结果的模拟移动）
+        for a in AgentRegistry.list_all():
+            if a.status == "running":
+                a.x += random.uniform(-8, 12)
+                a.y += random.uniform(-8, 12)
+                a.x = max(10, min(390, a.x or 200))
+                a.y = max(10, min(390, a.y or 200))
         time.sleep(0.3)
     else:
         stop_reason = "hard_limit"
@@ -596,16 +706,17 @@ def _launch_containers(config: Dict[str, str]) -> Dict[str, Any]:
 
     return {
         "simulation_name": scene_def.scene_name,
-        "duration_seconds": round(actual_rounds * 1.5, 2),
+        "duration_seconds": round(len(results_log) * 1.5 if results_log else 1.5, 2),
         "agents": registry_agents,
         "agent_stats": AgentRegistry.get_stats(),
         "packet_stats": PacketRecorder.get_stats(),
         "max_rounds": max_rounds,
         "rounds": actual_rounds,
         "stop_reason": stop_reason,
+        "rounds": MAX_ROUNDS,
         "results_log": results_log,
         "relationships": scene_def.workflow,
-        "container_mode": "docker",
+        "container_mode": "pool",
     }
 
 
@@ -632,7 +743,7 @@ def _build_scene_from_script_json(sj: Dict[str, Any]) -> SceneDefinition:
             name=identity,
             skills=action_space[:4],   # 前4个action作为skill
             tags=[core_goal[:30]],     # core_goal 截断为 tag
-            tasks=[core_goal],         # core_goal 作为主任务
+            tasks=action_space[:6] if action_space else [core_goal],  # 具体行动作为任务
             extra_meta={
                 "identity": identity,
                 "core_goal": core_goal,
@@ -671,16 +782,24 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
     smeta = meta.get("scenario_metadata", {})
     title = smeta.get("title", scene_name)
     bg = smeta.get("global_rules", "")
-
-    # 保存终止条件（供 _launch_containers 使用）
-    global _termination_config
-    _termination_config = {
-        "max_rounds": smeta.get("max_rounds", 10),
-        "stalemate_rounds": smeta.get("stalemate_rounds", 3),
-    }
-
     roles = meta.get("roles", {})
     containers = instances.get("container_instances", {})
+
+    # 加载场景 skills.py
+    global _active_skills_module
+    skills_info = []
+    skills_py = folder / "skills.py"
+    if skills_py.exists():
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(f"skills_{scene_name}", skills_py)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _active_skills_module = mod
+            for name, func in mod.SkillRegistry._skills.items():
+                skills_info.append({"name": name, "desc": (func.__doc__ or "").strip().split('\n')[0]})
+        except Exception:
+            _active_skills_module = None
 
     agents: List[AgentDef] = []
     for role_id, role in roles.items():
@@ -691,23 +810,35 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
         if backend == "claudecode":
             backend = "claude-code"
 
+        # 交互范式的 prompt 修饰
+        paradigm = role.get("primary_interaction_paradigm", "")
+        paradigm_hints = {
+            "EXTERNAL_NEGOTIATION": "你处于对外谈判模式，需要在合作与竞争之间寻找平衡。",
+            "COMPETITIVE_AGGRESSIVE": "你采取进攻性市场竞争策略，优先扩大份额而非短期利润。",
+            "INTERNAL_COLLABORATION": "你注重内部协作，通过团队配合提升整体效率。",
+            "REGULATORY_COMPLIANCE": "你需要确保所有行动符合监管要求，违规将带来严重后果。",
+        }
+
         agent = AgentDef(
             agent_id=role_id.lower(),
             role="generic",
             name=role.get("name", role_id),
             skills=skills[:4],
-            tags=[role.get("primary_interaction_paradigm", "")],
-            tasks=[role.get("core_goal", "")],
+            tags=[paradigm] if paradigm else [],
+            tasks=skills[:6] if skills else [role.get("core_goal", "")],  # 技能绑定作为具体任务
             extra_meta={
                 "identity": role.get("identity", ""),
                 "core_goal": role.get("core_goal", ""),
-                "hidden_secret": "",
-                "initial_assets": {},
+                "hidden_secret": role.get("hidden_secret", ""),      # 从 JSON 读取，不再硬编码空值
+                "initial_assets": role.get("initial_assets", {}),    # 从 JSON 读取，不再硬编码空值
                 "action_space": skills,
                 "background_rules": bg,
                 "backend": backend,
+                "interaction_paradigm": paradigm,
+                "paradigm_hint": paradigm_hints.get(paradigm, ""),
                 "pip_packages": instance.get("pip_packages", []),
                 "runtime_engine": instance.get("runtime_engine", ""),
+                "skills_list": skills_info,
             },
         )
         agents.append(agent)
@@ -716,12 +847,16 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
     relationships = []
     for subnet in topology.get("sub_networks", []):
         for edge in subnet.get("edges", []):
+            # 权重: 优先读 edge.weight，否则根据 paradigm 推断
+            weight = edge.get("weight")
+            if weight is None:
+                weight = 70 if edge.get("paradigm") == "COLLABORATION" else -50
             relationships.append({
                 "from": edge["source"],
                 "to": edge["target"],
                 "relation_type": edge.get("paradigm", ""),
-                "value": 50 if edge.get("paradigm") == "COLLABORATION" else -30,
-                "can_direct_chat": True,
+                "value": weight,
+                "can_direct_chat": edge.get("direct_chat", True),
                 "channel_id": edge.get("channel_id", ""),
             })
 
@@ -789,7 +924,7 @@ async def setup_simulation(req: SimulationRunRequest):
 async def launch_simulation():
     """Step 2: 拉起 Docker — 为已 setup 的 Agent 启动容器并运行仿真"""
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _launch_containers, _pending_config)
+    result = await loop.run_in_executor(None, _launch_containers, _pending_config, _pending_scene_def)
     return result
 
 
@@ -923,48 +1058,97 @@ async def get_simulation_results(limit: int = Query(default=5, le=20)):
 # ═══════════════════════════════════════════════
 # 日志查询 API — 对应架构文档第十一节
 # ═══════════════════════════════════════════════
-
-# 全局日志收集器
-_global_logger = SimulationLogger("api-server")
+# 日志查询 & 导出 API
+# ═══════════════════════════════════════════════
 
 
 @app.get("/api/logs")
 async def query_logs(
     agent_id: Optional[str] = Query(None),
     level: Optional[str] = Query(None),
-    level_type: Optional[str] = Query(None),
     event: Optional[str] = Query(None),
-    index: Optional[str] = Query(None),
-    limit: int = Query(default=50, le=500),
+    keyword: Optional[str] = Query(None),
+    limit: int = Query(default=100, le=1000),
 ):
-    """日志查询 API"""
-    # 内存查询
-    log_level = None
-    if level:
-        try:
-            log_level = LogLevel[level.upper()]
-        except KeyError:
-            pass
-
-    entries = _global_logger.query(
+    """日志查询 API — 支持按 agent/level/event/keyword 过滤"""
+    entries = logger.query(
         agent_id=agent_id,
-        level=log_level,
-        level_type=level_type,
-        event_contains=event,
-        index=index,
+        level=level,
+        event=event,
+        keyword=keyword,
         limit=limit,
     )
     return {
         "backend": "memory",
         "total": len(entries),
-        "entries": [e.to_dict() for e in entries],
+        "entries": entries,
     }
 
 
 @app.get("/api/logs/stats")
 async def log_stats():
-    """日志索引统计"""
-    return _global_logger.get_index_stats()
+    """日志统计"""
+    return logger.get_index_stats()
+
+
+@app.get("/api/logs/agent/{agent_id}")
+async def agent_logs(agent_id: str, limit: int = 50):
+    """获取某个 Agent 的完整时间线"""
+    return {
+        "agent_id": agent_id,
+        "entries": logger.get_agent_timeline(agent_id, limit),
+    }
+
+
+@app.get("/api/logs/messages")
+async def message_logs(limit: int = 50):
+    """获取 Agent 间通信报文"""
+    return {
+        "total": logger._stats["by_event"].get("agent_message", 0),
+        "entries": logger.get_message_log(limit),
+    }
+
+
+@app.get("/api/logs/export")
+async def export_logs(fmt: str = Query(default="jsonl", pattern="^(jsonl|json|csv)$"),
+                      limit: int = Query(default=0)):
+    """导出日志（jsonl / json / csv）"""
+    from fastapi.responses import PlainTextResponse
+    content = logger.export(fmt=fmt, limit=limit)
+    media_types = {"jsonl": "application/x-ndjson", "json": "application/json", "csv": "text/csv"}
+    return PlainTextResponse(content, media_type=media_types.get(fmt, "text/plain"))
+
+
+@app.get("/api/logs/export/file")
+async def export_logs_file(fmt: str = Query(default="jsonl", pattern="^(jsonl|json|csv)$"),
+                           limit: int = Query(default=0)):
+    """导出日志到文件并返回下载链接"""
+    import tempfile
+    filename = f"agent_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{fmt if fmt != 'jsonl' else 'jsonl'}"
+    filepath = os.path.join(tempfile.gettempdir(), filename)
+    logger.export_file(filepath, fmt=fmt, limit=limit)
+    from fastapi.responses import FileResponse
+    return FileResponse(filepath, filename=filename)
+
+
+@app.get("/api/logs/files")
+async def list_log_files():
+    """列出持久化的日志文件"""
+    return {"files": logger.list_log_files()}
+
+
+@app.get("/api/logs/download/{filename:path}")
+async def download_log_file(filename: str):
+    """下载指定日志文件（支持 session 子目录路径，如 session_name/global.jsonl）"""
+    from fastapi.responses import FileResponse
+    log_dir = os.path.realpath(logger._log_dir)
+    filepath = os.path.realpath(os.path.join(log_dir, filename))
+    # 安全检查：防止路径穿越
+    if not filepath.startswith(log_dir + os.sep) and filepath != log_dir:
+        raise HTTPException(403, "Path traversal denied")
+    if not os.path.isfile(filepath):
+        raise HTTPException(404, f"Log file '{filename}' not found")
+    return FileResponse(filepath, filename=os.path.basename(filename))
 
 
 # ═══════════════════════════════════════════════
@@ -972,19 +1156,32 @@ async def log_stats():
 # ═══════════════════════════════════════════════
 
 @app.get("/api/packets")
-async def query_packets(agent_id: Optional[str] = Query(None)):
-    """查询收发包记录"""
-    records = PacketRecorder.get_records(agent_id=agent_id)
+async def query_packets(
+    agent_id: Optional[str] = Query(None),
+    direction: Optional[str] = Query(None),
+    limit: int = Query(default=100, le=500),
+):
+    """查询 IP 包级别通信报文 — 含源/目标IP、延迟、内容"""
+    records = PacketRecorder.get_records(agent_id=agent_id, direction=direction, limit=limit)
     return {
-        "total": len(records),
-        "records": [r.to_dict() for r in records],
+        "total": PacketRecorder.get_stats()["total_packets"],
+        "packets": records,
+        "stats": PacketRecorder.get_stats(),
     }
 
 
 @app.get("/api/packets/stats")
 async def packet_stats():
-    """收发包统计"""
+    """收发包统计 — 总量/字节/平均延迟/按方向分布"""
     return PacketRecorder.get_stats()
+
+
+@app.get("/api/packets/stream")
+async def packet_stream(agent_id: Optional[str] = Query(None), limit: int = 100):
+    """Wireshark 风格报文文本流"""
+    lines = PacketRecorder.get_wireshark_view(agent_id=agent_id, limit=limit)
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse("\n".join(lines), media_type="text/plain")
 
 
 # ═══════════════════════════════════════════════
@@ -1007,7 +1204,7 @@ async def system_stats():
         "tools": {"registered": len(ToolRegistry.list_tools()), "stats": ToolRegistry.get_stats()},
         "skills": {"registered": len(SkillRegistry.list_skills())},
         "packets": PacketRecorder.get_stats(),
-        "logs": _global_logger.get_index_stats(),
+        "logs": logger.get_index_stats(),
     }
 
 
@@ -1690,27 +1887,70 @@ async def map_find_path(
 
 @app.post("/api/logs/agent")
 async def agent_log_ingest(req: Request):
-    """容器模式 Agent 提交决策/执行日志"""
+    """容器模式 Agent 提交决策/执行日志 — 写入统一日志器"""
     try:
         body = await req.json()
     except Exception:
         body = {}
+    agent_id = body.get("agent_id", "?")
+    event = body.get("event", "act")
+    detail = body.get("detail", "")
+    details = body.get("details", {})
+
+    # 同时写入旧缓冲（兼容）+ 统一日志器
     _agent_logs.append({
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "agent_id": body.get("agent_id", "?"),
+        "timestamp": _beijing_time(body.get("timestamp", "")),
+        "agent_id": agent_id,
         "agent_name": body.get("agent_name", "?"),
-        "event": body.get("event", "act"),
-        "detail": body.get("detail", ""),
+        "event": event,
+        "detail": detail,
+        "from_agent": body.get("from_agent", agent_id),
+        "to_agent": body.get("to_agent", ""),
+        "action": body.get("action", event),
+        "action_status": body.get("action_status", "success"),
     })
     if len(_agent_logs) > 500:
         _agent_logs.pop(0)
+
+    # 写入结构化日志（五个字段）
+    logger.system(event, detail, agent_id=agent_id, details={
+        "from_agent": body.get("from_agent", agent_id),
+        "to_agent": body.get("to_agent", ""),
+        "action": body.get("action", event),
+        "action_status": body.get("action_status", "success"),
+        **(details or {}),
+    })
+    # 更新 AgentRegistry 中的 Agent 状态（悬浮框用）
+    action_type = body.get("action", "")
+    action_status = body.get("action_status", "")
+    agent = AgentRegistry.get(agent_id)
+    if agent:
+        if event == "decide":
+            agent.status = "decided"
+        elif event == "act":
+            if action_type in ("send_message", "broadcast"):
+                agent.status = "messaged" if action_status == "success" else "send_failed"
+            else:
+                agent.status = "analyzed" if action_status == "success" else action_type
+
+    # 实时推送给前端（日志 + 状态更新）
+    if _ws_clients:
+        asyncio.create_task(_ws_broadcast({
+            "type": "agent_log", "data": _agent_logs[-1]
+        }))
+        # 同步推送 Agent 状态更新
+        agents_data = [a.get_status() for a in AgentRegistry.list_all()]
+        asyncio.create_task(_ws_broadcast({
+            "type": "agent_status", "data": agents_data
+        }))
     return {"status": "ok", "total_logs": len(_agent_logs)}
 
 
 @app.get("/api/logs/agent")
-async def agent_logs_get():
-    """获取 Agent 日志"""
-    return {"logs": _agent_logs[-200:], "total": len(_agent_logs)}
+async def agent_logs_get(limit: int = Query(default=200)):
+    """获取 Agent 动作日志（从统一日志器）"""
+    entries = logger.query(event="agent_action", limit=limit)
+    return {"logs": entries, "total": len(entries)}
 
 
 # ═══════════════════════════════════════════════
@@ -1721,8 +1961,8 @@ async def agent_logs_get():
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket 端点 — 实时推送 Agent 状态、日志和消息"""
     await websocket.accept()
+    _ws_clients.add(websocket)
 
-    # 状态推送循环
     try:
         while True:
             try:
@@ -1735,7 +1975,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "agents": agents_data,
                             "stats": AgentRegistry.get_stats(),
                             "map": _current_map,
-                            "agent_logs": _agent_logs[-50:],
+                            "agent_logs": _agent_logs[-50:], "log_entries": logger.get_entries(50),
                             "relationships": _current_relationships,
                         },
                     })
@@ -1743,7 +1983,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json({
                         "type": "packets",
                         "data": {
-                            "records": [r.to_dict() for r in PacketRecorder.get_records()],
+                            "packets": PacketRecorder.get_records(limit=50),
                             "stats": PacketRecorder.get_stats(),
                         },
                     })
@@ -1751,8 +1991,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json({
                         "type": "logs",
                         "data": {
-                            "entries": [e.to_dict() for e in _global_logger.get_entries()[-50:]],
-                            "stats": _global_logger.get_index_stats(),
+                            "entries": logger.get_entries(50),
+                            "stats": logger.get_index_stats(),
                         },
                     })
                 elif data == "all":
@@ -1763,9 +2003,9 @@ async def websocket_endpoint(websocket: WebSocket):
                             "agents": agents_data,
                             "stats": AgentRegistry.get_stats(),
                             "packets": PacketRecorder.get_stats(),
-                            "logs": _global_logger.get_index_stats(),
+                            "logs": {"stats": logger.get_index_stats(), "entries": logger.get_entries(20)},
                             "map": _current_map,
-                            "agent_logs": _agent_logs[-50:],
+                            "agent_logs": _agent_logs[-50:], "log_entries": logger.get_entries(50),
                             "relationships": _current_relationships,
                         },
                     })
@@ -1783,7 +2023,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 }
                 await websocket.send_json(payload)
     except WebSocketDisconnect:
-        pass
+        _ws_clients.discard(websocket)
+    except Exception:
+        _ws_clients.discard(websocket)
+
+
+async def _ws_broadcast(data: dict):
+    """向所有连接的 WebSocket 客户端广播"""
+    gone = set()
+    for ws in _ws_clients:
+        try:
+            await ws.send_json(data)
+        except Exception:
+            gone.add(ws)
+    _ws_clients.difference_update(gone)
 
 
 # ═══════════════════════════════════════════════

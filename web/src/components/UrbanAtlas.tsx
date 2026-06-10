@@ -3,7 +3,7 @@ import type { CityWorld, CityStats } from '../types/urban';
 import { UrbanRenderer } from '../rendering/UrbanRenderer';
 import { useMapControls } from '../hooks/useMapControls';
 import { useAnimationLoop } from '../hooks/useAnimationLoop';
-import { useAgentOverlay, drawAgents, drawRelationships } from './AgentLayer';
+import { useAgentOverlay, drawAgents, drawRelationships, findAgentAt, moveAgent } from './AgentLayer';
 
 interface UrbanAtlasProps {
   world: CityWorld;
@@ -24,7 +24,7 @@ export function UrbanAtlas({ world, onStats, showMap = true }: UrbanAtlasProps) 
   } = useMapControls({ canvasWidth: 1200, canvasHeight: 800 });
 
   // Agent overlay (same canvas)
-  const { agents, relationships, hovered, selected, handleMouse, handleClick } = useAgentOverlay();
+  const { agents, relationships, hovered, selected, draggingId, handleMouse, handleClick, handleDragStart, handleDragMove, handleDragEnd } = useAgentOverlay();
 
   // Send hovered agent info + mouse position to parent for tooltip
   const lastMouseScreen = useRef({ x: 0, y: 0 });
@@ -113,7 +113,7 @@ export function UrbanAtlas({ world, onStats, showMap = true }: UrbanAtlasProps) 
     ctx.clip();  // clip to atlas bounds
     ctx.translate(screenX, screenY);
     ctx.scale(screenW / world.width, screenH / world.height);
-    drawAgents(ctx, agents, selected, world.width, screenW, screenH);
+    drawAgents(ctx, agents, selected, world.width, screenW, screenH, draggingId);
     drawRelationships(ctx, relationships, agents);
     ctx.restore();
 
@@ -122,14 +122,7 @@ export function UrbanAtlas({ world, onStats, showMap = true }: UrbanAtlasProps) 
 
   useAnimationLoop(render, true);
 
-  const handleMouseMoveUrban = useCallback((e: React.MouseEvent) => {
-    handleMouseMove(e);
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    lastMouseScreen.current = { x: e.clientX, y: e.clientY };
-    // Screen → world (same as atlas transform)
+  const toWorld = useCallback((mx: number, my: number, rect: DOMRect) => {
     const W = rect.width;
     const H = rect.height;
     const atlasScale = viewport.zoom * (W / 1024);
@@ -137,20 +130,52 @@ export function UrbanAtlas({ world, onStats, showMap = true }: UrbanAtlasProps) 
     const screenH = 1024 * atlasScale;
     const sx = W / 2 + viewport.panX - screenW / 2;
     const sy = H / 2 + viewport.panY - screenH / 2;
-    const wx = (mx - sx) / screenW * world.width;
-    const wy = (my - sy) / screenH * world.height;
+    return { wx: (mx - sx) / screenW * world.width, wy: (my - sy) / screenH * world.height };
+  }, [viewport, world]);
+
+  const handleMouseMoveUrban = useCallback((e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    lastMouseScreen.current = { x: e.clientX, y: e.clientY };
+    const { wx, wy } = toWorld(mx, my, rect);
     setCursorWorld({ x: wx, y: wy });
-    handleMouse(mx, my, wx, wy, viewport.zoom);
-  }, [handleMouseMove, viewport, world, handleMouse]);
+    if (draggingId) {
+      handleDragMove(wx, wy);
+    } else {
+      handleMouseMove(e);
+      handleMouse(mx, my, wx, wy, viewport.zoom);
+    }
+  }, [handleMouseMove, viewport, world, handleMouse, draggingId, handleDragMove, toWorld]);
+
+  const handleMouseDownUrban = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return handleMouseDown(e);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const { wx, wy } = toWorld(mx, my, rect);
+    if (findAgentAt(wx, wy, agents, 20)) {
+      handleDragStart(wx, wy);
+    } else {
+      handleMouseDown(e);
+    }
+  }, [agents, handleMouseDown, handleDragStart, toWorld]);
+
+  const handleMouseUpUrban = useCallback((e: React.MouseEvent) => {
+    if (draggingId) handleDragEnd();
+    handleMouseUp(e);
+  }, [draggingId, handleDragEnd, handleMouseUp]);
 
   return (
     <div
       ref={containerRef}
       className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing"
-      onMouseDown={handleMouseDown}
+      onMouseDown={handleMouseDownUrban}
       onMouseMove={handleMouseMoveUrban}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseUp={handleMouseUpUrban}
+      onMouseLeave={handleMouseUpUrban}
       onDoubleClick={handleDoubleClick}
       onClick={() => agents.length > 0 && handleClick()}
     >

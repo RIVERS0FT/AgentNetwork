@@ -24,12 +24,32 @@ const STATUS_COLORS: Record<string, string> = {
 let _simState: Map<string, { x: number; y: number }> | null = null;
 let _relRef: Relationship[] = [];
 
+/** 导出: 用 _simState 检测哪个 Agent 在指定世界坐标下 (供拖动/悬停使用) */
+export function findAgentAt(worldX: number, worldY: number, agents: AgentInfo[], radius: number = 18): AgentInfo | null {
+  for (let i = agents.length - 1; i >= 0; i--) {
+    const a = agents[i];
+    if (a.x === undefined || a.y === undefined) continue;
+    const sp = _simState?.get(a.agent_id);
+    const ax = sp ? sp.x : a.x;
+    const ay = sp ? sp.y : a.y;
+    if (Math.abs(worldX - ax) < radius && Math.abs(worldY - ay) < radius) return a;
+  }
+  return null;
+}
+
+/** 导出: 直接更新 Agent 渲染位置 (拖动时调用) */
+export function moveAgent(agentId: string, worldX: number, worldY: number) {
+  if (!_simState) _simState = new Map();
+  _simState.set(agentId, { x: worldX, y: worldY });
+}
+
 export function useAgentOverlay() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [hovered, setHovered] = useState<AgentInfo | null>(null);
   const [selected, setSelected] = useState<AgentInfo | null>(null);
   const [mousePos, setMousePos] = useState<{x:number;y:number}|null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   // Receive agent data from parent via postMessage
   useEffect(() => {
@@ -50,7 +70,6 @@ export function useAgentOverlay() {
     for (let i = agents.length - 1; i >= 0; i--) {
       const a = agents[i];
       if (a.x === undefined || a.y === undefined) continue;
-      // Use force-adjusted position for hit test
       const sp = _simState?.get(a.agent_id);
       const ax = sp ? sp.x : a.x;
       const ay = sp ? sp.y : a.y;
@@ -64,7 +83,27 @@ export function useAgentOverlay() {
     setSelected(hovered);
   }, [hovered]);
 
-  return { agents, relationships, hovered, selected, mousePos, handleMouse, handleClick };
+  // ── 拖动 ──
+  const handleDragStart = useCallback((worldX: number, worldY: number) => {
+    const found = findAgentAt(worldX, worldY, agents, 20);
+    if (found) { setDraggingId(found.agent_id); setSelected(found); }
+  }, [agents]);
+
+  const handleDragMove = useCallback((worldX: number, worldY: number) => {
+    if (draggingId) moveAgent(draggingId, worldX, worldY);
+  }, [draggingId]);
+
+  const handleDragEnd = useCallback(() => {
+    if (draggingId && _simState) {
+      const pos = _simState.get(draggingId);
+      if (pos) {
+        window.parent.postMessage({ type: 'agent-move', agent_id: draggingId, x: Math.round(pos.x), y: Math.round(pos.y) }, '*');
+      }
+    }
+    setDraggingId(null);
+  }, [draggingId]);
+
+  return { agents, relationships, hovered, selected, mousePos, draggingId, handleMouse, handleClick, handleDragStart, handleDragMove, handleDragEnd };
 }
 
 /** Draw relationship links between agents */
@@ -103,7 +142,7 @@ export function drawRelationships(
     ctx.lineTo(to.x, to.y);
 
     if (rel.can_direct_chat) {
-      ctx.setLineDash([]);
+      ctx.setLineDash([4, 3]);
       ctx.lineWidth = 1.0;
     } else {
       ctx.setLineDash([3, 4]);
@@ -115,10 +154,10 @@ export function drawRelationships(
     if (rel.relation_type) {
       const mx = (from.x + to.x) / 2;
       const my = (from.y + to.y) / 2;
-      ctx.fillStyle = '#6A665F';
-      ctx.font = '7px Inter,IBM Plex Sans,system-ui,sans-serif';
+      ctx.fillStyle = '#88847F';
+      ctx.font = '5px Inter,IBM Plex Sans,system-ui,sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(rel.relation_type, mx, my - 3);
+      ctx.fillText(rel.relation_type, mx, my - 5);
       ctx.textAlign = 'start';
     }
   }
@@ -135,6 +174,7 @@ export function drawAgents(
   selected: AgentInfo | null,
   worldWidth: number,
   _canvasW: number, _canvasH: number,
+  draggingId: string | null = null,
 ) {
   if (!agents.length) return;
   const r = Math.max(2, Math.min(10, worldWidth / 50));
@@ -167,11 +207,13 @@ export function drawAgents(
   const margin = r * 2;
   const entries = Array.from(pos.entries());
   const n = entries.length;
-  const minDist = r * 5;        // target separation (~40px in world)
-  const damping = 0.08;         // low → smooth convergence
+  const minDist = r * 10;
+  const damping = 0.12;
 
   for (let i = 0; i < n; i++) {
     const [id, pi] = entries[i];
+    // 拖动中的 agent 不参与力模拟
+    if (id === draggingId) continue;
     let fx = 0, fy = 0;
     const neighbors = adj.get(id);
 
@@ -184,12 +226,10 @@ export function drawAgents(
       const isLinked = neighbors?.has(jid);
 
       if (d < minDist) {
-        // Push apart — linked agents get 2x push to prevent overlap
         const force = (minDist - d) / minDist * (isLinked ? 2 : 1);
         fx += (dx / d) * force;
         fy += (dy / d) * force;
       } else if (isLinked && d < minDist * 4) {
-        // Gentle pull toward linked agents (only when not too far)
         fx -= dx * 0.02;
         fy -= dy * 0.02;
       }
@@ -225,10 +265,10 @@ export function drawAgents(
 
     // Label
     ctx.fillStyle = '#2A2A2A';
-    const fontSize = Math.max(4, Math.min(7, r * 0.7));
+    const fontSize = Math.max(4, Math.min(5.5, r * 0.55));
     ctx.font = `${fontSize}px Inter,IBM Plex Sans,system-ui,sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillText(a.name || a.agent_id, sx, sy - r - 2);
+    ctx.fillText(a.name || a.agent_id, sx, sy - r - 4);
     ctx.textAlign = 'start';
   }
 }

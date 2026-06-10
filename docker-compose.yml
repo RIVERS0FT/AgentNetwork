@@ -1,107 +1,83 @@
-# ============================================
-# AgentNetwork — Docker Compose 编排
-# ============================================
-# 启动方式:
-#   docker-compose up -d                  # 后台启动全部服务
-#   docker-compose up -d message-bus      # 单独启动消息总线
-#   docker-compose logs -f agent-server   # 查看 agent 日志
-#
-# 注意: 在 Linux 上使用 service name 互访 (如 message-bus:9000)
-#       不需要 host.docker.internal (仅 Docker Desktop 支持)
-# ============================================
+# 启动: docker compose up -d --build
 
-version: "3.9"
+x-brain: &brain
+  build: { context: ., dockerfile: Dockerfile }
+  environment:
+    AGENT_BACKEND: brain
+    MESSAGE_BUS_URL: http://bus:9000
+    SERVER_URL: http://srv:8000
+    LLM_API_KEY: ${ANTHROPIC_API_KEY}
+    LLM_MODEL: deepseek-chat
+    LLM_API_BASE: https://api.deepseek.com/v1
+    LLM_PROVIDER: openai
+  restart: unless-stopped
+  networks: [an]
+
+x-claude: &claude
+  build: { context: ., dockerfile: Dockerfile.claude }
+  environment:
+    AGENT_BACKEND: claude-code
+    MESSAGE_BUS_URL: http://bus:9000
+    SERVER_URL: http://srv:8000
+    LLM_API_KEY: ${ANTHROPIC_API_KEY}
+    LLM_MODEL: deepseek-chat
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+  restart: unless-stopped
+  networks: [an]
+
+x-openclaw: &openclaw
+  build: { context: ., dockerfile: Dockerfile.openclaw }
+  environment:
+    AGENT_BACKEND: openclaw
+    MESSAGE_BUS_URL: http://bus:9000
+    SERVER_URL: http://srv:8000
+    LLM_API_KEY: ${ANTHROPIC_API_KEY}
+    LLM_MODEL: deepseek-chat
+    LLM_API_BASE: https://api.deepseek.com/v1
+    LLM_PROVIDER: openai
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+  restart: unless-stopped
+  networks: [an]
 
 services:
-  # ── 消息总线 (端口 9000) ──
-  message-bus:
-    build:
-      context: .
-      dockerfile: Dockerfile.message-bus
-    container_name: an-message-bus
-    ports:
-      - "9000:9000"
-    environment:
-      - MESSAGE_BUS_PORT=9000
+  bus:
+    build: { context: ., dockerfile: Dockerfile.message-bus }
+    container_name: bus
+    ports: ["9000:9000"]
+    volumes: ["./data/logs:/app/data/logs"]
+    environment: { MESSAGE_BUS_PORT: "9000" }
     restart: unless-stopped
-    networks:
-      - agent-network
+    networks: [an]
 
-  # ── 主调度中心 / Web API (端口 8000) ──
-  server:
-    build:
-      context: .
-      dockerfile: Dockerfile.server
-    container_name: an-server
-    ports:
-      - "8000:8000"
+  srv:
+    build: { context: ., dockerfile: Dockerfile.server }
+    container_name: srv
+    ports: ["8000:8000"]
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock", "./data/logs:/app/data/logs"]
     environment:
-      - SERVER_PORT=8000
-      - MESSAGE_BUS_URL=http://message-bus:9000
-    depends_on:
-      - message-bus
+      SERVER_PORT: "8000"
+      MESSAGE_BUS_URL: http://bus:9000
+      LLM_API_KEY: ${ANTHROPIC_API_KEY}
+      LLM_MODEL: deepseek-chat
+      LLM_API_BASE: https://api.deepseek.com/v1
+      LLM_PROVIDER: openai
     restart: unless-stopped
-    networks:
-      - agent-network
+    networks: [an]
 
-  # ── Agent 容器 (Python 通用版) ──
-  agent-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: an-agent
-    environment:
-      - AGENT_ID=agent-001
-      - AGENT_ROLE=generic
-      - AGENT_NAME=Agent
-      - MESSAGE_BUS_URL=http://message-bus:9000
-      - SERVER_URL=http://server:8000
-    depends_on:
-      - message-bus
-      - server
-    restart: unless-stopped
-    networks:
-      - agent-network
+  ag-b1: { <<: *brain, container_name: ag-b1 }
+  ag-b2: { <<: *brain, container_name: ag-b2 }
+  ag-b3: { <<: *brain, container_name: ag-b3 }
+  ag-b4: { <<: *brain, container_name: ag-b4 }
 
-  # ── Agent 容器 (Claude Code 版) ──
-  # agent-claude:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.claude
-  #   container_name: an-agent-claude
-  #   environment:
-  #     - AGENT_ID=agent-claude-001
-  #     - AGENT_ROLE=claude
-  #     - AGENT_NAME=Claude Agent
-  #     - MESSAGE_BUS_URL=http://message-bus:9000
-  #     - SERVER_URL=http://server:8000
-  #   depends_on:
-  #     - message-bus
-  #     - server
-  #   restart: unless-stopped
-  #   networks:
-  #     - agent-network
+  ag-c1: { <<: *claude, container_name: ag-c1 }
+  ag-c2: { <<: *claude, container_name: ag-c2 }
+  ag-c3: { <<: *claude, container_name: ag-c3 }
 
-  # ── Agent 容器 (OpenClaw 版) ──
-  # agent-openclaw:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.openclaw
-  #   container_name: an-agent-openclaw
-  #   environment:
-  #     - AGENT_ID=agent-openclaw-001
-  #     - AGENT_ROLE=openclaw
-  #     - AGENT_NAME=OpenClaw Agent
-  #     - MESSAGE_BUS_URL=http://message-bus:9000
-  #     - SERVER_URL=http://server:8000
-  #   depends_on:
-  #     - message-bus
-  #     - server
-  #   restart: unless-stopped
-  #   networks:
-  #     - agent-network
+  ag-o1: { <<: *openclaw, container_name: ag-o1 }
+  ag-o2: { <<: *openclaw, container_name: ag-o2 }
+  ag-o3: { <<: *openclaw, container_name: ag-o3 }
 
 networks:
-  agent-network:
-    driver: bridge
-    name: agent-network
+  an: { driver: bridge, name: an }

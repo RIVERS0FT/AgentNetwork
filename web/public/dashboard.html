@@ -15,8 +15,7 @@
 <div class="side-panel">
 <div class="section-title">
   <select id="scene-selector" onchange="onSceneSelect()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:2px 6px;border-radius:3px;font-size:0.7rem;width:150px">
-    <option value="">选择场景脚本</option>
-  </select>
+      </select>
   <button class="btn green" onclick="runSelectedScene()" style="margin-left:6px;font-size:0.7rem;padding:3px 10px">运行</button>
   <span class="toggle" onclick="togglePanel('script-editor')" style="margin-left:auto">_</span>
 </div>
@@ -29,6 +28,7 @@
 <div class="log-dropdown-menu" id="log-fields" style="display:none;flex-direction:column;gap:4px;position:absolute;top:100%;left:0;background:var(--bg);border:1px solid var(--border);padding:6px 10px;border-radius:4px;z-index:10;min-width:100px">
 <label class="chk"><input type="checkbox" data-field="frontend" checked onchange="renderLogs()">前端</label>
 <label class="chk"><input type="checkbox" data-field="scene" checked onchange="renderLogs()">场景</label>
+<label class="chk"><input type="checkbox" data-field="agent" checked onchange="renderLogs()">Agent</label>
 <label class="chk"><input type="checkbox" data-field="message" checked onchange="renderLogs()">消息</label>
 <label class="chk"><input type="checkbox" data-field="system" checked onchange="renderLogs()">系统</label>
 </div>
@@ -41,6 +41,6 @@
 </div>
 </div>
 </div>
-<script src="/static/dashboard.js"></script>
+<script src="/static/dashboard.js?v=3"></script>
 </body>
 </html>

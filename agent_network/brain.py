@@ -162,11 +162,13 @@ class Brain:
 }}
 ```
 
-注意:
-- 不要重复已经做过的事情
-- 如果收件箱有发给你的消息，回复它
-- 优先完成你的目标
-- 用中文回复"""
+行动指南:
+- 这是第{self.turn}轮，你必须立即采取具体行动，绝对不能wait！
+- 优先向其他Agent发送消息：合作、谈判、施压、询问信息
+- 如果收件箱有发给你的消息，必须回复
+- 如有技能（skills），积极使用它们
+- 用中文回复，内容要具体，不要泛泛而谈"""
+# action字段可选值: send_message(发送消息给特定Agent), broadcast(广播给所有人), execute_skill(执行技能), search(搜索信息), analyze(分析局势), plan(制定计划)"""
         return prompt
 
     def _call_llm(self, prompt: str, api_key: str) -> str:

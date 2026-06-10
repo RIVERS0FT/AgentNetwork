@@ -1,26 +1,22 @@
 """
-Docker 容器运行时 — 管理 Agent 容器的生命周期
+Agent 容器运行时 — 预创建池 + 动态扩容
 
-功能:
-- 创建/启动/停止 Agent 容器
-- 向容器发送指令
-- 收集容器状态和日志
-- 配合消息总线实现 Agent 间通信
-
-依赖: docker SDK (pip install docker)
+策略:
+1. 运行场景时，优先从预创建池中分配空闲容器
+2. 池中某类型容器耗尽 → 自动创建新容器
+3. 容器不再销毁，持续复用
 """
 
 import os
 import json
 import time
 import requests
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, field
 
 
 @dataclass
 class ContainerAgent:
-    """运行在 Docker 容器中的 Agent"""
     agent_id: str
     name: str
     role: str
@@ -39,233 +35,167 @@ class ContainerAgent:
 
 
 class ContainerRuntime:
-    """
-    Agent 容器运行时管理器 — Docker 模式
-    支持三种后端: brain (默认), openclaw, claude-code
-    """
+    """Agent 容器管理 — 分配 + 动态创建"""
 
     BACKEND_CONFIG = {
-        "brain":       {"image": "agent-network:latest",    "cmd": "python agent_server.py"},
-        "openclaw":    {"image": "agent-network:openclaw",  "cmd": "python agent_server_openclaw.py"},
-        "claude-code": {"image": "agent-network:claude",    "cmd": "python3 agent_server_claude.py"},
+        "brain":       {"image": "agentnetwork-ag-b1",   "cmd": "python agent_server.py",          "prefix": "ag-b"},
+        "claude-code": {"image": "agentnetwork-ag-c1",   "cmd": "python3 agent_server_claude.py",  "prefix": "ag-c"},
+        "openclaw":    {"image": "agentnetwork-ag-o1",   "cmd": "python agent_server_openclaw.py", "prefix": "ag-o"},
     }
     DEFAULT_BACKEND = "brain"
-    NETWORK_NAME = "agent-net"
-    SUBNET = "172.20.0.0/16"
+    NETWORK_NAME = "an"
+    INTERNAL_PORT = 8000
 
-    def __init__(self, message_bus_url: str = "http://host.docker.internal:9000"):
+    def __init__(self, message_bus_url: str = "http://message-bus:9000"):
         self.message_bus_url = message_bus_url
         self.agents: Dict[str, ContainerAgent] = {}
-        self._built_images: set = set()
+        self._docker_client = None
+        self._used_containers: Set[str] = set()  # 当前仿真已分配的容器名
+        self._init_docker()
 
+    def _init_docker(self):
         try:
             import docker
+            for _ in range(2):
+                try:
+                    self._docker_client = docker.from_env()
+                    self._docker_client.ping()
+                    print("[Runtime] Docker OK")
+                    return
+                except Exception:
+                    time.sleep(1)
         except ImportError:
-            raise RuntimeError("Docker SDK not installed. Run: pip install docker")
-
-        for attempt in range(3):
-            try:
-                self.docker_client = docker.from_env()
-                self.docker_client.ping()
-                self._setup_network()
-                print("[Runtime] Docker mode")
-                return
-            except Exception as e:
-                if attempt < 2:
-                    print(f"[Runtime] Docker probe {attempt+1}/3: {e}")
-                    time.sleep(2)
-        raise RuntimeError(
-            "Docker Engine unavailable. Ensure Docker Desktop is running.\n"
-            "Run 'docker ps' to verify. If WSL2 is blocked by IT policy,\n"
-            "Docker Desktop cannot run on this machine."
-        )
-
-    def _setup_network(self):
-        """创建 Docker 网络（如不存在）"""
-        try:
-            self.docker_client.networks.get(self.NETWORK_NAME)
-            print(f"[Runtime] Using existing network: {self.NETWORK_NAME}")
-        except Exception:
-            ipam_pool = docker.types.IPAMPool(subnet=self.SUBNET)
-            ipam_config = docker.types.IPAMConfig(pool_configs=[ipam_pool])
-            self.docker_client.networks.create(
-                self.NETWORK_NAME, driver="bridge", ipam=ipam_config,
-            )
-            print(f"[Runtime] Created network: {self.NETWORK_NAME} ({self.SUBNET})")
-
-    def _ensure_image(self, backend: str):
-        """检查镜像是否存在，不存在则自动构建"""
-        if backend in self._built_images:
-            return
-        cfg = self.BACKEND_CONFIG.get(backend, self.BACKEND_CONFIG[self.DEFAULT_BACKEND])
-        image_name = cfg["image"]
-
-        try:
-            self.docker_client.images.get(image_name)
-            self._built_images.add(backend)
-            return
-        except Exception:
             pass
+        print("[Runtime] No Docker SDK, container discovery only")
 
-        # 查找 Dockerfile
-        import pathlib
-        root = pathlib.Path(__file__).parent.parent
-        dockerfile_map = {
-            "brain":       root / "Dockerfile",
-            "openclaw":    root / "Dockerfile.openclaw",
-            "claude-code": root / "Dockerfile.claude",
-        }
-        dockerfile_path = dockerfile_map.get(backend, root / "Dockerfile")
-        if not dockerfile_path.exists():
-            raise RuntimeError(f"Dockerfile not found at {dockerfile_path}")
+    def _get_running_containers(self, backend: str) -> List[str]:
+        """获取某类型的所有运行中容器名"""
+        cfg = self.BACKEND_CONFIG.get(backend, self.BACKEND_CONFIG[self.DEFAULT_BACKEND])
+        prefix = cfg["prefix"]
+        containers = []
+        if self._docker_client:
+            try:
+                for c in self._docker_client.containers.list():
+                    if c.name.startswith(prefix):
+                        containers.append(c.name)
+            except Exception:
+                pass
+        return sorted(containers)
 
-        print(f"[Runtime] Building Docker image {image_name} ...")
-        image, logs = self.docker_client.images.build(
-            path=str(root),
-            dockerfile=str(dockerfile_path),
-            tag=image_name,
-            rm=True,
-        )
-        for chunk in logs:
-            if 'stream' in chunk:
-                line = chunk['stream'].rstrip()
-                if line:
-                    print(f"  [build] {line}")
-        print(f"[Runtime] Image {image_name} built successfully")
-        self._built_images.add(backend)
+    def _get_or_create_container(self, backend: str) -> str:
+        """获取空闲容器名，无则动态创建"""
+        cfg = self.BACKEND_CONFIG.get(backend, self.BACKEND_CONFIG[self.DEFAULT_BACKEND])
+        prefix = cfg["prefix"]
 
-    def create_agent(self, agent_id: str, role: str, name: str,
-                     port: int = 0, llm_config: Dict = None,
-                     extra_meta: Dict = None) -> ContainerAgent:
-        """创建并启动一个 Agent 容器"""
-        if port == 0:
-            used_ports = {a.port for a in self.agents.values()}
-            port = 8100 + len(self.agents)
-            while port in used_ports:
-                port += 1
+        # 1. 列出运行中容器
+        running = self._get_running_containers(backend)
 
-        ca = ContainerAgent(
-            agent_id=agent_id, name=name, role=role, port=port,
-            container_name=f"agent-{agent_id}",
-            url=f"http://localhost:{port}",
-        )
+        # 2. 找第一个未分配的
+        for name in running:
+            if name not in self._used_containers:
+                self._used_containers.add(name)
+                print(f"[Runtime] Assign {name} (from pool)")
+                return name
 
-        self._start_docker_container(ca, llm_config, extra_meta)
-        self.agents[agent_id] = ca
-        return ca
+        # 3. 池耗尽 → 动态创建
+        if self._docker_client:
+            prefix = cfg["prefix"]
+            auto_n = len([c for c in self._used_containers if c.startswith(prefix)]) + 10  # start from 10
+            auto_name = f"{prefix}{auto_n}"
+            try:
+                # 清理同名旧容器
+                try:
+                    old = self._docker_client.containers.get(auto_name)
+                    old.remove(force=True)
+                except Exception:
+                    pass
+                img = cfg["image"]
+                cmd = cfg["cmd"]
+                env = {
+                    "AGENT_ID": auto_name,
+                    "AGENT_NAME": auto_name,
+                    "AGENT_ROLE": backend,
+                    "AGENT_BACKEND": backend,
+                    "PORT": str(self.INTERNAL_PORT),
+                    "MESSAGE_BUS_URL": self.message_bus_url,
+                    "SERVER_URL": "http://server:8000",
+                }
+                for key in ("LLM_API_KEY", "LLM_MODEL", "LLM_API_BASE", "LLM_PROVIDER", "ANTHROPIC_API_KEY"):
+                    if os.environ.get(key):
+                        env[key] = os.environ[key]
 
-    def _start_docker_container(self, ca: ContainerAgent, llm_config: Dict = None,
-                                 extra_meta: Dict = None):
-        """启动 Docker 容器，根据 backend 选择镜像和命令"""
+                c = self._docker_client.containers.run(
+                    img, name=auto_name, detach=True, command=cmd,
+                    environment=env, network=self.NETWORK_NAME,
+                )
+                self._used_containers.add(auto_name)
+                print(f"[Runtime] Created {auto_name} ({backend}) container={c.id[:12]}")
+                return auto_name
+            except Exception as e:
+                print(f"[Runtime] Create failed: {e}, falling back to pool reuse")
+                if running:
+                    self._used_containers.add(running[0])
+                    return running[0]
+
+        # 4. 无 Docker，回退：复用已有容器
+        if running:
+            self._used_containers.add(running[0])
+            return running[0]
+
+        raise RuntimeError(f"No {backend} containers available")
+
+    def assign_agent(self, agent_id: str, role: str, name: str, extra_meta: Dict = None) -> ContainerAgent:
+        """从池中分配容器给场景 Agent"""
         backend = (extra_meta or {}).get("backend", self.DEFAULT_BACKEND)
         if backend not in self.BACKEND_CONFIG:
             backend = self.DEFAULT_BACKEND
 
-        self._ensure_image(backend)
-        cfg = self.BACKEND_CONFIG[backend]
+        container_name = self._get_or_create_container(backend)
+        url = f"http://{container_name}:{self.INTERNAL_PORT}"
 
-        env = {
-            "AGENT_ID": ca.agent_id,
-            "AGENT_ROLE": ca.role,
-            "AGENT_NAME": ca.name,
-            "PORT": str(ca.port),
-            "MESSAGE_BUS_URL": self.message_bus_url,
-            "SERVER_URL": getattr(self, 'server_url', 'http://localhost:8000'),
-        }
-        # 传递 script_json 身份数据
-        if extra_meta:
-            env["AGENT_CORE_GOAL"] = extra_meta.get("core_goal", "")
-            env["AGENT_HIDDEN_SECRET"] = extra_meta.get("hidden_secret", "")
-            env["AGENT_ACTION_SPACE"] = json.dumps(extra_meta.get("action_space", []), ensure_ascii=False)
-            env["AGENT_INITIAL_ASSETS"] = json.dumps(extra_meta.get("initial_assets", {}), ensure_ascii=False)
-            env["AGENT_SYSTEM_PROMPT"] = extra_meta.get("background_rules", "")
-        if llm_config:
-            if llm_config.get("api_key"):
-                env["LLM_API_KEY"] = llm_config["api_key"]
-                env["LLM_MODEL"] = llm_config.get("model", "")
-                env["LLM_PROVIDER"] = llm_config.get("provider", "auto")
-
-        # Claude Code needs ANTHROPIC_API_KEY for the CLI
-        if backend == "claude-code" and llm_config and llm_config.get("api_key"):
-            env["ANTHROPIC_API_KEY"] = llm_config["api_key"]
-
-        container = self.docker_client.containers.run(
-            cfg["image"],
-            name=ca.container_name,
-            detach=True,
-            command=cfg["cmd"],
-            ports={f"{ca.port}/tcp": ca.port},
-            environment=env,
-            network=self.NETWORK_NAME,
+        # 存储 extra_meta 供 decide_all 时注入 context
+        ca = ContainerAgent(
+            agent_id=agent_id, name=name, role=role,
+            container_name=container_name, port=self.INTERNAL_PORT,
+            url=url, status="running",
         )
-        ca.container_id = container.id
+        ca._extra_meta = extra_meta or {}
+        self.agents[agent_id] = ca
+        return ca
 
-        # Read assigned IP from Docker network
-        container.reload()
-        nets = container.attrs.get("NetworkSettings", {}).get("Networks", {})
-        agent_net = nets.get(self.NETWORK_NAME, {})
-        agent_ip = agent_net.get("IPAddress", "")
-        if agent_ip:
-            ca._ip = agent_ip
-            ca.url = f"http://{agent_ip}:{ca.port}"
-        else:
-            # Fallback: use container name as hostname (Docker DNS)
-            ca.url = f"http://{ca.container_name}:{ca.port}"
-
-        ca.status = "starting"
-        print(f"[Runtime] Started {ca.agent_id} ({backend}) @ IP {agent_ip}:{ca.port}")
-
-
-    def _register_with_bus(self, ca: ContainerAgent):
-        """向消息总线注册"""
-        try:
-            requests.post(f"{self.message_bus_url}/register",
-                         params={"agent_id": ca.agent_id, "url": ca.url, "name": ca.name}, timeout=3)
-        except Exception as e:
-            print(f"[Runtime] Failed to register {ca.agent_id}: {e}")
-
-    def stop_agent(self, agent_id: str):
-        """停止 Agent"""
-        ca = self.agents.get(agent_id)
-        if not ca:
-            return
-        try:
-            requests.post(f"{self.message_bus_url}/unregister", params={"agent_id": agent_id}, timeout=2)
-        except Exception:
-            pass
-        if ca.container_id:
-            try:
-                container = self.docker_client.containers.get(ca.container_id)
-                container.stop()
-                container.remove()
-            except Exception:
-                pass
-        ca.status = "stopped"
-
-    def stop_all(self):
-        for aid in list(self.agents.keys()):
-            self.stop_agent(aid)
+    def run_round(self, context: Dict = None) -> Dict:
+        decisions = self.decide_all(context)
+        actions = self.act_all()
+        return {"decisions": decisions, "actions": actions}
 
     def decide_all(self, context: Dict = None) -> List[Dict]:
-        """并行触发所有 Agent 决策"""
         from concurrent.futures import ThreadPoolExecutor, as_completed
         results = []
         agents_list = list(self.agents.values())
         def _decide(ca):
             try:
-                resp = requests.post(f"{ca.url}/decide",
-                                    json={"context": context or {}}, timeout=60)
+                ctx = dict(context or {})
+                ctx["agent_id"] = ca.agent_id
+                ctx["agent_name"] = ca.name
+                ctx["agent_role"] = ca.role
+                # 注入场景技能列表
+                em = getattr(ca, '_extra_meta', {}) or {}
+                if em.get("skills_list"): ctx["skills_list"] = em["skills_list"]
+                if em.get("core_goal"): ctx["core_goal"] = em["core_goal"]
+                if em.get("hidden_secret"): ctx["hidden_secret"] = em["hidden_secret"]
+                if em.get("action_space"): ctx["action_space"] = em["action_space"]
+                if em.get("background_rules"): ctx["background_rules"] = em["background_rules"]
+                resp = requests.post(f"{ca.url}/decide", json={"context": ctx}, timeout=60)
                 return resp.json()
             except Exception as e:
                 return {"agent_id": ca.agent_id, "error": str(e)}
-        with ThreadPoolExecutor(max_workers=len(agents_list)) as pool:
+        with ThreadPoolExecutor(max_workers=min(10, len(agents_list))) as pool:
             futures = {pool.submit(_decide, ca): ca for ca in agents_list}
             for f in as_completed(futures):
                 results.append(f.result())
         return results
 
     def act_all(self) -> List[Dict]:
-        """并行触发所有 Agent 执行决策"""
         from concurrent.futures import ThreadPoolExecutor, as_completed
         results = []
         agents_list = list(self.agents.values())
@@ -275,37 +205,26 @@ class ContainerRuntime:
                 return resp.json()
             except Exception as e:
                 return {"agent_id": ca.agent_id, "error": str(e)}
-        with ThreadPoolExecutor(max_workers=len(agents_list)) as pool:
+        with ThreadPoolExecutor(max_workers=min(10, len(agents_list))) as pool:
             futures = {pool.submit(_act, ca): ca for ca in agents_list}
             for f in as_completed(futures):
                 results.append(f.result())
         return results
 
-    def run_round(self, context: Dict = None) -> Dict:
-        """执行一轮：决策 → 执行 → 收集结果"""
-        decisions = self.decide_all(context)
-        actions = self.act_all()
-        return {"decisions": decisions, "actions": actions}
+    def stop_all(self):
+        self.agents.clear()
 
-    def get_all_status(self) -> List[Dict]:
-        """获取所有 Agent 状态"""
-        statuses = []
-        for ca in self.agents.values():
-            try:
-                resp = requests.get(f"{ca.url}/status", timeout=3)
-                statuses.append({**ca.to_dict(), **resp.json()})
-            except Exception:
-                statuses.append({**ca.to_dict(), "error": "unreachable"})
-        return statuses
+    def reset(self):
+        self.stop_all()
+        self._used_containers.clear()
 
 
-# 全局单例
 _runtime: Optional[ContainerRuntime] = None
 
 
 def get_runtime() -> ContainerRuntime:
     global _runtime
     if _runtime is None:
-        bus_url = os.environ.get("MESSAGE_BUS_URL", "http://localhost:9000")
+        bus_url = os.environ.get("MESSAGE_BUS_URL", "http://message-bus:9000")
         _runtime = ContainerRuntime(message_bus_url=bus_url)
     return _runtime

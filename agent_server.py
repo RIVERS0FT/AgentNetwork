@@ -24,10 +24,12 @@ import os
 import sys
 import json
 import time
+import asyncio
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
@@ -35,6 +37,8 @@ import requests
 
 from agent_network.agent import Agent
 from agent_network.comm import RemoteBus
+from agent_network.logger import get_logger
+from agent_network.event_bus import PacketRecorder
 
 
 # ═══════════════════════════════════════════════
@@ -53,6 +57,8 @@ AGENT_HIDDEN_SECRET = os.environ.get("AGENT_HIDDEN_SECRET", "")
 AGENT_ACTION_SPACE = json.loads(os.environ.get("AGENT_ACTION_SPACE", "[]"))
 AGENT_INITIAL_ASSETS = json.loads(os.environ.get("AGENT_INITIAL_ASSETS", "{}"))
 AGENT_SYSTEM_PROMPT = os.environ.get("AGENT_SYSTEM_PROMPT", "")  # from scene background_rules
+AGENT_INTERACTION_PARADIGM = os.environ.get("AGENT_INTERACTION_PARADIGM", "")
+AGENT_PARADIGM_HINT = os.environ.get("AGENT_PARADIGM_HINT", "")
 
 LOG_COLLECTOR_URL = os.environ.get("LOG_COLLECTOR_URL", "")
 PACKET_MONITOR_URL = os.environ.get("PACKET_MONITOR_URL", "")
@@ -82,6 +88,8 @@ agent.extra_meta = {
     "hidden_secret": AGENT_HIDDEN_SECRET,
     "action_space": AGENT_ACTION_SPACE,
     "initial_assets": AGENT_INITIAL_ASSETS,
+    "interaction_paradigm": AGENT_INTERACTION_PARADIGM,
+    "paradigm_hint": AGENT_PARADIGM_HINT,
 }
 
 # 安装 Brain
@@ -100,9 +108,16 @@ if AGENT_ACTION_SPACE:
     _goals.append(f"可用行动: {', '.join(AGENT_ACTION_SPACE)}")
 if AGENT_INITIAL_ASSETS:
     _goals.append(f"初始资产: {json.dumps(AGENT_INITIAL_ASSETS, ensure_ascii=False)}")
+if AGENT_PARADIGM_HINT:
+    _goals.append(f"行为模式: {AGENT_PARADIGM_HINT}")
+
+# 构建完整系统提示词（注入范式提示）
+_system_prompt = AGENT_SYSTEM_PROMPT
+if AGENT_PARADIGM_HINT:
+    _system_prompt = f"{_system_prompt}\n\n【行为模式指导】\n{AGENT_PARADIGM_HINT}"
 
 agent.equip_brain(goals=_goals if _goals else None, config=brain_config,
-                   system_prompt=AGENT_SYSTEM_PROMPT)
+                   system_prompt=_system_prompt)
 
 # ═══════════════════════════════════════════════
 # HTTP API
@@ -112,18 +127,36 @@ app = FastAPI(title=f"Agent {AGENT_NAME}")
 
 turn = 0
 last_action: Dict[str, Any] = {}
+_allowed_targets: set = set()  # 通信权限矩阵
+_channel_map: Dict[str, str] = {}  # {(from_id, to_id): channel_id} 来自 topology edge
+_current_talk: str = ""        # 当前会话/对话 ID（仿真启动时生成）
 
-def _log_agent(event: str, detail: str):
-    """统一日志 — POST 到主服务器"""
+_agent_logger = get_logger()
+
+def _log_agent(event: str, detail: str, **kw):
+    """Agent 本地日志 + 上报到主服务器"""
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    effective_id = kw.get("from_id", AGENT_ID)
+    effective_name = kw.get("from_name", AGENT_NAME)
+    payload = {
+        "agent_id": effective_id,
+        "agent_name": effective_name,
+        "event": event,
+        "detail": detail,
+        "timestamp": timestamp,
+        "from_agent": effective_id,
+        "to_agent": kw.get("target", kw.get("to", "")),
+        "action": kw.get("action_type", event),
+        "action_status": kw.get("status", "success"),
+        "details": kw or {},
+    }
+    # 本地记录
+    _agent_logger.system(event, detail, agent_id=AGENT_ID, details=payload)
+    # 上报到主服务器
     try:
-        requests.post(f"{SERVER_URL}/api/logs/agent", json={
-            "agent_id": AGENT_ID,
-            "agent_name": AGENT_NAME,
-            "event": event,
-            "detail": detail,
-        }, timeout=2)
+        requests.post(f"{SERVER_URL}/api/logs/agent", json=payload, timeout=2)
     except Exception:
-        pass  # 日志发送失败不影响 Agent 运行
+        pass
 
 
 class MessageIn(BaseModel):
@@ -156,8 +189,9 @@ async def status():
 
 
 @app.post("/message")
-async def receive_message(msg: MessageIn):
+async def receive_message(msg: MessageIn, request: Request):
     """接收来自其他 Agent 的消息 → 写入 Agent 收件箱"""
+    client_ip = request.client.host if request.client else "unknown"
     agent.inbox.append({
         "from": msg.from_name or msg.from_id,
         "content": msg.content,
@@ -165,31 +199,107 @@ async def receive_message(msg: MessageIn):
     })
     if len(agent.inbox) > 50:
         agent.inbox.pop(0)
+    # 记录入站报文
+    PacketRecorder.record_inbound(
+        agent_id=AGENT_ID, src_ip=client_ip, method="POST", path="/message",
+        content=msg.content, from_id=msg.from_id,
+    )
     return {"received": True, "inbox_size": len(agent.inbox)}
+
+
+# ── 全局事件队列 ──
+_event_queue: List[Dict[str, Any]] = []
+
+
+@app.post("/event")
+async def receive_event(event: Dict[str, Any]):
+    """接收来自调度中心的事件通知（如合规检查、媒体曝光等）"""
+    event_name = event.get("event_name", "未知事件")
+    impact = event.get("impact", "")
+    turn = event.get("turn", 0)
+
+    # 写入 Agent 收件箱（作为系统消息）
+    agent.inbox.append({
+        "from": "系统",
+        "content": f"⚠️ 事件 [{event_name}]: {impact}",
+        "type": "event",
+    })
+
+    # 同时写入事件队列（供决策时参考）
+    _event_queue.append({
+        "event_name": event_name,
+        "impact": impact,
+        "turn": turn,
+    })
+
+    _log_agent("event_received", f"事件: {event_name} — {impact}",
+               event_name=event_name, impact=impact, turn=turn)
+    return {"received": True, "event": event_name}
+
+
+@app.get("/events")
+async def list_events():
+    """获取已触发的事件列表"""
+    return {"agent_id": AGENT_ID, "events": _event_queue}
 
 
 @app.post("/decide")
 async def decide(req: DecideRequest = None):
-    """触发 LLM 决策，返回 Action"""
+    """触发 LLM 决策，返回 Action — 支持身份注入"""
     global turn, last_action
     turn += 1
     ctx = req.context if req else {}
     ctx["round"] = turn
 
+    # 使用注入的身份（场景 Agent），覆盖容器自身的身份
+    effective_id = ctx.get("agent_id", AGENT_ID)
+    effective_name = ctx.get("agent_name", AGENT_NAME)
+    effective_role = ctx.get("agent_role", AGENT_ROLE)
+
+    # 存储通信权限矩阵
+    global _allowed_targets, _channel_map, _current_talk
+    _allowed_targets = set(ctx.get("comm_matrix", {}).get(effective_id, []))
+    # 存储信道映射和会话 ID（供 /act 使用）
+    _channel_map = ctx.get("channel_map", {})
+    _current_talk = ctx.get("talk", "")
+
+    # 注入场景角色目标和技能（只在身份变化时重建 brain）
+    if effective_id != AGENT_ID:
+        injected_goals = []
+        injected_prompt = AGENT_SYSTEM_PROMPT
+        if ctx.get("core_goal"): injected_goals.append(f"核心目标: {ctx['core_goal']}")
+        if ctx.get("hidden_secret"): injected_goals.append(f"隐藏秘密: {ctx['hidden_secret']}")
+        if ctx.get("action_space"): injected_goals.append(f"可用行动: {', '.join(ctx['action_space'])}")
+        if ctx.get("skills_list"):
+            skills_text = "\n".join(f"  - {s['name']}: {s.get('desc','')}" for s in ctx["skills_list"])
+            injected_goals.append(f"可用技能:\n{skills_text}")
+        if ctx.get("background_rules"): injected_prompt = ctx["background_rules"]
+        if injected_goals and effective_id != getattr(agent, '_last_injected_id', None):
+            agent._last_injected_id = effective_id
+            agent.equip_brain(goals=injected_goals, config=brain_config, system_prompt=injected_prompt)
+
     action = agent.decide(ctx)
     if action:
         last_action = action.to_dict() if hasattr(action, 'to_dict') else str(action)
-        _log_agent("decide", f"{action.type} → {getattr(action, 'target', '')}: {getattr(action, 'content', '')[:100]}")
-
+        act_type = action.type if hasattr(action, 'type') else "unknown"
+        act_target = getattr(action, 'target', '')
+        content_text = getattr(action, 'content', '') or getattr(action, 'reasoning', '')
+        _log_agent("decide",
+                   content_text[:100],
+                   from_id=effective_id, target=act_target,
+                   action_type=act_type,
+                   content=getattr(action, 'content', '')[:300],
+                   reasoning=getattr(action, 'reasoning', '')[:200],
+                   round=turn, status="decided")
 
     if action and hasattr(action, 'to_dict'):
         return {
-            "agent_id": AGENT_ID, "agent_name": AGENT_NAME,
+            "agent_id": effective_id, "agent_name": effective_name,
             "turn": turn, "has_llm": bool(brain_config.get("api_key")),
             **action.to_dict(),
         }
     return {
-        "agent_id": AGENT_ID, "agent_name": AGENT_NAME,
+        "agent_id": effective_id, "agent_name": effective_name,
         "turn": turn, "type": "wait", "target": "", "content": "",
         "reasoning": "no brain available",
     }
@@ -208,31 +318,71 @@ async def act():
     action_target = last_action.get("target", "")
     action_content = last_action.get("content", "")
     result["action"] = last_action
-    _log_agent("act", f"{action_type} → {action_target}: {action_content[:100]}")
 
-    # 如果是发送消息，通过 RemoteBus 转发
+    # 如果是发送消息，通过 RemoteBus 转发（日志在发送结果确定后记录）
     if action_type in ("send_message", "broadcast"):
-        try:
-            relay_start = time.time()
-            if action_type == "send_message":
-                ok = comm.send(AGENT_ID, AGENT_NAME, action_target, action_content)
-            else:
-                ok = comm.broadcast(AGENT_ID, AGENT_NAME, action_content)
-            result["relayed"] = ok
+        # 检查通信权限
+        if action_type == "send_message" and _allowed_targets and action_target not in _allowed_targets:
+            result["relayed"] = False
+            _log_agent("act", f"无通信权限: {action_target}（允许: {', '.join(sorted(_allowed_targets))}）",
+                       action_type=action_type, target=action_target, status="failed")
+        else:
+            try:
+                relay_start = time.time()
+                # 从信道映射中查找当前 Agent→目标 的 channel_id
+                chan_id = _channel_map.get(f"{AGENT_ID}->{action_target}", "") or \
+                          _channel_map.get(f"{AGENT_ID.lower()}->{action_target.lower()}", "")
+                if action_type == "send_message":
+                    ok = await asyncio.to_thread(comm.send, AGENT_ID, AGENT_NAME, action_target, action_content,
+                                                 chan_id, _current_talk)
+                else:
+                    ok = await asyncio.to_thread(comm.broadcast, AGENT_ID, AGENT_NAME, action_content, _allowed_targets,
+                                                 chan_id, _current_talk)
+                latency = (time.time() - relay_start) * 1000
+                result["relayed"] = ok
+                _log_agent("act",
+                           action_content[:100] or action_type,
+                           action_type=action_type, target=action_target,
+                           content=action_content[:300], status="success" if ok else "failed")
+                # 记录出站报文
+                destination = action_target if action_type == "send_message" else "broadcast"
+                PacketRecorder.record_outbound(
+                    agent_id=AGENT_ID, dst_ip=f"bus", dst_port=9000,
+                    method="POST", path="/relay", status=200 if ok else 0,
+                    latency_ms=latency, content=action_content,
+                    agent_to=destination,
+                )
+                # 转发到 Packet Monitor
+                if PACKET_MONITOR_URL:
+                    try:
+                        requests.post(f"{PACKET_MONITOR_URL}/api/packets/ingest", json={
+                            "from_id": AGENT_ID, "from_name": AGENT_NAME,
+                            "to": action_target if action_type == "send_message" else "broadcast",
+                            "content": action_content, "type": action_type,
+                            "direction": "outbound",
+                        }, timeout=1)
+                    except Exception:
+                        pass
+            except Exception as e:
+                result["relay_error"] = str(e)
+                _log_agent("act", f"发送异常: {e}",
+                           action_type=action_type, target=action_target, status="failed")
+    else:
+        # 非消息类动作（wait/think/analyze/plan 等）
+        _log_agent("act", action_content[:100] or action_type,
+                   action_type=action_type, target=action_target,
+                   content=action_content[:300], status="executed")
 
-            # 转发到 Packet Monitor
-            if PACKET_MONITOR_URL:
-                try:
-                    requests.post(f"{PACKET_MONITOR_URL}/api/packets/ingest", json={
-                        "from_id": AGENT_ID, "from_name": AGENT_NAME,
-                        "to": action_target if action_type == "send_message" else "broadcast",
-                        "content": action_content, "type": action_type,
-                        "direction": "outbound",
-                    }, timeout=1)
-                except Exception:
-                    pass
+    if action_type == "execute_skill":
+        skill_name = last_action.get("skill", action_target)
+        skill_params = last_action.get("params", {})
+        try:
+            resp = requests.post(f"{SERVER_URL}/api/skills/execute", json={
+                "agent_id": AGENT_ID, "skill_name": skill_name, "params": skill_params,
+            }, timeout=10)
+            result["skill_result"] = resp.json() if resp.ok else {"error": resp.text}
         except Exception as e:
-            result["relay_error"] = str(e)
+            result["skill_error"] = str(e)
 
     # 转发日志到 Log Collector
     if LOG_COLLECTOR_URL:

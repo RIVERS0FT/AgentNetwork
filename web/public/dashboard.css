@@ -57,7 +57,7 @@ body{font-family:'Inter','IBM Plex Sans',system-ui,sans-serif;background:var(--b
 .log-controls select{background:var(--bg);color:var(--text);border:1px solid var(--border);padding:2px 6px;border-radius:3px;font-size:0.7rem;font-family:inherit}
 .log-controls .chk{display:flex;align-items:center;gap:4px;font-size:0.7rem;cursor:pointer;color:var(--gray)}
 .log-entries{flex:1;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:0.68rem;padding:0.3rem}
-.log-entry{padding:1px 4px;border-bottom:1px solid rgba(0,0,0,0.04);white-space:nowrap}
+.log-entry{padding:1px 4px;border-bottom:1px solid rgba(0,0,0,0.04);white-space:nowrap;cursor:pointer}.log-entry:hover{background:rgba(107,138,94,0.08)}.log-entry.expanded{white-space:normal;word-break:break-all;background:rgba(107,138,94,0.12)}
 .log-entry .ts{color:var(--gray)}.log-entry .lv{font-weight:600}
 .lv-L1{color:var(--gray)}.lv-L2{color:var(--blue)}.lv-L3{color:var(--green)}.lv-L4{color:var(--purple)}.lv-L5{color:var(--gray)}
 .log-entry .ev{color:var(--text)}
