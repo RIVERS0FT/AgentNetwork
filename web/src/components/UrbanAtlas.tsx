@@ -113,8 +113,9 @@ export function UrbanAtlas({ world, onStats, showMap = true }: UrbanAtlasProps) 
     ctx.clip();  // clip to atlas bounds
     ctx.translate(screenX, screenY);
     ctx.scale(screenW / world.width, screenH / world.height);
-    drawAgents(ctx, agents, selected, world.width, screenW, screenH, draggingId);
-    drawRelationships(ctx, relationships, agents);
+    const now = performance.now();
+    drawAgents(ctx, agents, selected, world.width, screenW, screenH, draggingId, now);
+    drawRelationships(ctx, relationships, agents, now);
     ctx.restore();
 
     ctx.restore();

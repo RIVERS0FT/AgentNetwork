@@ -18,7 +18,24 @@ interface Relationship {
 const STATUS_COLORS: Record<string, string> = {
   idle: '#6B8A5E', running: '#5A7A9A', paused: '#B8783A',
   stopped: '#C0392B', error: '#C0392B', created: '#8B8475',
+  decided: '#7A6A8A', messaged: '#5A7A9A', send_failed: '#C0392B', analyzed: '#B8783A',
 };
+
+/** 通信事件（用于数据流动画） */
+interface CommEvent {
+  from: string; to: string; timestamp: number;
+}
+const _commEvents: CommEvent[] = [];
+const COMM_EVENT_TTL = 2000; // 粒子动画持续 2 秒
+
+/** 清理过期的通信事件 */
+function purgeCommEvents(now: number) {
+  for (let i = _commEvents.length - 1; i >= 0; i--) {
+    if (now - _commEvents[i].timestamp > COMM_EVENT_TTL) {
+      _commEvents.splice(i, 1);
+    }
+  }
+}
 
 /** Persistent simulation state (survives re-renders) */
 let _simState: Map<string, { x: number; y: number }> | null = null;
@@ -57,6 +74,13 @@ export function useAgentOverlay() {
       if (e.data?.type === 'agents') {
         setAgents(e.data.data || []);
         setRelationships(e.data.relationships || []);
+      }
+      // 接收通信事件，用于数据流动画
+      if (e.data?.type === 'comm-event' && e.data.data) {
+        const d = e.data.data;
+        _commEvents.push({ from: d.from.toLowerCase(), to: d.to.toLowerCase(), timestamp: d.timestamp || Date.now() });
+        // 限制缓冲区大小
+        if (_commEvents.length > 20) _commEvents.shift();
       }
     };
     window.addEventListener('message', handler);
@@ -111,6 +135,7 @@ export function drawRelationships(
   ctx: CanvasRenderingContext2D,
   relationships: Relationship[],
   agents: AgentInfo[],
+  time: number = 0,
 ) {
   _relRef = relationships;
   if (!relationships.length || !agents.length) return;
@@ -122,6 +147,10 @@ export function drawRelationships(
     const a = agentMap.get(id);
     return (a && a.x != null) ? { x: a.x, y: a.y } : null;
   };
+
+  // 清理过期通信事件
+  const now = time || performance.now();
+  purgeCommEvents(now);
 
   ctx.save();
   ctx.lineCap = 'round';
@@ -160,6 +189,37 @@ export function drawRelationships(
       ctx.fillText(rel.relation_type, mx, my - 5);
       ctx.textAlign = 'start';
     }
+
+    // ── 数据流动画：沿连线绘制流动粒子 ──
+    const fromKey = rel.from.toLowerCase();
+    const toKey = rel.to.toLowerCase();
+    const commOnEdge = _commEvents.find(c =>
+      c.from === fromKey && c.to === toKey
+    );
+    if (commOnEdge) {
+      const age = now - commOnEdge.timestamp;
+      if (age < COMM_EVENT_TTL) {
+        const fadeAlpha = 1 - age / COMM_EVENT_TTL;
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          const ux = dx / len;
+          const uy = dy / len;
+          const flowSpeed = 0.04; // 世界坐标/ms
+          ctx.fillStyle = `rgba(90,122,154,${fadeAlpha.toFixed(2)})`;
+          // 绘制 3 个流动粒子，均匀分布
+          for (let p = 0; p < 3; p++) {
+            const offset = ((age * flowSpeed + p * len / 3) % len + len) % len;
+            const px = from.x + ux * offset;
+            const py = from.y + uy * offset;
+            ctx.beginPath();
+            ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
   }
   ctx.setLineDash([]);
   ctx.restore();
@@ -175,6 +235,7 @@ export function drawAgents(
   worldWidth: number,
   _canvasW: number, _canvasH: number,
   draggingId: string | null = null,
+  time: number = 0,
 ) {
   if (!agents.length) return;
   const r = Math.max(2, Math.min(10, worldWidth / 50));
@@ -262,6 +323,21 @@ export function drawAgents(
     ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fillStyle = color + 'cc'; ctx.fill();
     ctx.strokeStyle = color; ctx.lineWidth = 0.8; ctx.stroke();
+
+    // ── 思考动画：decided / analyzed 状态时绘制旋转弧线 ──
+    if (a.status === 'decided' || a.status === 'analyzed') {
+      const spinAngle = (time / 600) % (Math.PI * 2); // 每 600ms 转一圈
+      const arcLen = Math.PI * 1.4; // 约 252°，留缺口
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(sx, sy, r + 3.5, spinAngle, spinAngle + arcLen);
+      ctx.strokeStyle = color + '99';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
 
     // Label
     ctx.fillStyle = '#2A2A2A';

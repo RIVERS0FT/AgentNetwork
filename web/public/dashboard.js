@@ -118,6 +118,15 @@ if (msg.type === 'agent_log' && msg.data) {
     const msgText = from + ' ' + stIcon + ' ' + action + (to && to !== '-' ? ' → ' + to : '') + ' | ' + (l.detail||'');
     logEntry('agent', msgText, ts);
     _lastLogCount++; // 同步计数，避免 batch all 响应重复渲染
+    // 转发通信事件到 iframe，用于数据流动画
+    if ((action === 'send_message' || action === 'broadcast') && status === 'success' && from !== '?' && to) {
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({
+          type: 'comm-event',
+          data: { from: from, to: to, action: action, timestamp: Date.now() }
+        }, '*');
+      }
+    }
     return;
     }
 // ── Agent 状态实时更新 ──
@@ -126,6 +135,7 @@ if (msg.type === 'agent_status' && msg.data) {
         const existing = agents.find(a => a.agent_id === s.agent_id);
         if (existing) { existing.status = s.status; }
     });
+    forwardAgents();
     return;
 }
 if (msg.type === 'status' || msg.type === 'all') {
