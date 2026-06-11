@@ -26,7 +26,7 @@ SYSTEM_PROMPT = """
    - RING (环状传递)
    你必须在剧本中声明总体拓扑类型（global_topology_type），并通过子网（sub_networks）的形式，把角色分入不同的拓扑层。
 4. 异构模型底层：根据模型的特长和角色特征，每个角色必须明确它运行时依赖的底层基座模型（model_backbone），必须在 ['openclaw', 'claudecode'] 中二选一。例如内部协助侧、技术蓝图侧节点可倾向于 openclaw，涉及深度工程、对赌合同决策侧可倾向于 claudecode。
-5. 工具集与环境依赖落地：每个角色容器必须挂载具体的工具集（skillset）。这些工具需要有具体的网络端点（endpoint）和实现描述，同时在配置中声明该容器需要预装的 Python 依赖包（pip_packages）。
+5. 技能绑定：每个角色在 instances_and_skills 中通过 skills 字段（字符串列表）挂载技能。技能名必须与 skills_code 中定义的函数名完全一致。技能数量按角色复杂度分配（核心角色2-4个，辅助角色1-2个）。
 6. 技能可执行代码落地（重点）：你必须为 instances_and_skills 中出现的每一个 skill_name 生成对应的 Python 函数实现，放入 skills_code 字段。代码要求：
    - 是一个完整可独立运行的 Python 模块字符串（含 SkillRegistry 注册中心类 + 所有技能函数）
    - 每个技能函数接受 **kwargs 参数，返回 dict 结果（至少包含 status/result/data 字段）
@@ -83,39 +83,23 @@ RESPONSE_SCHEMA = {
                     "required": ["scenario_metadata", "roles"],
                     "additionalProperties": False
                 },
-                # 模块二：实例容器运行配置与挂载工具集 (对应 instances_and_skills.json)
+                # 模块二：角色技能绑定 (对应 instances_and_skills.json)
                 "instances_and_skills": {
                     "type": "object",
                     "properties": {
                         "container_instances": {
                             "type": "object",
-                            "description": "实例配置，Key必须与模块一中的角色ID严格一一对应",
+                            "description": "角色技能配置，Key必须与模块一中的角色ID严格一一对应",
                             "additionalProperties": {
                                 "type": "object",
                                 "properties": {
-                                    "runtime_engine": {"type": "string", "description": "运行引擎核心名称"},
-                                    "docker_image": {"type": "string", "description": "推荐的底层 Docker 基础镜像名称"},
-                                    "pip_packages": {
+                                    "skills": {
                                         "type": "array",
-                                        "description": "容器拉起时需要自动 pip install 的包列表，带版本号",
+                                        "description": "该角色绑定的技能名称列表，必须与 skills.py 中的函数名一一对应",
                                         "items": {"type": "string"}
-                                    },
-                                    "skill_bindings": {
-                                        "type": "array",
-                                        "description": "为该角色发包、赋能的工具和外部接口清单",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "skill_name": {"type": "string", "description": "技能/公共函数名"},
-                                                "endpoint": {"type": "string", "description": "对应的服务API端点网址"},
-                                                "description": {"type": "string", "description": "该技能的作用及触发逻辑说明"}
-                                            },
-                                            "required": ["skill_name", "endpoint", "description"],
-                                            "additionalProperties": False
-                                        }
                                     }
                                 },
-                                "required": ["runtime_engine", "docker_image", "pip_packages", "skill_bindings"],
+                                "required": ["skills"],
                                 "additionalProperties": False
                             }
                         }

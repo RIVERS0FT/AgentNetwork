@@ -26,16 +26,12 @@
 
 ## 3. 数据字典 (Data Dictionary)
 
-### 3.1 实体实例配置 (`instances_and_skills.json`)
-* `container_instances`: `object`，所有运行的 Agent 容器实例集合。
-    * `{Agent_ID}`: `object`，具体 Agent 实例。
-        * `runtime_engine`: `string`，固定为 `"docker"`。
-        * `docker_image`: `string`，运行时镜像（如 `"python:3.10-slim"`）。
-        * `pip_packages`: `array[string]`，依赖包列表（如 `["numpy==1.24.3", "requests==2.31.0"]`）。
-        * `skill_bindings`: `array[object]`，该实例绑定的技能域（**新嵌套结构**）。
-            * `skill_name`: `string`，技能唯一标识符。
-            * `endpoint`: `string`，技能的 API 路由网关。
-            * `description`: `string`，技能的业务含义与调用约束。
+### 3.1 技能绑定 (`instances_and_skills.json`)
+* `container_instances`: `object`，角色技能绑定集合。
+    * `{Agent_ID}`: `object`，具体角色配置。
+        * `skills`: `array[string]`，该角色绑定的技能名称列表，与 `skills.py` 中注册名一致。
+
+> Docker 镜像由 `meta_and_roles.json` 中角色的 `model_backbone` 决定（`claudecode` → `agentnetwork-ag-c1`，`openclaw` → `agentnetwork-ag-o1`）。
 
 ### 3.2 技能输入与输出参数 (`skills.py`)
 
