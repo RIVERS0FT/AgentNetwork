@@ -475,7 +475,7 @@ const msg = JSON.parse(e.data);
 // ── 实时推送的单条日志 ──
 if (msg.type === 'agent_log' && msg.data) {
     const l = msg.data;
-    const ts = (l.timestamp||'').slice(11,23);
+    const ts = (l.timestamp||'').slice(11,24);
     const from = l.from_agent || l.agent_id || '?';
     const to = l.to_agent || '';
     const action = l.action || l.event || '?';
@@ -508,7 +508,7 @@ if (msg.type === 'status' || msg.type === 'all') {
     if (_lastLogCount === 0) {
     const logs = msg.data.agent_logs || [];
     logs.slice(_lastLogCount).forEach(l => {
-        const ts = (l.timestamp||'').slice(11,23);
+        const ts = (l.timestamp||'').slice(11,24);
         const from = l.from_agent || l.agent_id || '?';
         const to = l.to_agent || '';
         const action = l.action || l.event || '?';
@@ -522,7 +522,7 @@ if (msg.type === 'status' || msg.type === 'all') {
     // ── 结构化的 logger 条目 (去重) ──
     const logEntries = msg.data.log_entries || [];
     logEntries.forEach(e => {
-        const ts = (e.timestamp||'').slice(11,23);
+        const ts = (e.timestamp||'').slice(11,24);
         const d = e.details || {};
         const from = d.from_agent || e.agent_id || '';
         const to = d.to_agent || '';
@@ -538,7 +538,7 @@ if (msg.type === 'status' || msg.type === 'all') {
 // ── 通信报文 ──
 if (msg.type === 'packets' && msg.data) {
     (msg.data.packets || []).forEach(p => {
-        const ts = (p.timestamp||'').slice(11,23);
+        const ts = (p.timestamp||'').slice(11,24);
         const src = [p.src_ip||'', p.src_port||''].filter(Boolean).join(':') || '?';
         const dst = [p.dst_ip||'', p.dst_port||''].filter(Boolean).join(':') || '?';
         const text = [
