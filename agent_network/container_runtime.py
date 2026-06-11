@@ -162,12 +162,6 @@ class ContainerRuntime:
         ca._extra_meta = extra_meta or {}
         self.agents[agent_id] = ca
 
-        # 重置容器状态（清除上一轮仿真的残留数据）
-        try:
-            requests.post(f"{url}/reset", timeout=3)
-        except Exception:
-            pass
-
         return ca
 
     def run_round(self, context: Dict = None) -> Dict:

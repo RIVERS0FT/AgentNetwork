@@ -50,12 +50,11 @@ import time
 # 导入平台核心模块
 from agent_network.agent import Agent, AgentRegistry, Message
 from agent_network.agent_hub import AgentHub, RoutingStrategy, ScalingPolicy
-from agent_network.llm_parser import parse_script, get_api_config, SceneDefinition, AgentDef
+from agent_network.llm_parser import get_api_config, SceneDefinition, AgentDef
 from agent_network.container_runtime import get_runtime, ContainerRuntime
 from agent_network.container_controller import ContainerController
 from agent_network.workflow import WorkflowEngine, WorkflowDAG, WorkflowStep
 from agent_network.agent_scheduler import TaskPriority, TaskStatus
-from agent_network.terrain import TerrainMap
 from agent_network.logger import SimulationLogger, LogLevel, get_logger
 from agent_network.event_bus import PacketRecorder
 from agent_network.tool import ToolRegistry
@@ -127,8 +126,6 @@ service_state = {
     "active_engine": None,
 }
 
-_current_map: Optional[Dict[str, Any]] = None  # 当前地形地图 (TerrainMap.to_dict())
-_current_map_obj: Optional[Any] = None           # TerrainMap 实例 (用于寻路等操作)
 _current_relationships: List[Dict[str, Any]] = []  # 当前关系链
 _termination_config: Dict[str, int] = {"max_rounds": 10, "stalemate_rounds": 3}  # 终止条件默认值
 
@@ -177,10 +174,8 @@ class SkillExecuteRequest(BaseModel):
 
 
 class SimulationRunRequest(BaseModel):
-    scene: str = "auto"  # "battlefield" | "fleet" | "auto"
+    scene: str = ""  # 场景文件夹名（scenes/ 下的子目录）
     name: str = ""
-    script: Optional[str] = None  # 自然语言剧本（scene=auto 时使用 LLM 解析）
-    script_json: Optional[Dict[str, Any]] = None  # 结构化场景定义（直接映射，不经过 LLM）
 
 
 class SettingsRequest(BaseModel):
@@ -188,11 +183,6 @@ class SettingsRequest(BaseModel):
     api_base: Optional[str] = None
     model: Optional[str] = None
     provider: Optional[str] = None
-
-
-class ScriptParseRequest(BaseModel):
-    script: str
-    use_llm: bool = True
 
 
 class LogQueryRequest(BaseModel):
@@ -268,17 +258,6 @@ async def delete_agent(agent_id: str):
     agent.stop()
     AgentRegistry.unregister(agent_id)
     return {"deleted": agent_id}
-
-
-@app.post("/api/agents/{agent_id}/move")
-async def move_agent(agent_id: str, x: float = Query(...), y: float = Query(...)):
-    """更新 Agent 坐标（前端拖动后上报）"""
-    agent = AgentRegistry.get(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
-    agent.x = x
-    agent.y = y
-    return {"agent_id": agent_id, "x": x, "y": y}
 
 
 @app.get("/api/agents/discover")
@@ -410,13 +389,6 @@ def _get_effective_llm_config() -> Dict[str, str]:
     config = get_api_config()
     config.update(_llm_config)
     return config
-
-
-def _run_scene_definition(scene_def: SceneDefinition, engine_name: str) -> Dict[str, Any]:
-    """根据 SceneDefinition 创建并运行场景（容器模式）"""
-    config = _get_effective_llm_config()
-    _agent_logs.clear()
-    return _run_with_containers(scene_def, engine_name, config)
 
 
 def _force_layout(agents: List[Any], links: List[Dict],
@@ -592,6 +564,13 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
         if agent:
             agent.container_url = ca.url
 
+    # ── 容器状态重置（在分配后、注册前，确保上一轮仿真残留已清除）──
+    for ca, _ in created_cas:
+        try:
+            _req.post(f"{ca.url}/reset", timeout=3)
+        except Exception:
+            pass
+
     time.sleep(1)
     for ca, _ in created_cas:
         try:
@@ -693,13 +672,10 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
             stop_reason = f"stalemate_{stalemate_threshold}_silent_rounds"
             break
 
-        # 每轮后更新 Agent 位置（基于决策结果的模拟移动）
+        # 每轮结束后重置 Agent 状态，停止前端决策/数据流动画
         for a in AgentRegistry.list_all():
-            if a.status == "running":
-                a.x += random.uniform(-8, 12)
-                a.y += random.uniform(-8, 12)
-                a.x = max(10, min(390, a.x or 200))
-                a.y = max(10, min(390, a.y or 200))
+            a.status = "idle"
+
         time.sleep(0.3)
     else:
         stop_reason = "hard_limit"
@@ -726,55 +702,6 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
         "relationships": scene_def.workflow,
         "container_mode": "pool",
     }
-
-
-def _build_scene_from_script_json(sj: Dict[str, Any]) -> SceneDefinition:
-    """将 script_json 格式直接映射为 SceneDefinition（不需要 LLM）。"""
-    meta = sj.get("scenario_metadata", {})
-    title = meta.get("title", "自定义场景")
-    bg = meta.get("background_rules", "")
-    role_slots = sj.get("role_slots", [])
-
-    agents: List[AgentDef] = []
-    for slot in role_slots:
-        slot_id = slot.get("slot_id", "").lower()  # ROLE_A → role-a
-        identity = slot.get("identity", slot_id)
-        core_goal = slot.get("core_goal", "")
-        action_space = slot.get("action_space", [])
-        hidden_secret = slot.get("hidden_secret", "")
-        initial_assets = slot.get("initial_assets", {})
-        backend = slot.get("backend", "brain")
-
-        agent = AgentDef(
-            agent_id=slot_id,
-            role="generic",           # 非军事角色，统一 generic
-            name=identity,
-            skills=action_space[:4],   # 前4个action作为skill
-            tags=[core_goal[:30]],     # core_goal 截断为 tag
-            tasks=action_space[:6] if action_space else [core_goal],  # 具体行动作为任务
-            extra_meta={
-                "identity": identity,
-                "core_goal": core_goal,
-                "hidden_secret": hidden_secret,
-                "initial_assets": initial_assets,
-                "action_space": ["send_message"] + action_space,
-                "background_rules": bg,  # scene system prompt
-                "backend": backend,
-            },
-        )
-        agents.append(agent)
-
-    # 关系矩阵 → workflow（每个关系作为一个消息步骤）
-    relationships = sj.get("initial_relationship_matrix", {}).get("links", [])
-    event_triggers = sj.get("event_triggers", [])
-
-    return SceneDefinition(
-        scene_name=title,
-        description=bg,
-        agents=agents,
-        workflow=relationships,       # 保留原始关系数据
-        event_triggers=event_triggers,  # type: ignore[call-arg]
-    )
 
 
 def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
@@ -879,18 +806,13 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
 
 @app.post("/api/simulations/run")
 async def run_simulation(req: SimulationRunRequest):
-    """运行仿真场景 — setup + launch 一体化（兼容旧版）"""
+    """运行仿真场景 — setup + launch 一体化"""
     global service_state, _current_relationships
 
-    # ── Step 1: Build scene ──
-    if req.script_json:
-        scene_def = _build_scene_from_script_json(req.script_json)
-    elif req.scene and (_SCENES_DIR / req.scene).is_dir():
-        scene_def = _build_scene_from_folder(req.scene)
-    elif req.scene == "auto" or req.script:
-        script_text = req.script or req.scene
-        config = _get_effective_llm_config()
-        scene_def = parse_script(script_text, use_llm=bool(config.get("api_key")), config=config)
+    # ── Step 1: Build scene (folder format only) ──
+    if not req.scene or not (_SCENES_DIR / req.scene).is_dir():
+        raise HTTPException(status_code=400, detail=f"Scene '{req.scene}' not found")
+    scene_def = _build_scene_from_folder(req.scene)
 
     # ── Step 2: Setup agents ──
     result = _setup_scene(scene_def)
@@ -911,16 +833,9 @@ async def setup_simulation(req: SimulationRunRequest):
     """Step 1: 绘制场景 — 创建 Agent、返回布局和关系（不启动容器）"""
     global _current_relationships, _pending_config
 
-    if req.script_json:
-        scene_def = _build_scene_from_script_json(req.script_json)
-    elif req.scene and (_SCENES_DIR / req.scene).is_dir():
-        scene_def = _build_scene_from_folder(req.scene)
-    elif req.scene == "auto" or req.script:
-        script_text = req.script or req.scene
-        config = _get_effective_llm_config()
-        scene_def = parse_script(script_text, use_llm=bool(config.get("api_key")), config=config)
-    else:
-        return {"error": "No scene data provided"}
+    if not req.scene or not (_SCENES_DIR / req.scene).is_dir():
+        raise HTTPException(status_code=400, detail=f"Scene '{req.scene}' not found")
+    scene_def = _build_scene_from_folder(req.scene)
 
     _pending_config = _get_effective_llm_config()
     result = _setup_scene(scene_def)
@@ -937,39 +852,6 @@ async def launch_simulation():
 
 
 # ═══════════════════════════════════════════════
-# 脚本解析 API
-# ═══════════════════════════════════════════════
-
-@app.post("/api/scripts/parse")
-async def parse_script_endpoint(req: ScriptParseRequest):
-    """
-    LLM 解析自然语言剧本 → 返回结构化场景定义
-
-    用于前端预览：用户在编辑器中输入自然语言，点"解析"预览 Agent 配置
-    """
-    config = _get_effective_llm_config()
-    use_llm = req.use_llm and bool(config.get("api_key"))
-    scene_def = parse_script(req.script, use_llm=use_llm, config=config)
-    return {
-        "llm_used": use_llm,
-        "scene_name": scene_def.scene_name,
-        "description": scene_def.description,
-        "agents": [
-            {
-                "agent_id": a.agent_id,
-                "role": a.role,
-                "name": a.name,
-                "skills": a.skills,
-                "tags": a.tags,
-                "tasks": a.tasks,
-            }
-            for a in scene_def.agents
-        ],
-        "workflow": scene_def.workflow,
-    }
-
-
-# ═══════════════════════════════════════════════
 # 场景文件 API
 # ═══════════════════════════════════════════════
 
@@ -978,43 +860,31 @@ _SCENES_DIR = None  # initialized after pathlib import below
 
 @app.get("/api/scenes")
 async def list_scenes():
-    """列出所有可用场景（文件夹式 + 旧版 .json 文件）"""
+    """列出所有可用场景（文件夹格式）"""
     if not _SCENES_DIR.exists():
         return {"scenes": []}
     scenes = []
     for f in sorted(_SCENES_DIR.iterdir(), key=lambda n: n.name.lower()):
         if f.is_dir() and (f / "meta_and_roles.json").exists():
             scenes.append({"name": f.name, "format": "folder"})
-        elif f.suffix == '.json' and f.name != "test_output.json":
-            scenes.append({"name": f.name, "format": "file"})
     return {"scenes": scenes}
 
 
 @app.get("/api/scenes/{scene_name}")
 async def read_scene(scene_name: str):
-    """读取场景内容（文件夹式或旧版 .json 文件）"""
-    from pathlib import Path
-    # Try folder format first
+    """读取场景内容（文件夹格式）"""
     folder = _SCENES_DIR / scene_name
-    if folder.is_dir():
-        files = {}
-        for key in ["meta_and_roles", "instances_and_skills", "network_topology"]:
-            fpath = folder / f"{key}.json"
-            if fpath.exists():
-                files[key] = json.loads(fpath.read_text(encoding='utf-8'))
-        if "meta_and_roles" in files:
-            title = files["meta_and_roles"].get("scenario_metadata", {}).get("title", scene_name)
-            return {"name": scene_name, "title": title, "format": "folder", "files": files}
-        raise HTTPException(status_code=404, detail=f"Folder scene '{scene_name}' missing meta_and_roles.json")
-
-    # Legacy .json file format
-    path = (_SCENES_DIR / scene_name).resolve()
-    if not str(path).startswith(str(_SCENES_DIR.resolve())):
-        raise HTTPException(status_code=403, detail="Invalid path")
-    if not path.exists() or path.suffix != '.json':
+    if not folder.is_dir():
         raise HTTPException(status_code=404, detail=f"Scene '{scene_name}' not found")
-    content = path.read_text(encoding='utf-8')
-    return {"name": path.stem, "filename": scene_name, "format": "file", "content": content}
+    files = {}
+    for key in ["meta_and_roles", "instances_and_skills", "network_topology"]:
+        fpath = folder / f"{key}.json"
+        if fpath.exists():
+            files[key] = json.loads(fpath.read_text(encoding='utf-8'))
+    if "meta_and_roles" not in files:
+        raise HTTPException(status_code=404, detail=f"Folder scene '{scene_name}' missing meta_and_roles.json")
+    title = files["meta_and_roles"].get("scenario_metadata", {}).get("title", scene_name)
+    return {"name": scene_name, "title": title, "format": "folder", "files": files}
 
 
 # ═══════════════════════════════════════════════
@@ -1715,178 +1585,6 @@ async def workflow_validate(req: WorkflowValidateRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# ═══════════════════════════════════════════════
-# 地图 API — 地形生成、Agent 部署、移动
-# ═══════════════════════════════════════════════
-
-class MapGenerateRequest(BaseModel):
-    size: int = Field(default=16, ge=4, le=64, description="地图尺寸 (4-64)")
-    use_llm: bool = Field(default=False, description="是否使用 LLM 生成")
-
-
-class MapPlaceRequest(BaseModel):
-    agent_ids: List[str]
-    positions: List[List[float]]  # [[col, row], ...]
-
-
-class MapPlaceRandomRequest(BaseModel):
-    agent_ids: List[str]
-
-
-class MapMoveRequest(BaseModel):
-    agent_id: str
-    target_x: float
-    target_y: float
-
-
-@app.post("/api/map/generate")
-async def map_generate(req: MapGenerateRequest):
-    """
-    生成地形地图
-
-    - **size**: 网格尺寸 (4-64)
-    - **use_llm**: 是否使用 LLM 智能生成 (需要配置 API Key)
-    """
-    global _current_map, _current_map_obj
-
-    config = _get_effective_llm_config()
-    tm = generate_map_with_llm(size=req.size, config=config, use_llm=req.use_llm)
-    _current_map_obj = tm
-    _current_map = tm.to_dict()
-    return _current_map
-
-
-@app.get("/api/map/state")
-async def map_state():
-    """获取当前地图状态"""
-    if _current_map is None:
-        raise HTTPException(status_code=404, detail="尚未生成地图，请先 POST /api/map/generate")
-    return _current_map
-
-
-@app.post("/api/map/agents/place")
-async def map_place_agents(req: MapPlaceRequest):
-    """将 Agent 部署到指定坐标"""
-    if _current_map is None:
-        raise HTTPException(status_code=400, detail="请先生成地图")
-
-    placed = 0
-    for agent_id, (col, row) in zip(req.agent_ids, req.positions):
-        agent = AgentRegistry.get(agent_id)
-        if agent:
-            if not is_passable(_current_map, int(col), int(row)):
-                continue
-            agent.x = float(col)
-            agent.y = float(row)
-            placed += 1
-    return {"placed": placed, "total": len(req.agent_ids)}
-
-
-@app.post("/api/map/agents/place-random")
-async def map_place_random(req: MapPlaceRandomRequest):
-    """随机部署 Agent 到地图可通行格"""
-    if _current_map is None:
-        raise HTTPException(status_code=400, detail="请先生成地图")
-
-    tm = _current_map_obj
-    if tm is None:
-        raise HTTPException(status_code=500, detail="地图对象不可用")
-
-    passable = tm.find_passable_cells()
-    if not passable:
-        raise HTTPException(status_code=400, detail="地图无可用通行格")
-
-    placed = 0
-    for agent_id in req.agent_ids:
-        agent = AgentRegistry.get(agent_id)
-        if agent and passable:
-            col, row = random.choice(passable)
-            agent.x = float(col)
-            agent.y = float(row)
-            placed += 1
-    return {"placed": placed, "total": len(req.agent_ids)}
-
-
-@app.post("/api/map/agents/move")
-async def map_move_agent(req: MapMoveRequest):
-    """设置 Agent 移动目标"""
-    if _current_map is None:
-        raise HTTPException(status_code=400, detail="请先生成地图")
-
-    agent = AgentRegistry.get(req.agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent 不存在")
-
-    target_col, target_row = int(req.target_x), int(req.target_y)
-    if not is_passable(_current_map, target_col, target_row):
-        raise HTTPException(status_code=400, detail="目标格不可通行")
-
-    agent._target_x = float(req.target_x)
-    agent._target_y = float(req.target_y)
-    return {
-        "agent_id": req.agent_id,
-        "from": [agent.x, agent.y],
-        "target": [req.target_x, req.target_y],
-    }
-
-
-@app.post("/api/map/tick")
-async def map_tick():
-    """执行一次仿真 tick，更新所有 Agent 位置"""
-    if _current_map is None:
-        raise HTTPException(status_code=400, detail="请先生成地图")
-
-    import math
-
-    updated = []
-    for agent in AgentRegistry.list_all():
-        if agent._target_x is not None and agent._target_y is not None:
-            dx = agent._target_x - agent.x
-            dy = agent._target_y - agent.y
-            dist = math.sqrt(dx * dx + dy * dy)
-            if dist < 0.1:
-                agent.x = agent._target_x
-                agent.y = agent._target_y
-                agent._target_x = None
-                agent._target_y = None
-            else:
-                step = agent.speed * 0.3  # 每 tick 移动 0.3 格
-                agent.x += (dx / dist) * min(step, dist)
-                agent.y += (dy / dist) * min(step, dist)
-            updated.append(agent)
-
-    return {
-        "tick": "completed",
-        "agents": [a.get_status() for a in updated],
-        "total_updated": len(updated),
-    }
-
-
-@app.get("/api/map/path")
-async def map_find_path(
-    from_x: float = Query(...),
-    from_y: float = Query(...),
-    to_x: float = Query(...),
-    to_y: float = Query(...),
-):
-    """计算两点之间的路径 (A*)"""
-    if _current_map is None:
-        raise HTTPException(status_code=400, detail="请先生成地图")
-
-    grid = _current_map.get("grid", [])
-    if not grid:
-        raise HTTPException(status_code=500, detail="地图网格不可用")
-
-    start = (int(from_x), int(from_y))
-    goal = (int(to_x), int(to_y))
-    path = astar(grid, start, goal)
-    return {
-        "path": path,
-        "length": len(path),
-        "reachable": len(path) > 0,
-        "from": list(start),
-        "to": list(goal),
-    }
 
 
 # ═══════════════════════════════════════════════
@@ -1982,7 +1680,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         "data": {
                             "agents": agents_data,
                             "stats": AgentRegistry.get_stats(),
-                            "map": _current_map,
                             "agent_logs": _agent_logs[-50:], "log_entries": logger.get_entries(50),
                             "relationships": _current_relationships,
                         },
@@ -2012,7 +1709,6 @@ async def websocket_endpoint(websocket: WebSocket):
                             "stats": AgentRegistry.get_stats(),
                             "packets": PacketRecorder.get_stats(),
                             "logs": {"stats": logger.get_index_stats(), "entries": logger.get_entries(20)},
-                            "map": _current_map,
                             "agent_logs": _agent_logs[-50:], "log_entries": logger.get_entries(50),
                             "relationships": _current_relationships,
                         },
@@ -2025,7 +1721,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     "data": {
                         "agents": agents_data,
                         "stats": AgentRegistry.get_stats(),
-                        "map": _current_map,
                         "relationships": _current_relationships,
                     },
                 }
@@ -2091,32 +1786,6 @@ app.mount('/static', StaticFiles(directory=str(pathlib.Path(__file__).parent / '
 
 
 # ═══════════════════════════════════════════════
-# 战术地图 (Procedural Tactical Situation Map)
-# ═══════════════════════════════════════════════
-
-_TACTICAL_PATH = pathlib.Path(__file__).parent / 'web' / 'dist'
-
-def _load_tactical_map() -> str:
-    try:
-        return (_TACTICAL_PATH / 'index.html').read_text(encoding='utf-8')
-    except Exception:
-        return '<h1>Tactical Map not built — run: cd web && npm run build</h1>'
-
-TACTICAL_HTML = None  # reloaded on each request to pick up rebuilds
-
-@app.get("/tactical-map", response_class=HTMLResponse)
-async def tactical_map():
-    """程序化战术态势地图 — Procedural Tactical Situation Map"""
-    html = _load_tactical_map()
-    return HTMLResponse(content=html)
-
-if _TACTICAL_PATH.exists():
-    # Mount the entire dist directory to serve JS, CSS, favicon, icons, etc.
-    # Route /tactical-map (above) takes priority over this mount for exact matches.
-    app.mount('/tactical-map', StaticFiles(directory=str(_TACTICAL_PATH), html=True), name='tactical-map')
-
-
-# ═══════════════════════════════════════════════
 # 启动入口
 # ═══════════════════════════════════════════════
 
@@ -2136,7 +1805,6 @@ if __name__ == '__main__':
     print(f'║  地址: http://{args.host}:{args.port}                          ║')
     print(f'║  API:  http://{args.host}:{args.port}/docs                      ║')
     print(f'║  控制台: http://{args.host}:{args.port}/                        ║')
-    print(f'║  战术地图: http://{args.host}:{args.port}/tactical-map          ║')
     print('╚══════════════════════════════════════════════════════════════╝')
     print()
 

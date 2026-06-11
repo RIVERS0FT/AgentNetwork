@@ -429,7 +429,11 @@ async def reset_state():
     agent.inbox.clear()
     if hasattr(agent, '_last_injected_id'):
         del agent._last_injected_id
-    return {"status": "reset"}
+    # 清除 Brain 记忆（防止跨仿真上下文泄漏）
+    if hasattr(agent, 'brain') and agent.brain:
+        agent.brain.memory = []
+        agent.brain.turn = 0
+    return {"status": "reset", "brain_cleared": bool(hasattr(agent, 'brain') and agent.brain)}
 
 
 # ═══════════════════════════════════════════════
