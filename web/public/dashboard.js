@@ -48,18 +48,110 @@ let _relationships = [];
 let _lastLogCount = 0;
 let _serverTimeOffset = 0; // ms, 服务端与浏览器时差
 
-// ============== Communication Events (data flow animation) ==============
-const _commEvents = [];
-const COMM_EVENT_TTL = 4000; // 粒子动画持续 4 秒
-const _TWO_PI = Math.PI * 2;
-const _DASH_PATTERN = [4, 3];
+// ============== Persistent Viewport State ==============
+const viewport = {
+  scale: 1,
+  offsetX: 0,    // world coordinate at canvas centre
+  offsetY: 0,
+  initialized: false,
+  userControlled: false,
+  MIN_SCALE: 0.15,
+  MAX_SCALE: 4.0,
+};
 
-function purgeCommEvents(now) {
-  for (let i = _commEvents.length - 1; i >= 0; i--) {
-    if (now - _commEvents[i].timestamp > COMM_EVENT_TTL) {
-      _commEvents.splice(i, 1);
-    }
+// ============== Coordinate Conversion ==============
+// All coords are CSS-pixel based; ctx.scale(dpr,dpr) is applied in render().
+function canvasCSS() {
+  const dpr = window.devicePixelRatio || 1;
+  return { w: canvas.width / dpr, h: canvas.height / dpr };
+}
+
+function worldToScreen(wx, wy) {
+  const { w, h } = canvasCSS();
+  const cx = w / 2, cy = h / 2;
+  return {
+    sx: cx + (wx - viewport.offsetX) * viewport.scale,
+    sy: cy + (wy - viewport.offsetY) * viewport.scale,
+  };
+}
+
+function screenToWorld(sx, sy) {
+  const { w, h } = canvasCSS();
+  const cx = w / 2, cy = h / 2;
+  return {
+    wx: viewport.offsetX + (sx - cx) / viewport.scale,
+    wy: viewport.offsetY + (sy - cy) / viewport.scale,
+  };
+}
+
+function fitViewportToAgents() {
+  if (!agents.length) {
+    viewport.initialized = false;
+    return;
   }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  agents.forEach(a => {
+    if (a.x == null || a.y == null) return;
+    const sp = _simState.get(a.agent_id);
+    const ax = sp ? sp.x : a.x;
+    const ay = sp ? sp.y : a.y;
+    minX = Math.min(minX, ax); maxX = Math.max(maxX, ax);
+    minY = Math.min(minY, ay); maxY = Math.max(maxY, ay);
+  });
+  if (!isFinite(minX)) { viewport.initialized = false; return; }
+
+  const { w, h } = canvasCSS();
+  const margin = 60;
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+  viewport.scale = Math.min((w - margin * 2) / rangeX, (h - margin * 2) / rangeY) * 0.85;
+  viewport.offsetX = (minX + maxX) / 2;
+  viewport.offsetY = (minY + maxY) / 2;
+  viewport.initialized = true;
+}
+
+// ============== Communication Trajectories ==============
+// Each message (send_message / broadcast success) produces one trajectory.
+const _trajectories = [];
+const TRAJECTORY_DURATION = 2200;   // travel time (ms)
+const TRAJECTORY_FADE = 500;        // fade-out after arrival (ms)
+const TRAJECTORY_MAX_AGE = TRAJECTORY_DURATION + TRAJECTORY_FADE + 200;
+const MAX_TRAJECTORIES = 80;
+
+// Per-edge message counter for parallel-offset (cycling 0..4)
+const _edgeMsgIdx = {};
+
+function pushCommEvent(fromId, toId, isBroadcast) {
+  const key = fromId + '→' + toId;
+  _edgeMsgIdx[key] = ((_edgeMsgIdx[key] || 0) + 1) % 5;
+  _trajectories.push({
+    from: fromId,
+    to: toId,
+    startTime: performance.now(),
+    offsetIndex: _edgeMsgIdx[key],
+    isBroadcast: !!isBroadcast,
+  });
+  // Trim old events when over capacity
+  const now = performance.now();
+  while (_trajectories.length > 0 && now - _trajectories[0].startTime > TRAJECTORY_MAX_AGE) {
+    _trajectories.shift();
+  }
+  if (_trajectories.length > MAX_TRAJECTORIES) {
+    _trajectories.splice(0, _trajectories.length - MAX_TRAJECTORIES);
+  }
+}
+
+function getAgentWorldPos(agentId) {
+  const sp = _simState.get(agentId);
+  if (sp) return sp;
+  const a = agents.find(ag => ag.agent_id === agentId);
+  return (a && a.x != null) ? { x: a.x, y: a.y } : null;
+}
+
+function hasRelationship(fromId, toId) {
+  return _relationships.some(r =>
+    r.from.toLowerCase() === fromId && r.to.toLowerCase() === toId
+  );
 }
 
 // ============== Client-side Force Simulation State ==============
@@ -84,6 +176,10 @@ function resizeCanvas() {
   canvas.height = rect.height * dpr;
   canvas.style.width = rect.width + 'px';
   canvas.style.height = rect.height + 'px';
+  // Re-fit if user hasn't taken manual control
+  if (!viewport.userControlled && agents.length > 0) {
+    fitViewportToAgents();
+  }
 }
 
 window.addEventListener('resize', resizeCanvas);
@@ -100,82 +196,26 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { resizeCanvas(); render(); }
 });
 
-function getScreenMapping(agents) {
-  const dpr = window.devicePixelRatio || 1;
-  const canvasW = canvas.width / dpr;
-  const canvasH = canvas.height / dpr;
-  const margin = 60;
-  const worldW = canvasW - margin * 2;
-  const worldH = canvasH - margin * 2;
-
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  agents.forEach(a => {
-    if (a.x == null) return;
-    const sp = _simState.get(a.agent_id);
-    const ax = sp ? sp.x : a.x;
-    const ay = sp ? sp.y : a.y;
-    minX = Math.min(minX, ax); maxX = Math.max(maxX, ax);
-    minY = Math.min(minY, ay); maxY = Math.max(maxY, ay);
-  });
-
-  const rangeX = maxX - minX || 1;
-  const rangeY = maxY - minY || 1;
-  const scale = Math.min(worldW / rangeX, worldH / rangeY) * 0.85;
-  const offsetX = margin + (worldW - rangeX * scale) / 2;
-  const offsetY = margin + (worldH - rangeY * scale) / 2;
-
-  return {
-    valid: isFinite(minX),
-    // When force-simulated position exists, use it instead of raw agent position
-    getPos: function(agentId) {
-      const sp = _simState.get(agentId);
-      if (sp) return sp;
-      const a = agents.find(a => a.agent_id === agentId);
-      return (a && a.x != null) ? { x: a.x, y: a.y } : null;
-    },
-    toScreen: function(x, y) {
-      return {
-        sx: offsetX + (x - minX) * scale,
-        sy: offsetY + (y - minY) * scale,
-      };
-    },
-    toWorld: function(sx, sy) {
-      return {
-        wx: minX + (sx - offsetX) / scale,
-        wy: minY + (sy - offsetY) / scale,
-      };
-    },
-  };
-}
-
-function drawRelationships(agents, relationships, time) {
+// ── Draw permanent relationship lines ──
+function drawRelationshipLines(relationships, agents) {
   if (!ctx || !relationships.length || !agents.length) return;
-  const agentMap = {};
-  agents.forEach(a => { agentMap[a.agent_id.toLowerCase()] = a; });
-
-  const mapping = getScreenMapping(agents);
-  if (!mapping.valid) return;
-
-  const now = time || performance.now();
-  purgeCommEvents(now);
 
   ctx.save();
   ctx.lineCap = 'round';
 
   for (const rel of relationships) {
-    const fromPos = mapping.getPos(rel.from.toLowerCase());
-    const toPos = mapping.getPos(rel.to.toLowerCase());
+    const fromPos = getAgentWorldPos(rel.from.toLowerCase());
+    const toPos = getAgentWorldPos(rel.to.toLowerCase());
     if (!fromPos || !toPos) continue;
 
-    const from = mapping.toScreen(fromPos.x, fromPos.y);
-    const to = mapping.toScreen(toPos.x, toPos.y);
+    const from = worldToScreen(fromPos.x, fromPos.y);
+    const to = worldToScreen(toPos.x, toPos.y);
 
     const dx = to.sx - from.sx;
     const dy = to.sy - from.sy;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) continue;
 
-    // ── 静态基线 ──
     const isCooperative = (rel.value || 0) > 0;
     const alpha = Math.min(1, Math.abs(rel.value || 50) / 100 + 0.15);
     const color = isCooperative
@@ -189,49 +229,189 @@ function drawRelationships(agents, relationships, time) {
     ctx.lineWidth = 0.6;
     ctx.strokeStyle = color;
     ctx.stroke();
-
-    // ── 数据流动画：沿连线绘制流动粒子 ──
-    const fromKey = rel.from.toLowerCase();
-    const toKey = rel.to.toLowerCase();
-    const commOnEdge = _commEvents.find(c =>
-      c.from === fromKey && c.to === toKey
-    );
-    if (commOnEdge) {
-      const age = now - commOnEdge.timestamp;
-      if (age < COMM_EVENT_TTL) {
-        const fadeAlpha = 1 - age / COMM_EVENT_TTL;
-        const flowSpeed = 0.012; // px/ms (12px/s)
-        ctx.fillStyle = `rgba(90,122,154,${fadeAlpha.toFixed(2)})`;
-        // 绘制 3 个流动粒子，均匀分布
-        for (let p = 0; p < 3; p++) {
-          const offset = ((age * flowSpeed + p * len / 3) % len + len) % len;
-          const px = from.sx + (dx / len) * offset;
-          const py = from.sy + (dy / len) * offset;
-          ctx.beginPath();
-          ctx.arc(px, py, 2.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
   }
   ctx.setLineDash([]);
   ctx.restore();
 }
 
+// ── Draw a single trajectory (message envelope) ──
+function drawOneTrajectory(traj, fromScr, toScr, now) {
+  const age = now - traj.startTime;
+  if (age > TRAJECTORY_MAX_AGE) return;
+
+  const dx = toScr.sx - fromScr.sx;
+  const dy = toScr.sy - fromScr.sy;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+
+  // Perpendicular normal for offset
+  const nx = -dy / len;
+  const ny = dx / len;
+  const off = (traj.offsetIndex - 2) * 5.5; // spread -11..11 px
+
+  const progress = Math.min(1, age / TRAJECTORY_DURATION);
+  const fadeOut = 1 - Math.max(0, (age - TRAJECTORY_DURATION) / TRAJECTORY_FADE);
+  if (fadeOut <= 0.01) return;
+
+  const headX = fromScr.sx + dx * progress + nx * off;
+  const headY = fromScr.sy + dy * progress + ny * off;
+
+  // ── Short tail (3 dots fading behind head) ──
+  const tailAlpha = fadeOut * 0.75;
+  for (let t = 0; t < 3; t++) {
+    const tp = Math.max(0, progress - (t + 1) * 0.04);
+    const tx = fromScr.sx + dx * tp + nx * off;
+    const ty = fromScr.sy + dy * tp + ny * off;
+    const tr = 2.2 - t * 0.5;
+    const ta = tailAlpha * (1 - t * 0.3);
+    ctx.fillStyle = `rgba(90,122,154,${ta.toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(tx, ty, tr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── Head (bright dot) ──
+  ctx.fillStyle = `rgba(90,122,154,${fadeOut.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.arc(headX, headY, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Destination pulse ring (after arrival) ──
+  if (progress >= 1 && age - TRAJECTORY_DURATION < 700) {
+    const pulseAge = age - TRAJECTORY_DURATION;
+    const pulseR = 4 + pulseAge * 0.04;
+    const pulseAlpha = Math.max(0, (1 - pulseAge / 700)) * fadeOut * 0.7;
+    if (pulseAlpha > 0.01) {
+      ctx.strokeStyle = `rgba(90,122,154,${pulseAlpha.toFixed(3)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(toScr.sx + nx * off, toScr.sy + ny * off, pulseR, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+}
+
+// ── Draw temporary link line for agents without permanent relationship ──
+function drawTempLink(fromScr, toScr) {
+  ctx.save();
+  ctx.setLineDash([2, 5]);
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = 'rgba(90,122,154,0.28)';
+  ctx.beginPath();
+  ctx.moveTo(fromScr.sx, fromScr.sy);
+  ctx.lineTo(toScr.sx, toScr.sy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// ── Draw all communication trajectories + optional temp links ──
+function drawTrajectories(now) {
+  if (!ctx || !_trajectories.length || !agents.length) return;
+
+  // Purge expired
+  let cut = 0;
+  while (cut < _trajectories.length && now - _trajectories[cut].startTime > TRAJECTORY_MAX_AGE) {
+    cut++;
+  }
+  if (cut > 0) _trajectories.splice(0, cut);
+
+  if (!_trajectories.length) return;
+
+  // Determine temp links needed (agents communicating without explicit relationship)
+  const tempLinks = new Map(); // "from→to" → true
+  const seenEdges = new Set();
+
+  ctx.save();
+
+  for (const traj of _trajectories) {
+    const fromPos = getAgentWorldPos(traj.from);
+    const toPos = getAgentWorldPos(traj.to);
+    if (!fromPos || !toPos) continue;
+
+    const from = worldToScreen(fromPos.x, fromPos.y);
+    const to = worldToScreen(toPos.x, toPos.y);
+
+    const edgeKey = traj.from + '→' + traj.to;
+    if (!hasRelationship(traj.from, traj.to) && !tempLinks.has(edgeKey)) {
+      tempLinks.set(edgeKey, { from, to });
+    }
+
+    drawOneTrajectory(traj, from, to, now);
+  }
+
+  // Draw temp links behind trajectories (draw after trajectories so they're visible underneath)
+  // Actually we need to draw them before trajectories. Let's reorder:
+  // This is handled in the main drawRelationshipsComposite which draws lines first,
+  // so we just collect them here.
+
+  ctx.restore();
+
+  return tempLinks;
+}
+
+// ── Composite: relationships + trajectories ──
+function drawRelationshipsComposite(agents, relationships, now) {
+  if (!ctx || !agents.length) return;
+
+  // Auto-fit on first render with agents
+  if (!viewport.initialized) {
+    fitViewportToAgents();
+  }
+
+  // 1. Permanent relationship lines
+  drawRelationshipLines(relationships, agents);
+
+  // 2. Collect temp links and draw trajectories
+  if (!_trajectories.length) return;
+
+  // Purge expired
+  let cut = 0;
+  while (cut < _trajectories.length && now - _trajectories[cut].startTime > TRAJECTORY_MAX_AGE) {
+    cut++;
+  }
+  if (cut > 0) _trajectories.splice(0, cut);
+  if (!_trajectories.length) return;
+
+  // Gather temp links
+  const tempLinks = [];
+  const drawnTemp = new Set();
+
+  ctx.save();
+
+  for (const traj of _trajectories) {
+    const fromPos = getAgentWorldPos(traj.from);
+    const toPos = getAgentWorldPos(traj.to);
+    if (!fromPos || !toPos) continue;
+
+    const from = worldToScreen(fromPos.x, fromPos.y);
+    const to = worldToScreen(toPos.x, toPos.y);
+
+    const edgeKey = traj.from + '→' + traj.to;
+    if (!hasRelationship(traj.from, traj.to) && !drawnTemp.has(edgeKey)) {
+      drawnTemp.add(edgeKey);
+      drawTempLink(from, to);
+    }
+
+    drawOneTrajectory(traj, from, to, now);
+  }
+
+  ctx.restore();
+}
+
+// ── Draw agents ──
 function drawAgents(agents, hoveredId, time) {
   if (!ctx || !agents.length) return;
 
-  const mapping = getScreenMapping(agents);
-  if (!mapping.valid) return;
-
-  const dpr = window.devicePixelRatio || 1;
-  const canvasW = canvas.width / dpr;
+  const now = time || performance.now();
+  const { w: canvasW, h: canvasH } = canvasCSS();
   const r = Math.max(6, Math.min(16, Math.min(canvasW, canvasH) / 40));
 
   // ── Client-side force simulation (prevent overlap) ──
-  const now = time || performance.now();
-  const worldSize = Math.min(canvasW, canvasH);
-  const margin = r * 2;
+  // Convert screen-pixel thresholds to world-space using current scale
+  const worldR = r / viewport.scale;
+  const minDistWorld = worldR * 10;
+  const damping = 0.12;
 
   // Init new agents
   for (const a of agents) {
@@ -256,8 +436,15 @@ function drawAgents(agents, hoveredId, time) {
 
   const entries = Array.from(_simState.entries());
   const n = entries.length;
-  const minDist = r * 10;
-  const damping = 0.12;
+
+  // Compute world bounds for clamping
+  let minWX = Infinity, maxWX = -Infinity, minWY = Infinity, maxWY = -Infinity;
+  for (const [, p] of entries) {
+    minWX = Math.min(minWX, p.x); maxWX = Math.max(maxWX, p.x);
+    minWY = Math.min(minWY, p.y); maxWY = Math.max(maxWY, p.y);
+  }
+  const padX = Math.max((maxWX - minWX) * 0.5, 100 / viewport.scale);
+  const padY = Math.max((maxWY - minWY) * 0.5, 100 / viewport.scale);
 
   for (let i = 0; i < n; i++) {
     const [id, pi] = entries[i];
@@ -274,11 +461,11 @@ function drawAgents(agents, hoveredId, time) {
       const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
       const isLinked = neighbors?.has(jid);
 
-      if (d < minDist) {
-        const force = (minDist - d) / minDist * (isLinked ? 2 : 1);
+      if (d < minDistWorld) {
+        const force = (minDistWorld - d) / minDistWorld * (isLinked ? 2 : 1);
         fx += (dx / d) * force;
         fy += (dy / d) * force;
-      } else if (isLinked && d < minDist * 4) {
+      } else if (isLinked && d < minDistWorld * 4) {
         fx -= dx * 0.02;
         fy -= dy * 0.02;
       }
@@ -286,8 +473,8 @@ function drawAgents(agents, hoveredId, time) {
 
     pi.x += fx * damping;
     pi.y += fy * damping;
-    pi.x = Math.max(margin, Math.min(worldSize - margin, pi.x));
-    pi.y = Math.max(margin, Math.min(worldSize - margin, pi.y));
+    pi.x = Math.max(minWX - padX, Math.min(maxWX + padX, pi.x));
+    pi.y = Math.max(minWY - padY, Math.min(maxWY + padY, pi.y));
   }
 
   // ── Draw agents ──
@@ -296,7 +483,7 @@ function drawAgents(agents, hoveredId, time) {
     const sp = _simState.get(a.agent_id);
     const wx = sp ? sp.x : a.x;
     const wy = sp ? sp.y : a.y;
-    const p = mapping.toScreen(wx, wy);
+    const p = worldToScreen(wx, wy);
     const color = STATUS_COLORS[a.status] || '#8B8475';
 
     // Selection ring for hovered agent
@@ -346,8 +533,7 @@ function render() {
   ctx.save();
   ctx.scale(dpr, dpr);
 
-  const canvasW = canvas.width / dpr;
-  const canvasH = canvas.height / dpr;
+  const { w: canvasW, h: canvasH } = canvasCSS();
   const now = performance.now();
 
   // Clear canvas with paper background
@@ -355,7 +541,7 @@ function render() {
   ctx.fillRect(0, 0, canvasW, canvasH);
 
   if (agents.length > 0) {
-    drawRelationships(agents, _relationships, now);
+    drawRelationshipsComposite(agents, _relationships, now);
     drawAgents(agents, hoveredAgent?.agent_id, now);
   }
 
@@ -363,7 +549,7 @@ function render() {
 }
 render();
 
-// ============== Canvas Mouse Events → Tooltip ==============
+// ============== Canvas Mouse Events ==============
 const statusLabel = { idle:'空闲', running:'运行中', paused:'已暂停', stopped:'已停止', error:'异常', created:'已创建', decided:'已决策', messaged:'已发送', send_failed:'发送失败', analyzed:'分析中' };
 const roleLabel = { scout:'侦察兵', commander:'指挥官', analyst:'分析师', support:'支援', brain:'Brain', 'claude-code':'Claude Code', openclaw:'OpenClaw', observer:'观察员' };
 const backendLabel = { brain:'Brain', 'claude-code':'Claude Code', openclaw:'OpenClaw' };
@@ -401,54 +587,81 @@ function showTooltip(agent, mx, my) {
   tt.style.top = Math.max(4, ty - 10) + 'px';
 }
 
-// ── Find agent at screen position ──
+// ── Find agent at screen (CSS-pixel) position ──
 function findAgentAtScreen(mx, my) {
-  const mapping = getScreenMapping(agents);
-  if (!mapping.valid) return null;
-  const dpr = window.devicePixelRatio || 1;
-  const canvasW = canvas.width / dpr;
+  if (!agents.length) return null;
+  const { w: canvasW, h: canvasH } = canvasCSS();
   const rPx = Math.max(6, Math.min(16, Math.min(canvasW, canvasH) / 40)) + 3;
 
   for (let i = agents.length - 1; i >= 0; i--) {
     const a = agents[i];
-    if (a.x == null) continue;
+    if (a.x == null || a.y == null) continue;
     const sp = _simState.get(a.agent_id);
     const wx = sp ? sp.x : a.x;
     const wy = sp ? sp.y : a.y;
-    const p = mapping.toScreen(wx, wy);
+    const p = worldToScreen(wx, wy);
     const dx = mx - p.sx, dy = my - p.sy;
     if (Math.sqrt(dx * dx + dy * dy) < rPx) return a;
   }
   return null;
 }
 
+// ── Panning state ──
+let isPanning = false;
+let panStartMX = 0, panStartMY = 0;
+let panStartOffX = 0, panStartOffY = 0;
+
+// ── Mouse down ──
 canvas?.addEventListener('mousedown', function(e) {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
   const found = findAgentAtScreen(mx, my);
+
   if (found) {
+    // Drag agent
     draggingId = found.agent_id;
     canvas.style.cursor = 'grabbing';
-    e.preventDefault();
+    const panel = document.getElementById('canvas-panel');
+    if (panel) { panel.classList.add('dragging'); panel.classList.remove('panning'); }
+  } else {
+    // Pan canvas (left button only)
+    if (e.button === 0) {
+      isPanning = true;
+      panStartMX = mx;
+      panStartMY = my;
+      panStartOffX = viewport.offsetX;
+      panStartOffY = viewport.offsetY;
+      const panel = document.getElementById('canvas-panel');
+      if (panel) { panel.classList.add('panning'); panel.classList.remove('dragging'); }
+    }
   }
+  e.preventDefault();
 });
 
+// ── Mouse move ──
 canvas?.addEventListener('mousemove', function(e) {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
 
   if (draggingId) {
-    // 拖动中：更新 _simState 中的位置
-    const mapping = getScreenMapping(agents);
-    if (mapping.valid) {
-      const world = mapping.toWorld(mx, my);
-      _simState.set(draggingId, { x: world.wx, y: world.wy });
-    }
+    // 拖动 Agent：更新 _simState 位置（世界坐标）
+    const world = screenToWorld(mx, my);
+    _simState.set(draggingId, { x: world.wx, y: world.wy });
     return;
   }
 
+  if (isPanning) {
+    const dx = mx - panStartMX;
+    const dy = my - panStartMY;
+    viewport.offsetX = panStartOffX - dx / viewport.scale;
+    viewport.offsetY = panStartOffY - dy / viewport.scale;
+    viewport.userControlled = true;
+    return;
+  }
+
+  // Hover detection
   const found = findAgentAtScreen(mx, my);
   canvas.style.cursor = found ? 'grab' : '';
   if (found !== hoveredAgent) {
@@ -456,6 +669,7 @@ canvas?.addEventListener('mousemove', function(e) {
   }
 });
 
+// ── Mouse up ──
 canvas?.addEventListener('mouseup', function(e) {
   if (draggingId) {
     const pos = _simState.get(draggingId);
@@ -466,9 +680,18 @@ canvas?.addEventListener('mouseup', function(e) {
     }
     draggingId = null;
     canvas.style.cursor = '';
+    const panel = document.getElementById('canvas-panel');
+    if (panel) panel.classList.remove('dragging');
+  }
+
+  if (isPanning) {
+    isPanning = false;
+    const panel = document.getElementById('canvas-panel');
+    if (panel) panel.classList.remove('panning');
   }
 });
 
+// ── Mouse leave ──
 canvas?.addEventListener('mouseleave', function() {
   if (draggingId) {
     const pos = _simState.get(draggingId);
@@ -478,8 +701,50 @@ canvas?.addEventListener('mouseleave', function() {
     }
     draggingId = null;
     canvas.style.cursor = '';
+    const panel = document.getElementById('canvas-panel');
+    if (panel) panel.classList.remove('dragging');
+  }
+  if (isPanning) {
+    isPanning = false;
+    const panel = document.getElementById('canvas-panel');
+    if (panel) panel.classList.remove('panning');
   }
   showTooltip(null, 0, 0);
+});
+
+// ── Mouse wheel: zoom at pointer ──
+canvas?.addEventListener('wheel', function(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  // World point under cursor before zoom
+  const worldBefore = screenToWorld(mx, my);
+
+  // Apply zoom
+  const factor = e.deltaY < 0 ? 1.12 : 0.88;
+  const newScale = Math.max(viewport.MIN_SCALE, Math.min(viewport.MAX_SCALE, viewport.scale * factor));
+  if (newScale === viewport.scale) return; // clamped — no change
+  viewport.scale = newScale;
+
+  // World point under cursor after zoom — adjust offset so cursor stays on same world point
+  const worldAfter = screenToWorld(mx, my);
+  viewport.offsetX += worldBefore.wx - worldAfter.wx;
+  viewport.offsetY += worldBefore.wy - worldAfter.wy;
+  viewport.userControlled = true;
+}, { passive: false });
+
+// ── Double-click on empty space: reset to auto-fit ──
+canvas?.addEventListener('dblclick', function(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const found = findAgentAtScreen(mx, my);
+  if (!found) {
+    viewport.userControlled = false;
+    fitViewportToAgents();
+  }
 });
 
 // ============== WebSocket ==============
@@ -505,19 +770,21 @@ if (msg.type === 'agent_log' && msg.data) {
     const msgText = from + ' ' + stIcon + ' ' + action + (to && to !== '-' ? ' → ' + to : '') + ' | ' + (l.detail||'');
     logEntry('agent', msgText, ts);
     _lastLogCount++;
-    // ── 记录通信事件，用于数据流动画 ──
+    // ── 记录通信事件，用于报文轨迹动画 ──
     if (status === 'success' && from !== '?' && to) {
-      if (to === '0.0.0.0') {
-        // 广播：在发送者的所有出边上展示数据流动画
-        for (const rel of _relationships) {
-          if (rel.from.toLowerCase() === from.toLowerCase()) {
-            _commEvents.push({ from: from.toLowerCase(), to: rel.to.toLowerCase(), timestamp: Date.now() });
+      if (action === 'send_message') {
+        pushCommEvent(from.toLowerCase(), to.toLowerCase(), false);
+      } else if (action === 'broadcast') {
+        if (to === '0.0.0.0') {
+          // 广播：在发送者的所有出边上展示轨迹
+          for (const rel of _relationships) {
+            if (rel.from.toLowerCase() === from.toLowerCase()) {
+              pushCommEvent(from.toLowerCase(), rel.to.toLowerCase(), true);
+            }
           }
+        } else {
+          pushCommEvent(from.toLowerCase(), to.toLowerCase(), true);
         }
-        if (_commEvents.length > 40) _commEvents.splice(0, _commEvents.length - 40);
-      } else if (action === 'send_message' || action === 'broadcast') {
-        _commEvents.push({ from: from.toLowerCase(), to: to.toLowerCase(), timestamp: Date.now() });
-        if (_commEvents.length > 40) _commEvents.shift();
       }
     }
     return;
@@ -531,8 +798,12 @@ if (msg.type === 'agent_status' && msg.data) {
     return;
 }
 if (msg.type === 'status' || msg.type === 'all') {
-    // Reset simState on full sync (new simulation)
-    if (msg.type === 'all') { _simState = new Map(); }
+    // Reset simState and viewport on full sync (new simulation)
+    if (msg.type === 'all') {
+      _simState = new Map();
+      viewport.initialized = false;
+      viewport.userControlled = false;
+    }
     agents = msg.data.agents || [];
     if (msg.data.relationships !== undefined && (msg.data.relationships.length > 0 || agents.length === 0)) _relationships = msg.data.relationships;
     // ── Agent 动作日志 ──
@@ -635,7 +906,10 @@ async function runSelectedScene() {
 	clearLogs();
 	_lastLogCount = 0;
   _simState = new Map();
-  _commEvents.length = 0;
+  _trajectories.length = 0;
+  // Reset viewport for new scene
+  viewport.initialized = false;
+  viewport.userControlled = false;
 
   logEntry('scene', '=== ' + name + ' ===');
 
