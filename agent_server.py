@@ -177,6 +177,11 @@ elif BACKEND == "openclaw":
 backend_label = {"brain": "Brain", "openclaw": "OpenCLAW", "claude-code": "Claude Code"}.get(BACKEND, BACKEND)
 app = FastAPI(title=f"Agent {AGENT_NAME} ({backend_label})")
 
+# ── 流量监管 middleware（LOG_TRAFFIC=1 时启用）──
+from agent_network.traffic_log import TrafficMiddleware, traffic_enabled
+if traffic_enabled():
+    app.add_middleware(TrafficMiddleware, component=AGENT_ID, server_url=f"{SERVER_URL}")
+
 turn = 0
 last_action: Dict[str, Any] = {}
 inbox: list = []                  # openclaw / claude-code 用的独立收件箱

@@ -30,6 +30,12 @@ from agent_network.event_bus import PacketRecorder, HEADER_OVERHEAD
 
 app = FastAPI(title="Agent Message Bus")
 
+# ── 流量监管 middleware（LOG_TRAFFIC=1 时启用）──
+SERVER_URL = os.environ.get("SERVER_URL", "http://srv:8000")
+from agent_network.traffic_log import TrafficMiddleware, traffic_enabled
+if traffic_enabled():
+    app.add_middleware(TrafficMiddleware, component="bus", server_url=f"{SERVER_URL}")
+
 # ── 全局日志器 ──
 logger = get_logger()
 

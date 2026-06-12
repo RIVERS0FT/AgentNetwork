@@ -119,6 +119,7 @@ class ContainerRuntime:
                     "PORT": str(self.INTERNAL_PORT),
                     "MESSAGE_BUS_URL": self.message_bus_url,
                     "SERVER_URL": os.environ.get("SERVER_URL", "http://srv:8000"),
+                    "LOG_TRAFFIC": os.environ.get("LOG_TRAFFIC", "1"),
                 }
                 for key in ("LLM_API_KEY", "LLM_MODEL", "LLM_API_BASE", "LLM_PROVIDER", "ANTHROPIC_API_KEY"):
                     if os.environ.get(key):

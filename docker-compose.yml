@@ -7,6 +7,7 @@ x-brain: &brain
     AGENT_BACKEND: brain
     MESSAGE_BUS_URL: http://bus:9000
     SERVER_URL: http://srv:8000
+    LOG_TRAFFIC: "1"
     LLM_API_KEY: ${ANTHROPIC_API_KEY}
     LLM_MODEL: deepseek-chat
     LLM_API_BASE: https://api.deepseek.com/v1
@@ -21,6 +22,7 @@ x-claude: &claude
     AGENT_BACKEND: claude-code
     MESSAGE_BUS_URL: http://bus:9000
     SERVER_URL: http://srv:8000
+    LOG_TRAFFIC: "1"
     LLM_API_KEY: ${ANTHROPIC_API_KEY}
     LLM_MODEL: deepseek-chat
     ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
@@ -35,6 +37,7 @@ x-openclaw: &openclaw
     AGENT_BACKEND: openclaw
     MESSAGE_BUS_URL: http://bus:9000
     SERVER_URL: http://srv:8000
+    LOG_TRAFFIC: "1"
     LLM_API_KEY: ${ANTHROPIC_API_KEY}
     LLM_MODEL: deepseek-chat
     LLM_API_BASE: https://api.deepseek.com/v1
@@ -51,7 +54,7 @@ services:
     user: "1000:1000"
     ports: ["9000:9000"]
     volumes: ["./data/logs:/app/data/logs"]
-    environment: { TZ: "Asia/Shanghai", MESSAGE_BUS_PORT: "9000" }
+    environment: { TZ: "Asia/Shanghai", MESSAGE_BUS_PORT: "9000", SERVER_URL: "http://srv:8000", LOG_TRAFFIC: "1" }
     restart: unless-stopped
     networks: [an]
 
@@ -65,6 +68,7 @@ services:
       TZ: Asia/Shanghai
       SERVER_PORT: "8000"
       MESSAGE_BUS_URL: http://bus:9000
+      LOG_TRAFFIC: "1"
       LLM_API_KEY: ${ANTHROPIC_API_KEY}
       LLM_MODEL: deepseek-chat
       LLM_API_BASE: https://api.deepseek.com/v1
