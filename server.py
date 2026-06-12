@@ -1711,14 +1711,32 @@ async def agent_log_ingest(req: Request):
     if len(_agent_logs) > 500:
         _agent_logs.pop(0)
 
-    # 写入结构化日志（五个字段）
-    logger.system(event, detail, agent_id=agent_id, details={
-        "from_agent": body.get("from_agent", agent_id),
-        "to_agent": body.get("to_agent", ""),
-        "action": body.get("action", event),
-        "action_status": body.get("action_status", "success"),
-        **(details or {}),
-    })
+    # 写入结构化日志 — 使用统一 schema
+    action_name = body.get("action", event)
+    from_agent = body.get("from_agent", agent_id)
+    to_agent = body.get("to_agent", "")
+    record = {
+        "timestamp": _beijing_time(body.get("timestamp", "")) or datetime.now().isoformat(timespec="milliseconds"),
+        "level": "ERROR" if action_status == "failed" else "INFO",
+        "source": "agent",
+        "component": agent_id,
+        "category": "agent_behavior",
+        "event": event,
+        "actor": {"id": from_agent},
+        "target": {"id": to_agent} if to_agent else {},
+        "action": {"name": action_name, "status": action_status},
+        "message": detail or f"[{agent_id}] {action_name}",
+        "payload": {
+            "content": body.get("content", details.get("content", "")),
+            "reasoning": body.get("reasoning", details.get("reasoning", "")),
+            "skill_params": body.get("skill_params", details.get("skill_params", {})),
+            "skill_result": body.get("skill_result", details.get("skill_result", {})),
+            **(details or {}),
+        },
+        "network": {},
+        "trace": {},
+    }
+    logger.emit(record)
     # 更新 AgentRegistry 中的 Agent 状态（悬浮框用）
     action_type = body.get("action", "")
     agent = AgentRegistry.get(agent_id)
@@ -1742,6 +1760,35 @@ async def agent_log_ingest(req: Request):
             "type": "agent_status", "data": agents_data
         }))
     return {"status": "ok", "total_logs": len(_agent_logs)}
+
+
+@app.post("/api/logs/ingest")
+async def log_ingest(req: Request):
+    """通用日志接入 — 接收前端/外部服务的日志，写入统一日志器"""
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+    record = {
+        "timestamp": body.get("timestamp", datetime.now().isoformat(timespec="milliseconds")),
+        "level": body.get("level", "INFO"),
+        "source": body.get("source", "external"),
+        "component": body.get("component", "unknown"),
+        "category": body.get("category", "system"),
+        "event": body.get("event", "log"),
+        "actor": body.get("actor", {}),
+        "target": body.get("target", {}),
+        "action": body.get("action", {}),
+        "message": body.get("message", ""),
+        "payload": body.get("payload", {}),
+        "network": body.get("network", {}),
+        "trace": body.get("trace", {}),
+    }
+    # 如果 message 为空但 payload.content 存在，自动填充
+    if not record["message"] and record["payload"].get("content"):
+        record["message"] = str(record["payload"]["content"])[:120]
+    logger.ingest(record)
+    return {"status": "ok"}
 
 
 @app.get("/api/logs/agent")

@@ -1,5 +1,7 @@
 // ============== Log (must be first) ==============
 let logBuffer = [];
+let _logIngestQueue = [];
+let _logIngestTimer = null;
 function logEntry(field, event, overrideTs) {
 const now = new Date(Date.now() + _serverTimeOffset);
 const ts = overrideTs || (now.getHours().toString().padStart(2,'0') + ':' +
@@ -10,6 +12,29 @@ logBuffer.push({ timestamp: ts, source: 'frontend', field, event });
 if (logBuffer.length > 500) logBuffer.shift();
 if (_logFlushTimer) clearTimeout(_logFlushTimer);
 _logFlushTimer = setTimeout(renderLogs, 16); // 合并同帧内的批量调用
+// 异步上报到后端全局日志（最多每 2 秒批量发送一次）
+_logIngestQueue.push({
+  timestamp: now.toISOString(),
+  source: 'frontend',
+  component: 'dashboard',
+  category: 'frontend',
+  event: field,
+  message: event,
+});
+if (!_logIngestTimer) {
+  _logIngestTimer = setTimeout(() => {
+    const batch = _logIngestQueue.splice(0);
+    _logIngestTimer = null;
+    // 逐条发送（保证每条都进入 global.jsonl）
+    for (const r of batch) {
+      fetch('/api/logs/ingest', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(r),
+      }).catch(() => {});
+    }
+  }, 2000);
+}
 }
 let _logFlushTimer = null;
 function renderLogs() {
