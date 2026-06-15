@@ -7,35 +7,40 @@
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
-<div class="app">
+<div class="app cockpit-shell">
 <div class="canvas-panel" id="canvas-panel">
-<div class="canvas-stage" id="canvas-stage">
-  <div class="stage-hud stage-hud-top">AGENT NETWORK // LIVE TOPOLOGY</div>
-  <div class="stage-hud stage-hud-bottom">SIGNAL BUS // ACTIVE LINK ANALYSIS</div>
-  <canvas id="agent-canvas"></canvas>
-  <div class="tooltip" id="tooltip"></div>
-</div>
 <div class="scene-panel" id="scene-panel">
   <div class="scene-header">
-    <span class="scene-kicker">SCENE FEED</span>
+    <span class="scene-kicker">MISSION VISUAL // SCENE FEED</span>
     <span class="scene-title" id="fp-title">场景面板</span>
     <button class="icon-btn" onclick="toggleScenePanel()" title="折叠场景面板">_</button>
   </div>
   <iframe id="fp-iframe" src="about:blank"></iframe>
 </div>
+<div class="canvas-stage" id="canvas-stage">
+  <div class="stage-frame stage-frame-tl"></div>
+  <div class="stage-frame stage-frame-tr"></div>
+  <div class="stage-frame stage-frame-bl"></div>
+  <div class="stage-frame stage-frame-br"></div>
+  <div class="stage-hud stage-hud-top">AGENT TACTICAL MAP // BLUE FORCE NETWORK</div>
+  <div class="stage-hud stage-hud-bottom">SIGNAL RELAY // LINK PULSE ANALYSIS</div>
+  <canvas id="agent-canvas"></canvas>
+  <div class="tooltip" id="tooltip"></div>
+</div>
 </div>
 <div class="side-panel">
 <div class="section-title control-bar">
+  <span class="control-label">MISSION CTRL</span>
   <select id="scene-selector" class="scene-select" onchange="onSceneSelect()">
       </select>
   <button class="btn green run-btn" onclick="runSelectedScene()">运行</button>
   <button class="btn red stop-btn" onclick="stopSimulation()">停止</button>
 </div>
-<div class="section-title">仿真日志 <span class="toggle" onclick="togglePanel('log-viewer')">_</span></div>
+<div class="section-title">战报日志 <span class="toggle" onclick="togglePanel('log-viewer')">_</span></div>
 <div class="log-viewer" id="log-viewer">
 <div class="log-controls">
 <div class="log-dropdown" id="log-dropdown">
-<button class="log-dropdown-btn" onclick="document.getElementById('log-dropdown').classList.toggle('open')">日志 ▾</button>
+<button class="log-dropdown-btn" onclick="document.getElementById('log-dropdown').classList.toggle('open')">频道 ▾</button>
 <div class="log-dropdown-menu" id="log-fields">
 <label class="chk"><input type="checkbox" data-field="frontend" checked onchange="renderLogs()">前端</label>
 <label class="chk"><input type="checkbox" data-field="scene" checked onchange="renderLogs()">场景</label>
@@ -54,6 +59,6 @@
 </div>
 </div>
 </div>
-<script src="/static/dashboard.js?v=4"></script>
+<script src="/static/dashboard.js?v=5"></script>
 </body>
 </html>

@@ -1952,7 +1952,10 @@ async def health_check():
 
 import pathlib
 _SCENES_DIR = pathlib.Path(__file__).parent / 'scenes'
-_DASHBOARD_PATH = pathlib.Path(__file__).parent / 'web' / 'dist' / 'dashboard.html'
+_WEB_PUBLIC_DIR = pathlib.Path(__file__).parent / 'web' / 'public'
+_WEB_DIST_DIR = pathlib.Path(__file__).parent / 'web' / 'dist'
+_WEB_STATIC_DIR = _WEB_DIST_DIR if (_WEB_DIST_DIR / 'dashboard.html').exists() else _WEB_PUBLIC_DIR
+_DASHBOARD_PATH = _WEB_STATIC_DIR / 'dashboard.html'
 
 def _load_dashboard() -> str:
     try:
@@ -1968,7 +1971,7 @@ def _load_dashboard() -> str:
 # ═══════════════════════════════════════════════
 
 from fastapi.staticfiles import StaticFiles
-app.mount('/static', StaticFiles(directory=str(pathlib.Path(__file__).parent / 'web' / 'dist')), name='static')
+app.mount('/static', StaticFiles(directory=str(_WEB_STATIC_DIR)), name='static')
 
 
 # ═══════════════════════════════════════════════

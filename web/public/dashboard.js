@@ -341,9 +341,9 @@ let _simState = new Map(); // agent_id → { x, y } in world coords
 
 // ============== Canvas Agent Rendering ==============
 const STATUS_COLORS = {
-  idle: '#85D274', running: '#A9D68B', paused: '#F2CF66',
-  stopped: '#E05243', error: '#E05243', created: '#7F8771',
-  decided: '#B9A35D', messaged: '#FFB84D', send_failed: '#E05243', analyzed: '#88A7A0',
+  idle: '#38D5FF', running: '#2F8CFF', paused: '#FFBF5A',
+  stopped: '#FF4E5E', error: '#FF4E5E', created: '#7B8EA5',
+  decided: '#8EA7FF', messaged: '#58F0C2', send_failed: '#FF4E5E', analyzed: '#BFEAFF',
 };
 
 const canvas = document.getElementById('agent-canvas');
@@ -382,31 +382,31 @@ document.addEventListener('visibilitychange', () => {
 function drawCommandBackground(canvasW, canvasH, now) {
   const pulse = REDUCED_MOTION ? 0 : now * 0.001;
   const bg = ctx.createLinearGradient(0, 0, canvasW, canvasH);
-  bg.addColorStop(0, '#060805');
-  bg.addColorStop(0.48, '#11160E');
-  bg.addColorStop(1, '#1C1D13');
+  bg.addColorStop(0, '#020815');
+  bg.addColorStop(0.48, '#07182B');
+  bg.addColorStop(1, '#020611');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
-  const glow1 = ctx.createRadialGradient(canvasW * 0.22, canvasH * 0.18, 0, canvasW * 0.22, canvasH * 0.18, canvasW * 0.75);
-  glow1.addColorStop(0, 'rgba(133,210,116,0.16)');
-  glow1.addColorStop(0.45, 'rgba(133,210,116,0.035)');
-  glow1.addColorStop(1, 'rgba(133,210,116,0)');
+  const glow1 = ctx.createRadialGradient(canvasW * 0.18, canvasH * 0.10, 0, canvasW * 0.18, canvasH * 0.10, canvasW * 0.78);
+  glow1.addColorStop(0, 'rgba(47,140,255,0.20)');
+  glow1.addColorStop(0.44, 'rgba(47,140,255,0.045)');
+  glow1.addColorStop(1, 'rgba(47,140,255,0)');
   ctx.fillStyle = glow1;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
-  const glow2 = ctx.createRadialGradient(canvasW * 0.84, canvasH * 0.28, 0, canvasW * 0.84, canvasH * 0.28, canvasW * 0.62);
-  glow2.addColorStop(0, 'rgba(255,184,77,0.13)');
-  glow2.addColorStop(0.48, 'rgba(255,184,77,0.03)');
-  glow2.addColorStop(1, 'rgba(255,184,77,0)');
+  const glow2 = ctx.createRadialGradient(canvasW * 0.82, canvasH * 0.42, 0, canvasW * 0.82, canvasH * 0.42, canvasW * 0.68);
+  glow2.addColorStop(0, 'rgba(56,213,255,0.15)');
+  glow2.addColorStop(0.50, 'rgba(56,213,255,0.035)');
+  glow2.addColorStop(1, 'rgba(56,213,255,0)');
   ctx.fillStyle = glow2;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
-  const grid = Math.max(28, Math.min(54, canvasW / 22));
-  const drift = REDUCED_MOTION ? 0 : (pulse * 18) % grid;
+  const grid = Math.max(32, Math.min(58, canvasW / 24));
+  const drift = REDUCED_MOTION ? 0 : (pulse * 14) % grid;
   ctx.save();
   ctx.lineWidth = 0.7;
-  ctx.strokeStyle = 'rgba(178,197,128,0.09)';
+  ctx.strokeStyle = 'rgba(95,187,255,0.105)';
   ctx.beginPath();
   for (let x = -grid + drift; x <= canvasW + grid; x += grid) {
     ctx.moveTo(x, 0);
@@ -417,33 +417,73 @@ function drawCommandBackground(canvasW, canvasH, now) {
     ctx.lineTo(canvasW, y);
   }
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,184,77,0.075)';
-  ctx.lineWidth = 0.35;
+  ctx.strokeStyle = 'rgba(56,213,255,0.075)';
+  ctx.lineWidth = 0.45;
   ctx.beginPath();
   for (let x = -grid * 2 + drift * 0.5; x <= canvasW + grid * 2; x += grid * 2) {
     ctx.moveTo(x, 0);
-    ctx.lineTo(x + canvasH * 0.22, canvasH);
+    ctx.lineTo(x + canvasH * 0.18, canvasH);
   }
   ctx.stroke();
-  ctx.restore();
 
-  ctx.save();
-  ctx.fillStyle = 'rgba(232,227,200,0.34)';
-  for (let i = 0; i < 44; i++) {
-    const x = (i * 137.5 + (REDUCED_MOTION ? 0 : now * 0.018)) % Math.max(1, canvasW);
-    const y = (i * 59.7 + Math.sin(i * 2.3) * 44 + canvasH * 2) % Math.max(1, canvasH);
-    const a = 0.12 + ((i % 7) / 7) * 0.28;
-    ctx.globalAlpha = a;
-    ctx.fillRect(x, y, i % 5 === 0 ? 2 : 1, i % 3 === 0 ? 2 : 1);
+  const cx = canvasW / 2;
+  const cy = canvasH / 2;
+  const radius = Math.min(canvasW, canvasH) * 0.42;
+  ctx.strokeStyle = 'rgba(95,187,255,0.16)';
+  ctx.lineWidth = 0.8;
+  for (let i = 1; i <= 4; i++) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * i / 4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(191,234,255,0.18)';
+  ctx.beginPath();
+  ctx.moveTo(cx - radius, cy);
+  ctx.lineTo(cx + radius, cy);
+  ctx.moveTo(cx, cy - radius);
+  ctx.lineTo(cx, cy + radius);
+  ctx.stroke();
+
+  for (let deg = 0; deg < 360; deg += 15) {
+    const a = deg * Math.PI / 180;
+    const inner = radius - (deg % 45 === 0 ? 16 : 8);
+    const outer = radius + 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+    ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+    ctx.strokeStyle = deg % 45 === 0 ? 'rgba(191,234,255,0.32)' : 'rgba(95,187,255,0.15)';
+    ctx.lineWidth = deg % 45 === 0 ? 1.1 : 0.7;
+    ctx.stroke();
+  }
+
+  if (!REDUCED_MOTION) {
+    const sweep = (now * 0.00042) % (Math.PI * 2);
+    const wedge = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    wedge.addColorStop(0, 'rgba(56,213,255,0.12)');
+    wedge.addColorStop(1, 'rgba(56,213,255,0)');
+    ctx.fillStyle = wedge;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, sweep - 0.18, sweep + 0.02);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.fillStyle = 'rgba(191,234,255,0.34)';
+  for (let i = 0; i < 52; i++) {
+    const x = (i * 149.5 + (REDUCED_MOTION ? 0 : now * 0.012)) % Math.max(1, canvasW);
+    const y = (i * 67.7 + Math.sin(i * 2.7) * 38 + canvasH * 2) % Math.max(1, canvasH);
+    ctx.globalAlpha = 0.10 + ((i % 7) / 7) * 0.22;
+    ctx.fillRect(x, y, i % 6 === 0 ? 2 : 1, i % 4 === 0 ? 2 : 1);
   }
   ctx.restore();
 
   if (!REDUCED_MOTION) {
     const scanY = (now * 0.07) % (canvasH + 120) - 60;
     const scan = ctx.createLinearGradient(0, scanY - 42, 0, scanY + 42);
-    scan.addColorStop(0, 'rgba(133,210,116,0)');
-    scan.addColorStop(0.5, 'rgba(133,210,116,0.10)');
-    scan.addColorStop(1, 'rgba(255,184,77,0)');
+    scan.addColorStop(0, 'rgba(47,140,255,0)');
+    scan.addColorStop(0.5, 'rgba(56,213,255,0.12)');
+    scan.addColorStop(1, 'rgba(47,140,255,0)');
     ctx.fillStyle = scan;
     ctx.fillRect(0, scanY - 42, canvasW, 84);
   }
@@ -472,15 +512,15 @@ function drawRelationshipLines(relationships, agents) {
     const isCooperative = (rel.value || 0) > 0;
     const alpha = Math.min(1, Math.abs(rel.value || 50) / 100 + 0.22);
     const color = isCooperative
-      ? `rgba(133,210,116,${alpha.toFixed(2)})`
-      : `rgba(224,82,67,${alpha.toFixed(2)})`;
-    const glow = isCooperative ? 'rgba(133,210,116,0.22)' : 'rgba(224,82,67,0.24)';
+      ? `rgba(56,213,255,${alpha.toFixed(2)})`
+      : `rgba(255,78,94,${alpha.toFixed(2)})`;
+    const glow = isCooperative ? 'rgba(47,140,255,0.24)' : 'rgba(255,78,94,0.24)';
 
     ctx.beginPath();
     ctx.moveTo(from.sx, from.sy);
     ctx.lineTo(to.sx, to.sy);
-    ctx.setLineDash([8, 6]);
-    ctx.lineWidth = 3.2;
+    ctx.setLineDash([10, 7]);
+    ctx.lineWidth = 3.4;
     ctx.strokeStyle = glow;
     ctx.shadowColor = glow;
     ctx.shadowBlur = 14;
@@ -488,7 +528,7 @@ function drawRelationshipLines(relationships, agents) {
     ctx.beginPath();
     ctx.moveTo(from.sx, from.sy);
     ctx.lineTo(to.sx, to.sy);
-    ctx.lineWidth = 0.85;
+    ctx.lineWidth = 1;
     ctx.strokeStyle = color;
     ctx.shadowBlur = 8;
     ctx.stroke();
@@ -520,7 +560,7 @@ function drawOneTrajectory(traj, fromScr, toScr, now) {
   const headX = fromScr.sx + dx * progress + nx * off;
   const headY = fromScr.sy + dy * progress + ny * off;
 
-  const packetColor = traj.isBroadcast ? '255,184,77' : '133,210,116';
+  const packetColor = traj.isBroadcast ? '255,191,90' : '56,213,255';
 
   // ── High-energy packet trail ──
   const tailAlpha = fadeOut * 0.9;
@@ -577,8 +617,8 @@ function drawTempLink(fromScr, toScr) {
   ctx.save();
   ctx.setLineDash([3, 7]);
   ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(178,197,128,0.32)';
-  ctx.shadowColor = 'rgba(255,184,77,0.22)';
+  ctx.strokeStyle = 'rgba(95,187,255,0.34)';
+  ctx.shadowColor = 'rgba(56,213,255,0.24)';
   ctx.shadowBlur = 10;
   ctx.beginPath();
   ctx.moveTo(fromScr.sx, fromScr.sy);
@@ -767,27 +807,27 @@ function drawAgents(agents, hoveredId, time) {
     const wx = sp ? sp.x : a.x;
     const wy = sp ? sp.y : a.y;
     const p = worldToScreen(wx, wy);
-    const color = STATUS_COLORS[a.status] || '#7F8771';
+    const color = STATUS_COLORS[a.status] || '#7B8EA5';
     const pulse = REDUCED_MOTION ? 0.5 : (Math.sin(now / 360 + p.sx * 0.01) + 1) / 2;
     const active = ['running', 'decided', 'messaged', 'analyzed'].includes(a.status);
 
     ctx.save();
     ctx.shadowColor = color;
-    ctx.shadowBlur = active ? 22 + pulse * 12 : 12;
+    ctx.shadowBlur = active ? 20 + pulse * 10 : 10;
 
-    // Soft aura
+    // Tactical aura
     const aura = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, r * 4.2);
-    aura.addColorStop(0, color + (active ? '66' : '40'));
-    aura.addColorStop(0.42, color + '18');
+    aura.addColorStop(0, color + (active ? '5f' : '34'));
+    aura.addColorStop(0.42, color + '16');
     aura.addColorStop(1, color + '00');
     ctx.fillStyle = aura;
     ctx.beginPath();
     ctx.arc(p.sx, p.sy, r * 4.2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Outer rings
-    ctx.shadowBlur = active ? 18 : 8;
-    ctx.lineWidth = hoveredId === a.agent_id ? 2.1 : 1.2;
+    // Target lock rings
+    ctx.shadowBlur = active ? 16 : 7;
+    ctx.lineWidth = hoveredId === a.agent_id ? 2.2 : 1.2;
     ctx.strokeStyle = color + (hoveredId === a.agent_id ? 'ee' : 'aa');
     ctx.beginPath();
     ctx.arc(p.sx, p.sy, r + 4 + pulse * 2, 0, Math.PI * 2);
@@ -801,6 +841,17 @@ function drawAgents(agents, hoveredId, time) {
     ctx.stroke();
     ctx.setLineDash([]);
 
+    const lock = r + 15;
+    const notch = 7;
+    ctx.strokeStyle = color + (hoveredId === a.agent_id ? 'ff' : 'bb');
+    ctx.lineWidth = hoveredId === a.agent_id ? 1.8 : 1.1;
+    ctx.beginPath();
+    ctx.moveTo(p.sx - lock, p.sy - lock + notch); ctx.lineTo(p.sx - lock, p.sy - lock); ctx.lineTo(p.sx - lock + notch, p.sy - lock);
+    ctx.moveTo(p.sx + lock - notch, p.sy - lock); ctx.lineTo(p.sx + lock, p.sy - lock); ctx.lineTo(p.sx + lock, p.sy - lock + notch);
+    ctx.moveTo(p.sx - lock, p.sy + lock - notch); ctx.lineTo(p.sx - lock, p.sy + lock); ctx.lineTo(p.sx - lock + notch, p.sy + lock);
+    ctx.moveTo(p.sx + lock - notch, p.sy + lock); ctx.lineTo(p.sx + lock, p.sy + lock); ctx.lineTo(p.sx + lock, p.sy + lock - notch);
+    ctx.stroke();
+
     // Core
     const core = ctx.createRadialGradient(p.sx - r * 0.3, p.sy - r * 0.35, 0, p.sx, p.sy, r);
     core.addColorStop(0, '#FFFFFF');
@@ -810,11 +861,11 @@ function drawAgents(agents, hoveredId, time) {
     ctx.beginPath();
     ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#E8E3C8';
-    ctx.lineWidth = 0.7;
+    ctx.strokeStyle = '#BFEAFF';
+    ctx.lineWidth = 0.8;
     ctx.stroke();
 
-    // Status spinner
+    // Active sweep arc
     if (active) {
       const spinAngle = REDUCED_MOTION ? 0 : (now / 480) % (Math.PI * 2);
       ctx.beginPath();
@@ -827,12 +878,15 @@ function drawAgents(agents, hoveredId, time) {
 
     // Label
     ctx.save();
-    ctx.shadowColor = 'rgba(133,210,116,0.72)';
+    ctx.shadowColor = 'rgba(56,213,255,0.72)';
     ctx.shadowBlur = 8;
-    ctx.fillStyle = '#E8E3C8';
+    ctx.fillStyle = '#EAF7FF';
     const labelSize = Math.max(9, Math.min(14, canvasW / 60));
     ctx.font = labelSize + 'px Inter, IBM Plex Sans, system-ui, sans-serif';
     ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(3,8,18,0.86)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(a.name || a.agent_id, p.sx, p.sy - r - 4);
     ctx.fillText(a.name || a.agent_id, p.sx, p.sy - r - 4);
     ctx.textAlign = 'start';
     ctx.restore();
@@ -856,12 +910,12 @@ function render() {
     drawAgents(agents, hoveredAgent?.agent_id, now);
   } else {
     ctx.save();
-    ctx.fillStyle = 'rgba(232,227,200,0.72)';
-    ctx.shadowColor = 'rgba(133,210,116,0.72)';
+    ctx.fillStyle = 'rgba(191,234,255,0.76)';
+    ctx.shadowColor = 'rgba(56,213,255,0.72)';
     ctx.shadowBlur = 18;
     ctx.font = '12px JetBrains Mono, IBM Plex Mono, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('WAITING FOR AGENT TELEMETRY', canvasW / 2, canvasH / 2);
+    ctx.fillText('WAITING FOR BLUE FORCE TELEMETRY', canvasW / 2, canvasH / 2);
     ctx.restore();
   }
 
