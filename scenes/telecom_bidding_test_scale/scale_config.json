@@ -1,0 +1,378 @@
+{
+  "_description": "telecom_bidding 百万级招投标仿真 — 9类角色、5层网络、合约生命周期动态演进",
+  "version": "1.0",
+  "target_scale": "1,000,000 agents",
+
+  "agent_categories": [
+    {
+      "category_id": "government_agency",
+      "name": "政府/公共事业机构",
+      "identity": "各级政府数字化办公室、公共事业部门，负责政务云/专网采购，注重安全与合规",
+      "spawn_count": { "base": 150000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.02 },
+      "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
+      "skills": ["evaluate_proposals", "sign_contract", "terminate_contract_with_flash"],
+      "persona_templates": [
+        { "role": "national_gov",    "ratio": 0.05, "budget_tier": "high",   "contract_sensitivity": "security_first" },
+        { "role": "provincial_gov",  "ratio": 0.25, "budget_tier": "medium", "contract_sensitivity": "balanced" },
+        { "role": "municipal_gov",   "ratio": 0.45, "budget_tier": "low",    "contract_sensitivity": "price_sensitive" },
+        { "role": "public_utility",  "ratio": 0.25, "budget_tier": "medium", "contract_sensitivity": "reliability_first" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "evaluate_proposals": [2, 5], "sign_contract": [1, 3], "terminate_contract_with_flash": [0, 1], "idle": [3, 7] },
+        "traffic_mix": { "EAST_WEST": 0.55, "NORTH_SOUTH": 0.25, "INTERNAL": 0.20 },
+        "avg_payload_kb": { "EAST_WEST": 16, "NORTH_SOUTH": 64, "INTERNAL": 256 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 30,
+        "preferred_connection_categories": ["telecom_operator", "virtual_operator", "consultant", "regulator"],
+        "connection_affinity": { "telecom_operator": 0.35, "virtual_operator": 0.25, "consultant": 0.20, "government_agency": 0.05, "other": 0.15 }
+      }
+    },
+    {
+      "category_id": "financial_institution",
+      "name": "金融机构",
+      "identity": "银行/证券/保险等金融机构，追求低延迟与高可靠性，对价格中度敏感",
+      "spawn_count": { "base": 100000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.03 },
+      "primary_interaction_paradigm": "ZERO_SUM_GAME",
+      "skills": ["evaluate_proposals", "sign_contract", "terminate_contract_with_flash"],
+      "persona_templates": [
+        { "role": "major_bank",       "ratio": 0.15, "budget_tier": "high",   "contract_sensitivity": "reliability_first" },
+        { "role": "regional_bank",    "ratio": 0.30, "budget_tier": "medium", "contract_sensitivity": "balanced" },
+        { "role": "securities_firm",  "ratio": 0.30, "budget_tier": "medium", "contract_sensitivity": "latency_sensitive" },
+        { "role": "insurance_co",     "ratio": 0.25, "budget_tier": "low",    "contract_sensitivity": "price_sensitive" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "evaluate_proposals": [3, 7], "sign_contract": [1, 3], "terminate_contract_with_flash": [0, 2], "idle": [2, 5] },
+        "traffic_mix": { "EAST_WEST": 0.45, "NORTH_SOUTH": 0.35, "INTERNAL": 0.20 },
+        "avg_payload_kb": { "EAST_WEST": 24, "NORTH_SOUTH": 128, "INTERNAL": 512 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 25,
+        "preferred_connection_categories": ["telecom_operator", "virtual_operator", "consultant"],
+        "connection_affinity": { "telecom_operator": 0.40, "virtual_operator": 0.20, "consultant": 0.20, "financial_institution": 0.05, "other": 0.15 }
+      }
+    },
+    {
+      "category_id": "educational_institution",
+      "name": "教育/科研机构",
+      "identity": "高校/研究所/职校，大带宽科研数据传输需求，预算有限",
+      "spawn_count": { "base": 80000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.01 },
+      "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
+      "skills": ["evaluate_proposals", "sign_contract"],
+      "persona_templates": [
+        { "role": "top_university",  "ratio": 0.15, "budget_tier": "medium", "contract_sensitivity": "bandwidth_first" },
+        { "role": "college",         "ratio": 0.45, "budget_tier": "low",    "contract_sensitivity": "price_sensitive" },
+        { "role": "research_lab",    "ratio": 0.25, "budget_tier": "medium", "contract_sensitivity": "bandwidth_first" },
+        { "role": "vocational",      "ratio": 0.15, "budget_tier": "low",    "contract_sensitivity": "price_sensitive" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "evaluate_proposals": [1, 4], "sign_contract": [1, 2], "idle": [5, 8] },
+        "traffic_mix": { "EAST_WEST": 0.40, "NORTH_SOUTH": 0.40, "INTERNAL": 0.20 },
+        "avg_payload_kb": { "EAST_WEST": 16, "NORTH_SOUTH": 256, "INTERNAL": 2048 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 15,
+        "preferred_connection_categories": ["telecom_operator", "virtual_operator", "consultant"],
+        "connection_affinity": { "telecom_operator": 0.35, "virtual_operator": 0.30, "consultant": 0.15, "other": 0.20 }
+      }
+    },
+    {
+      "category_id": "healthcare_institution",
+      "name": "医疗机构",
+      "identity": "医院/诊所/远程医疗平台，低时延高可靠需求，合规要求严格",
+      "spawn_count": { "base": 60000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.01 },
+      "primary_interaction_paradigm": "INTERNAL_COLLABORATION",
+      "skills": ["evaluate_proposals", "sign_contract"],
+      "persona_templates": [
+        { "role": "top_hospital",    "ratio": 0.15, "budget_tier": "high",   "contract_sensitivity": "reliability_first" },
+        { "role": "regional_hospital","ratio":0.35, "budget_tier": "medium", "contract_sensitivity": "balanced" },
+        { "role": "clinic",          "ratio": 0.35, "budget_tier": "low",    "contract_sensitivity": "price_sensitive" },
+        { "role": "telemedicine",    "ratio": 0.15, "budget_tier": "medium", "contract_sensitivity": "latency_sensitive" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "evaluate_proposals": [1, 3], "sign_contract": [1, 2], "idle": [5, 8] },
+        "traffic_mix": { "EAST_WEST": 0.30, "NORTH_SOUTH": 0.50, "INTERNAL": 0.20 },
+        "avg_payload_kb": { "EAST_WEST": 8, "NORTH_SOUTH": 64, "INTERNAL": 1024 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 12,
+        "preferred_connection_categories": ["telecom_operator", "virtual_operator"],
+        "connection_affinity": { "telecom_operator": 0.45, "virtual_operator": 0.25, "other": 0.30 }
+      }
+    },
+    {
+      "category_id": "industrial_enterprise",
+      "name": "工业/制造企业",
+      "identity": "智能制造工厂/物流/能源企业，5G专网和工业互联网需求，性价比和定制化要求高",
+      "spawn_count": { "base": 120000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.01 },
+      "primary_interaction_paradigm": "ZERO_SUM_GAME",
+      "skills": ["evaluate_proposals", "sign_contract", "terminate_contract_with_flash"],
+      "persona_templates": [
+        { "role": "smart_factory",  "ratio": 0.35, "budget_tier": "medium", "contract_sensitivity": "balanced" },
+        { "role": "logistics_hub",  "ratio": 0.25, "budget_tier": "low",    "contract_sensitivity": "price_sensitive" },
+        { "role": "energy_plant",   "ratio": 0.20, "budget_tier": "high",   "contract_sensitivity": "reliability_first" },
+        { "role": "mining_site",    "ratio": 0.20, "budget_tier": "low",    "contract_sensitivity": "price_sensitive" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "evaluate_proposals": [2, 6], "sign_contract": [1, 3], "terminate_contract_with_flash": [1, 3], "idle": [2, 5] },
+        "traffic_mix": { "EAST_WEST": 0.40, "NORTH_SOUTH": 0.35, "INTERNAL": 0.25 },
+        "avg_payload_kb": { "EAST_WEST": 16, "NORTH_SOUTH": 128, "INTERNAL": 4096 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 20,
+        "preferred_connection_categories": ["telecom_operator", "virtual_operator", "consultant"],
+        "connection_affinity": { "telecom_operator": 0.35, "virtual_operator": 0.30, "consultant": 0.15, "industrial_enterprise": 0.05, "other": 0.15 }
+      }
+    },
+    {
+      "category_id": "telecom_operator",
+      "name": "电信运营商",
+      "identity": "移动/联通/电信等基础运营商，拥有自有频谱和骨干网，市场份额竞争激烈",
+      "spawn_count": { "base": 5000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.05 },
+      "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
+      "skills": ["submit_bidding_proposal", "process_breach_notification"],
+      "persona_templates": [
+        { "role": "national_operator",  "ratio": 0.10, "market_share": "high",   "pricing_strategy": "premium" },
+        { "role": "regional_operator",  "ratio": 0.40, "market_share": "medium", "pricing_strategy": "competitive" },
+        { "role": "niche_operator",     "ratio": 0.30, "market_share": "low",    "pricing_strategy": "undercut" },
+        { "role": "infra_operator",     "ratio": 0.20, "market_share": "medium", "pricing_strategy": "value" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "submit_bidding_proposal": [5, 15], "process_breach_notification": [2, 6], "idle": [0, 3] },
+        "traffic_mix": { "EAST_WEST": 0.50, "NORTH_SOUTH": 0.30, "INTERNAL": 0.20 },
+        "avg_payload_kb": { "EAST_WEST": 32, "NORTH_SOUTH": 128, "INTERNAL": 512 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 300,
+        "preferred_connection_categories": ["government_agency", "financial_institution", "educational_institution", "healthcare_institution", "industrial_enterprise", "telecom_operator", "virtual_operator", "regulator"],
+        "connection_affinity": { "government_agency": 0.15, "financial_institution": 0.15, "industrial_enterprise": 0.15, "educational_institution": 0.10, "healthcare_institution": 0.10, "telecom_operator": 0.05, "virtual_operator": 0.05, "regulator": 0.05, "other": 0.20 }
+      }
+    },
+    {
+      "category_id": "virtual_operator",
+      "name": "虚拟运营商/MVNO",
+      "identity": "租用基础运营商网络的虚拟运营商，通过低价和差异化服务抢夺细分市场",
+      "spawn_count": { "base": 30000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.02 },
+      "primary_interaction_paradigm": "ZERO_SUM_GAME",
+      "skills": ["submit_bidding_proposal", "process_breach_notification"],
+      "persona_templates": [
+        { "role": "budget_mvno",  "ratio": 0.40, "market_share": "low",  "pricing_strategy": "undercut" },
+        { "role": "niche_mvno",   "ratio": 0.35, "market_share": "low",  "pricing_strategy": "specialized" },
+        { "role": "enterprise_mvno","ratio":0.25,"market_share": "low",  "pricing_strategy": "value" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "submit_bidding_proposal": [3, 10], "process_breach_notification": [1, 4], "idle": [1, 5] },
+        "traffic_mix": { "EAST_WEST": 0.45, "NORTH_SOUTH": 0.35, "INTERNAL": 0.20 },
+        "avg_payload_kb": { "EAST_WEST": 16, "NORTH_SOUTH": 64, "INTERNAL": 256 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 50,
+        "preferred_connection_categories": ["government_agency", "financial_institution", "educational_institution", "healthcare_institution", "industrial_enterprise", "telecom_operator"],
+        "connection_affinity": { "government_agency": 0.10, "financial_institution": 0.10, "industrial_enterprise": 0.15, "educational_institution": 0.15, "healthcare_institution": 0.10, "telecom_operator": 0.15, "other": 0.25 }
+      }
+    },
+    {
+      "category_id": "regulator",
+      "name": "通信监管机构",
+      "identity": "国家级/省级/市级通信管理局，监督市场公平竞争，分配频谱资源，防止垄断",
+      "spawn_count": { "base": 5000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.05 },
+      "primary_interaction_paradigm": "INTERNAL_COLLABORATION",
+      "skills": ["investigate_complaint", "impose_sanction", "audit_market_share"],
+      "persona_templates": [
+        { "role": "national_regulator",  "ratio": 0.10, "authority_level": "supreme",  "enforcement_style": "policy_driven" },
+        { "role": "provincial_regulator","ratio": 0.35, "authority_level": "high",    "enforcement_style": "balanced" },
+        { "role": "municipal_regulator", "ratio": 0.40, "authority_level": "medium",  "enforcement_style": "reactive" },
+        { "role": "spectrum_authority",  "ratio": 0.15, "authority_level": "high",    "enforcement_style": "technical" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "investigate_complaint": [3, 8], "impose_sanction": [1, 4], "audit_market_share": [1, 3], "idle": [1, 4] },
+        "traffic_mix": { "EAST_WEST": 0.70, "NORTH_SOUTH": 0.10, "INTERNAL": 0.20 },
+        "avg_payload_kb": { "EAST_WEST": 8, "NORTH_SOUTH": 32, "INTERNAL": 128 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 80,
+        "preferred_connection_categories": ["telecom_operator", "virtual_operator", "government_agency", "financial_institution"],
+        "connection_affinity": { "telecom_operator": 0.35, "virtual_operator": 0.25, "government_agency": 0.10, "financial_institution": 0.10, "other": 0.20 }
+      }
+    },
+    {
+      "category_id": "consultant",
+      "name": "招投标咨询顾问",
+      "identity": "独立咨询公司/律所，为机构提供运营商评估报告和法律支持，收取咨询费",
+      "spawn_count": { "base": 20000, "scale_factor": 1.0 },
+      "model_backbone": { "enabled": false, "llm_ratio": 0.02 },
+      "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
+      "skills": ["provide_evaluation_report", "broker_deal"],
+      "persona_templates": [
+        { "role": "bidding_advisor",  "ratio": 0.40, "expertise": "procurement", "fee_tier": "percentage" },
+        { "role": "legal_consultant", "ratio": 0.30, "expertise": "compliance",  "fee_tier": "fixed" },
+        { "role": "tech_advisor",     "ratio": 0.30, "expertise": "technology",  "fee_tier": "hybrid" }
+      ],
+      "behavior_profile": {
+        "actions_per_10_rounds": { "provide_evaluation_report": [4, 10], "broker_deal": [1, 4], "idle": [1, 4] },
+        "traffic_mix": { "EAST_WEST": 0.55, "NORTH_SOUTH": 0.25, "INTERNAL": 0.20 },
+        "avg_payload_kb": { "EAST_WEST": 32, "NORTH_SOUTH": 64, "INTERNAL": 256 }
+      },
+      "topology_constraints": {
+        "max_peers_per_agent": 40,
+        "preferred_connection_categories": ["government_agency", "financial_institution", "industrial_enterprise", "educational_institution", "healthcare_institution", "telecom_operator"],
+        "connection_affinity": { "government_agency": 0.20, "financial_institution": 0.20, "industrial_enterprise": 0.20, "telecom_operator": 0.15, "other": 0.25 }
+      }
+    }
+  ],
+
+  "network_generation_rules": [
+    {
+      "sub_id": "sub_market",
+      "topology_type": "MESH",
+      "description": "招投标市场平面：所有机构与所有运营商可互相报价谈判",
+      "generation_rule": "BIPARTITE",
+      "source_categories": ["government_agency", "financial_institution", "educational_institution", "healthcare_institution", "industrial_enterprise"],
+      "target_categories": ["telecom_operator", "virtual_operator"],
+      "paradigm": "NEGOTIATION",
+      "edge_density": { "inter": 0.0002 },
+      "max_total_edges": 30000000,
+      "channel_prefix": "vlan_market"
+    },
+    {
+      "sub_id": "sub_agency_collab",
+      "topology_type": "MESH",
+      "description": "机构间信息共享网络：同类机构交流招标经验和市场情报",
+      "generation_rule": "INTRA_CATEGORY_FULL_INTER_CATEGORY_SPARSE",
+      "source_categories": ["government_agency", "financial_institution", "educational_institution", "healthcare_institution", "industrial_enterprise"],
+      "target_categories": ["government_agency", "financial_institution", "educational_institution", "healthcare_institution", "industrial_enterprise"],
+      "paradigm": "COLLABORATION",
+      "edge_density": { "intra": 0.00002, "inter": 0.000005 },
+      "max_total_edges": 10000000,
+      "channel_prefix": "vlan_agency"
+    },
+    {
+      "sub_id": "sub_operator_compete",
+      "topology_type": "MESH",
+      "description": "运营商竞争情报网络：运营商间互相监测定价和市场动态",
+      "generation_rule": "INTRA_CATEGORY_FULL_INTER_CATEGORY_SPARSE",
+      "source_categories": ["telecom_operator", "virtual_operator"],
+      "target_categories": ["telecom_operator", "virtual_operator"],
+      "paradigm": "GAME",
+      "edge_density": { "intra": 0.001, "inter": 0.0005 },
+      "max_total_edges": 5000000,
+      "channel_prefix": "vlan_op_compete"
+    },
+    {
+      "sub_id": "sub_regulatory",
+      "topology_type": "STAR",
+      "description": "监管平面：监管机构监督所有运营商和大型机构",
+      "generation_rule": "STAR_HUB",
+      "hub_categories": ["regulator"],
+      "spoke_categories": ["telecom_operator", "virtual_operator", "government_agency", "financial_institution", "industrial_enterprise"],
+      "paradigm": "NEGOTIATION",
+      "edge_density": { "hub_to_spoke": 0.05 },
+      "max_total_edges": 10000000,
+      "channel_prefix": "vlan_reg"
+    },
+    {
+      "sub_id": "sub_consulting",
+      "topology_type": "STAR",
+      "description": "咨询服务平面：咨询顾问连接所有机构侧和运营商侧",
+      "generation_rule": "STAR_HUB",
+      "hub_categories": ["consultant"],
+      "spoke_categories": ["government_agency", "financial_institution", "educational_institution", "healthcare_institution", "industrial_enterprise", "telecom_operator", "virtual_operator"],
+      "paradigm": "NEGOTIATION",
+      "edge_density": { "hub_to_spoke": 0.01 },
+      "max_total_edges": 15000000,
+      "channel_prefix": "vlan_consult"
+    }
+  ],
+
+  "network_global_constraints": {
+    "max_total_edges_across_all_subnets": 80000000,
+    "max_edges_per_agent_global": 400,
+    "oversubscription_ratio": { "telecom_operator": 300, "virtual_operator": 50, "regulator": 80, "consultant": 40, "government_agency": 30, "financial_institution": 25, "industrial_enterprise": 20, "educational_institution": 15, "healthcare_institution": 12 },
+    "bandwidth_limits_gbps": {
+      "EAST_WEST":   { "per_agent_avg_mbps": 0.5,  "total_aggregate_gbps": 500 },
+      "NORTH_SOUTH": { "per_agent_avg_mbps": 2,    "total_aggregate_gbps": 2000 },
+      "INTERNAL":    { "per_agent_avg_mbps": 5,    "total_aggregate_gbps": 5000 }
+    }
+  },
+
+  "business_topology_rules": {
+    "_description": "合约生命周期动态规则。业务拓扑由种子 links 初始化，运行时由技能驱动演进",
+    "seed_generation": {
+      "enabled": true,
+      "max_seed_links": 50000,
+      "generation_rule": "RANDOM_SAMPLE",
+      "source_categories": ["government_agency", "financial_institution", "educational_institution", "healthcare_institution", "industrial_enterprise"],
+      "target_categories": ["telecom_operator", "virtual_operator"],
+      "initial_status": "NEGOTIATING",
+      "value_range": { "min": 100, "max": 5000 }
+    },
+    "contract_lifecycle": {
+      "statuses": ["NEGOTIATING", "SIGNED", "BREACH_FLASHING", "TERMINATED"],
+      "transition_triggers": {
+        "NEGOTIATING→SIGNED": "sign_contract",
+        "SIGNED→BREACH_FLASHING": "terminate_contract_with_flash",
+        "BREACH_FLASHING→TERMINATED": "confirm_termination"
+      },
+      "avg_contract_duration_rounds": { "telecom_operator": 8, "virtual_operator": 5 },
+      "breach_probability_per_round": 0.08,
+      "event_log_enabled": true
+    }
+  },
+
+  "traffic_generation_rules": {
+    "EAST_WEST": {
+      "description": "Agent间东西向协作流量（招标通知/评标讨论/合同协商/投诉调查）",
+      "generated_by": ["evaluate_proposals", "notify_team", "investigate_complaint", "provide_evaluation_report"],
+      "avg_requests_per_agent_per_round": 0.25,
+      "size_distribution": { "min_kb": 1, "p50_kb": 16, "p95_kb": 64, "max_kb": 512 }
+    },
+    "NORTH_SOUTH": {
+      "description": "外部API调用南北向流量（运营商报价/信用评估/法规查询）",
+      "generated_by": ["submit_bidding_proposal", "request_external_api"],
+      "avg_requests_per_agent_per_round": 0.08,
+      "size_distribution": { "min_kb": 4, "p50_kb": 64, "p95_kb": 256, "max_kb": 4096 },
+      "rate_limit_per_round_global": 100000
+    },
+    "INTERNAL": {
+      "description": "内部管理流量（合同归档/审计报告/市场分析）",
+      "generated_by": ["sign_contract", "terminate_contract_with_flash", "audit_market_share", "impose_sanction", "handle_push"],
+      "avg_requests_per_agent_per_round": 0.15,
+      "size_distribution": { "min_kb": 1, "p50_kb": 64, "p95_kb": 1024, "max_kb": 16384 }
+    }
+  },
+
+  "mapping_rules": {
+    "_description": "agent_categories → network subnets 映射",
+    "rules": [
+      { "category_id": "government_agency",      "subnets": ["sub_market","sub_agency_collab","sub_regulatory","sub_consulting"], "roles": ["peer","peer","spoke","spoke"] },
+      { "category_id": "financial_institution",   "subnets": ["sub_market","sub_agency_collab","sub_regulatory","sub_consulting"], "roles": ["peer","peer","spoke","spoke"] },
+      { "category_id": "educational_institution",  "subnets": ["sub_market","sub_agency_collab","sub_consulting"],             "roles": ["peer","peer","spoke"] },
+      { "category_id": "healthcare_institution",   "subnets": ["sub_market","sub_agency_collab","sub_consulting"],             "roles": ["peer","peer","spoke"] },
+      { "category_id": "industrial_enterprise",    "subnets": ["sub_market","sub_agency_collab","sub_regulatory","sub_consulting"], "roles": ["peer","peer","spoke","spoke"] },
+      { "category_id": "telecom_operator",         "subnets": ["sub_market","sub_operator_compete","sub_regulatory","sub_consulting"], "roles": ["peer","peer","spoke","spoke"] },
+      { "category_id": "virtual_operator",         "subnets": ["sub_market","sub_operator_compete","sub_regulatory","sub_consulting"], "roles": ["peer","peer","spoke","spoke"] },
+      { "category_id": "regulator",                "subnets": ["sub_regulatory"],                                                "roles": ["hub"] },
+      { "category_id": "consultant",               "subnets": ["sub_consulting"],                                                "roles": ["hub"] }
+    ]
+  },
+
+  "scaling_parameters": {
+    "_description": "全局缩放参数",
+    "total_agents_target": 1000000,
+    "llm_enabled_agents_ratio": 0.02,
+    "llm_enabled_agents_estimate": 20000,
+    "scale_factors": {
+      "agent_count":        { "min": 100000, "default": 570000, "max": 5000000 },
+      "edges_per_subnet":   { "formula": "min(agents * avg_peers * density / 2, max_total_edges)" },
+      "traffic_throughput": { "formula": "agents * avg_requests_per_round * avg_payload / round_duration" }
+    }
+  }
+}
