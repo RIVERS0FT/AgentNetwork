@@ -341,9 +341,9 @@ let _simState = new Map(); // agent_id → { x, y } in world coords
 
 // ============== Canvas Agent Rendering ==============
 const STATUS_COLORS = {
-  idle: '#35FF9D', running: '#35F6FF', paused: '#FFE45E',
-  stopped: '#FF3B67', error: '#FF3B67', created: '#7FA5B8',
-  decided: '#A56CFF', messaged: '#FF2ED4', send_failed: '#FF3B67', analyzed: '#4D8DFF',
+  idle: '#85D274', running: '#A9D68B', paused: '#F2CF66',
+  stopped: '#E05243', error: '#E05243', created: '#7F8771',
+  decided: '#B9A35D', messaged: '#FFB84D', send_failed: '#E05243', analyzed: '#88A7A0',
 };
 
 const canvas = document.getElementById('agent-canvas');
@@ -379,26 +379,26 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { resizeCanvas(); render(); }
 });
 
-function drawCyberBackground(canvasW, canvasH, now) {
+function drawCommandBackground(canvasW, canvasH, now) {
   const pulse = REDUCED_MOTION ? 0 : now * 0.001;
   const bg = ctx.createLinearGradient(0, 0, canvasW, canvasH);
-  bg.addColorStop(0, '#020612');
-  bg.addColorStop(0.48, '#07172D');
-  bg.addColorStop(1, '#12091F');
+  bg.addColorStop(0, '#060805');
+  bg.addColorStop(0.48, '#11160E');
+  bg.addColorStop(1, '#1C1D13');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
   const glow1 = ctx.createRadialGradient(canvasW * 0.22, canvasH * 0.18, 0, canvasW * 0.22, canvasH * 0.18, canvasW * 0.75);
-  glow1.addColorStop(0, 'rgba(53,246,255,0.18)');
-  glow1.addColorStop(0.45, 'rgba(53,246,255,0.04)');
-  glow1.addColorStop(1, 'rgba(53,246,255,0)');
+  glow1.addColorStop(0, 'rgba(133,210,116,0.16)');
+  glow1.addColorStop(0.45, 'rgba(133,210,116,0.035)');
+  glow1.addColorStop(1, 'rgba(133,210,116,0)');
   ctx.fillStyle = glow1;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
   const glow2 = ctx.createRadialGradient(canvasW * 0.84, canvasH * 0.28, 0, canvasW * 0.84, canvasH * 0.28, canvasW * 0.62);
-  glow2.addColorStop(0, 'rgba(255,46,212,0.16)');
-  glow2.addColorStop(0.48, 'rgba(255,46,212,0.035)');
-  glow2.addColorStop(1, 'rgba(255,46,212,0)');
+  glow2.addColorStop(0, 'rgba(255,184,77,0.13)');
+  glow2.addColorStop(0.48, 'rgba(255,184,77,0.03)');
+  glow2.addColorStop(1, 'rgba(255,184,77,0)');
   ctx.fillStyle = glow2;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
@@ -406,7 +406,7 @@ function drawCyberBackground(canvasW, canvasH, now) {
   const drift = REDUCED_MOTION ? 0 : (pulse * 18) % grid;
   ctx.save();
   ctx.lineWidth = 0.7;
-  ctx.strokeStyle = 'rgba(53,246,255,0.085)';
+  ctx.strokeStyle = 'rgba(178,197,128,0.09)';
   ctx.beginPath();
   for (let x = -grid + drift; x <= canvasW + grid; x += grid) {
     ctx.moveTo(x, 0);
@@ -417,7 +417,7 @@ function drawCyberBackground(canvasW, canvasH, now) {
     ctx.lineTo(canvasW, y);
   }
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,46,212,0.08)';
+  ctx.strokeStyle = 'rgba(255,184,77,0.075)';
   ctx.lineWidth = 0.35;
   ctx.beginPath();
   for (let x = -grid * 2 + drift * 0.5; x <= canvasW + grid * 2; x += grid * 2) {
@@ -428,7 +428,7 @@ function drawCyberBackground(canvasW, canvasH, now) {
   ctx.restore();
 
   ctx.save();
-  ctx.fillStyle = 'rgba(221,247,255,0.38)';
+  ctx.fillStyle = 'rgba(232,227,200,0.34)';
   for (let i = 0; i < 44; i++) {
     const x = (i * 137.5 + (REDUCED_MOTION ? 0 : now * 0.018)) % Math.max(1, canvasW);
     const y = (i * 59.7 + Math.sin(i * 2.3) * 44 + canvasH * 2) % Math.max(1, canvasH);
@@ -441,9 +441,9 @@ function drawCyberBackground(canvasW, canvasH, now) {
   if (!REDUCED_MOTION) {
     const scanY = (now * 0.07) % (canvasH + 120) - 60;
     const scan = ctx.createLinearGradient(0, scanY - 42, 0, scanY + 42);
-    scan.addColorStop(0, 'rgba(53,246,255,0)');
-    scan.addColorStop(0.5, 'rgba(53,246,255,0.12)');
-    scan.addColorStop(1, 'rgba(255,46,212,0)');
+    scan.addColorStop(0, 'rgba(133,210,116,0)');
+    scan.addColorStop(0.5, 'rgba(133,210,116,0.10)');
+    scan.addColorStop(1, 'rgba(255,184,77,0)');
     ctx.fillStyle = scan;
     ctx.fillRect(0, scanY - 42, canvasW, 84);
   }
@@ -472,9 +472,9 @@ function drawRelationshipLines(relationships, agents) {
     const isCooperative = (rel.value || 0) > 0;
     const alpha = Math.min(1, Math.abs(rel.value || 50) / 100 + 0.22);
     const color = isCooperative
-      ? `rgba(53,255,157,${alpha.toFixed(2)})`
-      : `rgba(255,59,103,${alpha.toFixed(2)})`;
-    const glow = isCooperative ? 'rgba(53,255,157,0.22)' : 'rgba(255,46,212,0.25)';
+      ? `rgba(133,210,116,${alpha.toFixed(2)})`
+      : `rgba(224,82,67,${alpha.toFixed(2)})`;
+    const glow = isCooperative ? 'rgba(133,210,116,0.22)' : 'rgba(224,82,67,0.24)';
 
     ctx.beginPath();
     ctx.moveTo(from.sx, from.sy);
@@ -520,7 +520,7 @@ function drawOneTrajectory(traj, fromScr, toScr, now) {
   const headX = fromScr.sx + dx * progress + nx * off;
   const headY = fromScr.sy + dy * progress + ny * off;
 
-  const packetColor = traj.isBroadcast ? '255,46,212' : '53,246,255';
+  const packetColor = traj.isBroadcast ? '255,184,77' : '133,210,116';
 
   // ── High-energy packet trail ──
   const tailAlpha = fadeOut * 0.9;
@@ -577,8 +577,8 @@ function drawTempLink(fromScr, toScr) {
   ctx.save();
   ctx.setLineDash([3, 7]);
   ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(53,246,255,0.28)';
-  ctx.shadowColor = 'rgba(255,46,212,0.25)';
+  ctx.strokeStyle = 'rgba(178,197,128,0.32)';
+  ctx.shadowColor = 'rgba(255,184,77,0.22)';
   ctx.shadowBlur = 10;
   ctx.beginPath();
   ctx.moveTo(fromScr.sx, fromScr.sy);
@@ -767,7 +767,7 @@ function drawAgents(agents, hoveredId, time) {
     const wx = sp ? sp.x : a.x;
     const wy = sp ? sp.y : a.y;
     const p = worldToScreen(wx, wy);
-    const color = STATUS_COLORS[a.status] || '#7FA5B8';
+    const color = STATUS_COLORS[a.status] || '#7F8771';
     const pulse = REDUCED_MOTION ? 0.5 : (Math.sin(now / 360 + p.sx * 0.01) + 1) / 2;
     const active = ['running', 'decided', 'messaged', 'analyzed'].includes(a.status);
 
@@ -810,7 +810,7 @@ function drawAgents(agents, hoveredId, time) {
     ctx.beginPath();
     ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#DDF7FF';
+    ctx.strokeStyle = '#E8E3C8';
     ctx.lineWidth = 0.7;
     ctx.stroke();
 
@@ -827,9 +827,9 @@ function drawAgents(agents, hoveredId, time) {
 
     // Label
     ctx.save();
-    ctx.shadowColor = 'rgba(53,246,255,0.8)';
+    ctx.shadowColor = 'rgba(133,210,116,0.72)';
     ctx.shadowBlur = 8;
-    ctx.fillStyle = '#DDF7FF';
+    ctx.fillStyle = '#E8E3C8';
     const labelSize = Math.max(9, Math.min(14, canvasW / 60));
     ctx.font = labelSize + 'px Inter, IBM Plex Sans, system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -849,15 +849,15 @@ function render() {
   const { w: canvasW, h: canvasH } = canvasCSS();
   const now = performance.now();
 
-  drawCyberBackground(canvasW, canvasH, now);
+  drawCommandBackground(canvasW, canvasH, now);
 
   if (agents.length > 0) {
     drawRelationshipsComposite(agents, _relationships, now);
     drawAgents(agents, hoveredAgent?.agent_id, now);
   } else {
     ctx.save();
-    ctx.fillStyle = 'rgba(221,247,255,0.72)';
-    ctx.shadowColor = 'rgba(53,246,255,0.75)';
+    ctx.fillStyle = 'rgba(232,227,200,0.72)';
+    ctx.shadowColor = 'rgba(133,210,116,0.72)';
     ctx.shadowBlur = 18;
     ctx.font = '12px JetBrains Mono, IBM Plex Mono, monospace';
     ctx.textAlign = 'center';
