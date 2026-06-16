@@ -97,7 +97,7 @@ function draw(){
 
   // Build hit targets
   hitTargets=[];
-  const aps=data?.ap_placements||[];
+  const aps=getAps()||[];
 
   // Interference zones
   INTERFERENCE.forEach(src=>{
@@ -142,11 +142,11 @@ function draw(){
   });
 
   // Blind spots
-  const spots=data?.latest_coverage?.blind_spots_sample||[];
+  const spots=getCoverage()?.blind_spots_sample||[];
   spots.forEach(s=>{const p=toScreen(s.x,s.y);ctx.beginPath();ctx.arc(p.x,p.y,2,0,Math.PI*2);ctx.fillStyle='rgba(220,100,120,0.55)';ctx.fill();});
 
   // Coverage badge
-  const cov=data?.latest_coverage?.coverage_pct;
+  const cov=getCoverage()?.coverage_pct;
   if(cov!=null){
     const bx=ox+5,by=oy+4,bw=cov>=95?150:130;
     ctx.fillStyle='rgba(12,17,25,0.82)';ctx.beginPath();ctx.roundRect(bx,by,bw,21,4);ctx.fill();
@@ -163,20 +163,20 @@ function draw(){
   ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='7px monospace';ctx.textAlign='center';ctx.fillText('100m',sbX+sbW/2,sbY-5);
 
   // Events top-right
-  const events=(data?.event_log||[]).slice(-5);
+  const events=(getEvents()||[]).slice(-5);
   events.forEach((e,i)=>{const ey=36+i*15,ex=w-235;ctx.fillStyle='rgba(12,17,25,0.72)';ctx.fillRect(ex,ey-9,230,14);ctx.fillStyle='#8892a4';ctx.font='9px monospace';ctx.fillText('R'+e.round+' '+e.action+' '+e.detail.slice(0,35),ex+4,ey);});
 }
 
 function updateStats(){
-  if(!data)return;
-  const cov=data.latest_coverage;
-  const el=document.getElementById('sCov');el.textContent=cov?cov.coverage_pct+'%':'--';el.className='v '+(cov?cov.coverage_pct>=95?'g':'y':'');
-  document.getElementById('sAP').textContent=(data.ap_placements||[]).length;
-  const cost=data.latest_cost;document.getElementById('sCost').textContent=cost?'¥'+(cost.total_cost/1000).toFixed(1)+'K':'0';
-  document.getElementById('sAI').textContent=(data.ai_call_log||[]).length;
-  const feas=data.feasibility_checks||[];document.getElementById('sFeas').textContent=feas.length?Math.round(feas.filter(f=>f.feasible).length/feas.length*100)+'%':'--';
+  if(!data&&window.location.protocol!=='file:')return;
+  const cov=getCoverage();
+  const el=document.getElementById('sCov');el.textContent=cov?cov.coverage_pct+'%':'--';el.className='v '+(cov&&cov.coverage_pct>=95?'g':'y');
+  document.getElementById('sAP').textContent=(getAps()||[]).length;
+  const cost=getCost();document.getElementById('sCost').textContent=cost?'¥'+(cost.total_cost/1000).toFixed(1)+'K':'0';
+  document.getElementById('sAI').textContent=(getAICalls()||[]).length;
+  const feas=getFeasibility()||[];document.getElementById('sFeas').textContent=feas.length?Math.round(feas.filter(function(f){return f.feasible}).length/feas.length*100)+'%':'--';
   document.getElementById('sStatus').textContent=cov&&cov.coverage_pct>=95?'✓达标':'↻迭代';
-  document.getElementById('roundLabel').textContent='R'+((data.event_log||[]).length>0?data.event_log[data.event_log.length-1].round:'0');
+  document.getElementById('roundLabel').textContent=data&&data.round!=null?'R'+data.round:'R0';
 }
 
 // Hover detection
@@ -200,22 +200,34 @@ canvas.addEventListener('mousemove',function(e){
 });
 canvas.addEventListener('mouseleave',function(){hovered=null;tip.style.display='none';});
 
+// 数据解析：适配 /api/scenes/state 返回的 {agents[], custom} 结构
+function getCampus(){return getApData()?.campus||{width:1000,height:400};}
+function getApData(){
+  if(window.location.protocol==='file:') return data;
+  return data?.custom?.ap_data||null;
+}
+function getAps(){return getApData()?.ap_placements||[];}
+function getCoverage(){return getApData()?.latest_coverage||null;}
+function getCost(){return getApData()?.latest_cost||null;}
+function getAICalls(){return getApData()?.ai_call_log||[];}
+function getFeasibility(){return getApData()?.feasibility_checks||[];}
+function getEvents(){return data?.custom?.recent_events||getApData()?.event_log||[];}
+
 async function poll(){
   try{const r=await fetch(API_URL);if(!r.ok)throw new Error('HTTP '+r.status);data=await r.json();}
   catch(e){if(!data)return;}
   layout();draw();updateStats();
 }
 
-// File:// local mock
+// File:// mock
 if(window.location.protocol==='file:'){
   data={
-    campus:{width:1000,height:400},interference:INTERFERENCE,
     ap_placements:[{id:'AP_1',x:130,y:70,radius:60},{id:'AP_2',x:300,y:130,radius:60},{id:'AP_3',x:500,y:80,radius:60},{id:'AP_4',x:700,y:150,radius:60},{id:'AP_5',x:850,y:80,radius:60},{id:'AP_6',x:200,y:260,radius:60},{id:'AP_7',x:550,y:300,radius:60},{id:'AP_8',x:800,y:340,radius:60}],
     latest_coverage:{coverage_pct:94.2,ap_count:8,blind_spot_count:12,blind_spots_sample:[{x:680,y:120},{x:690,y:125},{x:420,y:280},{x:425,y:285},{x:300,y:350},{x:310,y:355},{x:150,y:80}]},
     latest_cost:{ap_count:8,unit_cost:3500,extra_cost:5000,total_cost:33000,budget_remaining:17000,within_budget:true},
-    ai_call_log:[{round:1,caller:'PLANNER',latency_ms:450,tokens:1200},{round:2,caller:'RF_ENGINEER',latency_ms:520,tokens:1500},{round:3,caller:'VERIFIER',latency_ms:310,tokens:600}],
+    ai_call_log:[{round:1,caller:'PLANNER',latency_ms:450,tokens:1200}],
     feasibility_checks:[{ap_id:'AP_1',feasible:true},{ap_id:'AP_2',feasible:true},{ap_id:'AP_3',feasible:false},{ap_id:'AP_4',feasible:true},{ap_id:'AP_5',feasible:true},{ap_id:'AP_6',feasible:true},{ap_id:'AP_7',feasible:true},{ap_id:'AP_8',feasible:true}],
-    event_log:[{round:1,action:'optimize_ap',detail:'8 APs 450ms 1200t'},{round:1,action:'sim_coverage',detail:'87.3%'},{round:2,action:'evaluate_cost',detail:'8AP ¥33K'},{round:3,action:'verify',detail:'94.2% FAIL'},{round:3,action:'optimize_ap',detail:'adjusting AP_3...'}],
+    event_log:[{round:1,action:'optimize_ap',detail:'8 APs 450ms 1200t'},{round:1,action:'sim_coverage',detail:'87.3%'},{round:2,action:'evaluate_cost',detail:'8AP ¥33K'},{round:3,action:'verify',detail:'94.2% FAIL'}],
   };
 }
 

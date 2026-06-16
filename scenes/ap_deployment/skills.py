@@ -451,18 +451,76 @@ SkillRegistry.register("archive_solution", archive_solution)
 # get_panel_state — 供 GET /api/scenes/{name}/state 调用
 # ============================================================
 def get_panel_state(**kwargs):
-    return {
+    """符合 PANEL_API.md custom 对象结构"""
+    # agent_progress: 每个AP角色的完成统计
+    agent_progress = {
+        "PLANNER":     {"done": len([e for e in event_log if e["source"] == "PLANNER"]),     "goal": 10},
+        "RF_ENGINEER": {"done": len([e for e in event_log if e["source"] == "RF_ENGINEER"]), "goal": 10},
+        "COST_ANALYST":{"done": len(cost_estimates),                                          "goal": 5},
+        "SURVEYOR":    {"done": len(feasibility_checks),                                      "goal": 8},
+        "ARCHITECT":   {"done": len([e for e in event_log if e["source"] == "ARCHITECT"]),    "goal": 5},
+        "AI_ASSISTANT":{"done": len(ai_call_log),                                             "goal": 10},
+        "VERIFIER":    {"done": len([e for e in event_log if e["source"] == "VERIFIER"]),     "goal": 3},
+        "DEPLOYER":    {"done": len([e for e in event_log if e["source"] == "DEPLOYER"]),     "goal": 3},
+        "QA_ENGINEER": {"done": len([e for e in event_log if e["source"] == "QA_ENGINEER"]), "goal": 2},
+        "DOCUMENTER":  {"done": len([e for e in event_log if e["source"] == "DOCUMENTER"]),   "goal": 2},
+    }
+
+    # traffic: 三类流量统计
+    ew = [t for t in traffic_log if t["type"] == "EAST_WEST"]
+    ns = [t for t in traffic_log if t["type"] == "NORTH_SOUTH"]
+    it = [t for t in traffic_log if t["type"] == "INTERNAL"]
+    traffic = {
+        "EAST_WEST":   {"count": len(ew), "total_kb": sum(t["bytes"] for t in ew) // 1024},
+        "NORTH_SOUTH": {"count": len(ns), "total_kb": sum(t["bytes"] for t in ns) // 1024},
+        "INTERNAL":    {"count": len(it), "total_kb": sum(t["bytes"] for t in it) // 1024},
+    }
+
+    # task_stats
+    task_stats = {
+        "ai_calls": len(ai_call_log),
+        "coverage_reports": len(coverage_reports),
+        "cost_estimates": len(cost_estimates),
+        "feasibility_checks": len(feasibility_checks),
+    }
+
+    # ci_status (此处表示部署状态)
+    ci_status = {
+        "total": len(ap_placements),
+        "running": 0,
+        "success": len([ap for ap in ap_placements if any(
+            f["ap_id"] == ap.get("id", "") and f["feasible"] for f in feasibility_checks)]),
+        "failed": len([ap for ap in ap_placements if not any(
+            f["ap_id"] == ap.get("id", "") and f["feasible"] for f in feasibility_checks)]),
+    }
+
+    # recent_events
+    recent_events = []
+    for e in event_log[-30:]:
+        recent_events.append({
+            "round": e["round"], "type": e["event_type"],
+            "source": e["source"], "target": e["target"],
+            "action": e["action"], "detail": e["detail"],
+        })
+
+    # ap_deployment 特有数据
+    ap_data = {
         "campus": {"width": CAMPUS_W, "height": CAMPUS_H},
         "interference": INTERFERENCE,
         "ap_placements": ap_placements,
-        "coverage_reports": coverage_reports,
-        "cost_estimates": cost_estimates,
-        "ai_call_log": ai_call_log,
-        "feasibility_checks": feasibility_checks,
         "budget": {"total": BUDGET, "unit_ap_cost": AP_UNIT_COST, "target_coverage_pct": TARGET_COVERAGE},
         "latest_coverage": coverage_reports[-1] if coverage_reports else None,
         "latest_cost": cost_estimates[-1] if cost_estimates else None,
-        "event_log": event_log[-20:],
-        "traffic_log": traffic_log[-20:],
+        "ai_call_log": ai_call_log[-10:],
+        "feasibility_checks": feasibility_checks[-20:],
+    }
+
+    return {
+        "agent_progress": agent_progress,
+        "traffic": traffic,
+        "task_stats": task_stats,
+        "ci_status": ci_status,
+        "recent_events": recent_events,
+        "ap_data": ap_data,
     }
 SkillRegistry.register("get_panel_state", get_panel_state)
