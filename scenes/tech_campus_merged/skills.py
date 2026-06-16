@@ -14,6 +14,7 @@ documents = []
 test_reports = []
 external_api_calls = []
 ci_pipelines = []
+reviews = []
 
 
 def _emit_traffic(round_num, traffic_type, source, target, action, bytes_est=0):
@@ -76,10 +77,12 @@ def submit_code(**kwargs):
     _emit_traffic(current_round, "EAST_WEST", developer, "REPO_ADMIN", "git_push", files * 2048)
 
     pipeline_id = f"ci_{len(ci_pipelines)+1}"
-    ci_pipelines.append({"pipeline_id": pipeline_id, "triggered_by": commit_id, "status": "running", "round": current_round})
+    build_result = random.choice(["success", "success", "success", "failed"])
+    ci_pipelines.append({"pipeline_id": pipeline_id, "triggered_by": commit_id, "status": build_result, "round": current_round})
     _emit_traffic(current_round, "INTERNAL", "REPO_ADMIN", "CI_RUNNER", "trigger_pipeline", 512)
+    _emit_traffic(current_round, "INTERNAL", "CI_RUNNER", "REPO_ADMIN", "build_result", 1024)
 
-    _emit_event("CODE_SUBMITTED", current_round, developer, "REPO_ADMIN", "push", f"{commit_id} ({files} files)")
+    _emit_event("CODE_SUBMITTED", current_round, developer, "REPO_ADMIN", "push", f"{commit_id} ({files} files) | CI: {build_result}")
 
     return {
         "status": "success", "result": "code_submitted",
@@ -182,6 +185,7 @@ def review_document(**kwargs):
     current_round = kwargs.get("round", 0)
 
     decision = random.choice(["approved", "revision_required"])
+    reviews.append({"reviewer": reviewer, "doc_id": doc_id, "decision": decision, "target_dev": target_dev, "round": current_round})
     _emit_traffic(current_round, "EAST_WEST", reviewer, target_dev or "DEV_TEAM", "review_feedback", 4096)
 
     if decision == "revision_required" and target_dev:
@@ -292,6 +296,40 @@ def handle_push(**kwargs):
 SkillRegistry.register("handle_push", handle_push)
 
 
+def review_code(**kwargs):
+    """
+    仓库管理员审阅代码提交，决定是否合并。
+    参数: reviewer(str), commit_id(str), author(str), files_changed(int), round(int)
+    流量: reviewer→author (东西向通知)
+    """
+    reviewer = kwargs.get("reviewer", "REPO_ADMIN")
+    commit_id = kwargs.get("commit_id", "unknown")
+    author = kwargs.get("author", "unknown")
+    files = kwargs.get("files_changed", random.randint(1, 10))
+    current_round = kwargs.get("round", 0)
+
+    # 审查决策：代码质量 + 测试覆盖
+    passed = random.random() > 0.2
+    issues = []
+    if not passed:
+        issues = random.sample(["代码风格不符合规范", "缺少单元测试", "存在潜在空指针", "未处理边界条件", "缺少错误处理"], random.randint(1, 2))
+
+    _emit_traffic(current_round, "EAST_WEST", reviewer, author, "code_review", files * 1024)
+
+    if not passed and issues:
+        SkillRegistry.execute("notify_team", sender=reviewer, target=author,
+                              message=f"代码审查未通过: {commit_id} - {'; '.join(issues)}", round=current_round)
+
+    _emit_event("CODE_REVIEWED", current_round, reviewer, author,
+                "approved" if passed else "rejected", f"{commit_id} ({files} files)")
+
+    return {
+        "status": "success", "result": "approved" if passed else "rejected",
+        "data": {"commit_id": commit_id, "passed": passed, "issues": issues, "files": files, "round": current_round}
+    }
+SkillRegistry.register("review_code", review_code)
+
+
 def trigger_ci_cd(**kwargs):
     """
     手动触发CI/CD流水线。
@@ -302,13 +340,86 @@ def trigger_ci_cd(**kwargs):
     current_round = kwargs.get("round", 0)
 
     pipeline_id = f"ci_{len(ci_pipelines)+1}_{int(time.time()%100000)}"
-    ci_pipelines.append({"pipeline_id": pipeline_id, "type": "manual", "triggered_by": trigger_by, "status": "running", "round": current_round})
+    build_result = random.choice(["success", "success", "success", "failed"])
+    ci_pipelines.append({"pipeline_id": pipeline_id, "type": "manual", "triggered_by": trigger_by, "status": build_result, "round": current_round})
 
     _emit_traffic(current_round, "INTERNAL", trigger_by, "CI_RUNNER", "manual_trigger", 512)
-    _emit_event("CI_TRIGGERED", current_round, trigger_by, "CI_RUNNER", "trigger", pipeline_id)
+    _emit_traffic(current_round, "INTERNAL", "CI_RUNNER", "REPO_ADMIN", "build_result", 1024)
+    _emit_event("CI_TRIGGERED", current_round, trigger_by, "CI_RUNNER", build_result, pipeline_id)
 
-    return {"status": "success", "result": "ci_triggered", "data": {"pipeline_id": pipeline_id, "round": current_round}}
+    return {"status": "success", "result": build_result, "data": {"pipeline_id": pipeline_id, "round": current_round}}
 SkillRegistry.register("trigger_ci_cd", trigger_ci_cd)
+
+
+# ============================================================
+# 统一 Panel State — 供 /api/scenes/state 调用
+# ============================================================
+
+def get_panel_state():
+    """返回场景自定义面板数据，由 /api/scenes/state 的 custom 字段透传"""
+    import json
+    from pathlib import Path as _Path
+
+    _base = _Path(__file__).parent
+
+    # ── 静态配置（只读一次，缓存为模块级） ──
+    if not hasattr(get_panel_state, '_roles'):
+        try:
+            with open(_base / "meta_and_roles.json", "r", encoding="utf-8") as f:
+                get_panel_state._roles = json.load(f).get("roles", {})
+        except Exception:
+            get_panel_state._roles = {}
+    if not hasattr(get_panel_state, '_skills_map'):
+        try:
+            with open(_base / "instances_and_skills.json", "r", encoding="utf-8") as f:
+                _inst = json.load(f)
+            get_panel_state._skills_map = _inst.get("container_instances", {})
+        except Exception:
+            get_panel_state._skills_map = {}
+
+    # ── 运行时流量统计 ──
+    ew = [t for t in traffic_log if t["type"] == "EAST_WEST"]
+    ns = [t for t in traffic_log if t["type"] == "NORTH_SOUTH"]
+    it = [t for t in traffic_log if t["type"] == "INTERNAL"]
+
+    # ── 任务统计 ──
+    task_stats = {
+        "git_commits": len(git_commits),
+        "model_submissions": len(model_submissions),
+        "design_submissions": len(design_submissions),
+        "documents": len(documents),
+        "reviews": len(reviews),
+        "test_reports": len(test_reports),
+        "external_api_calls": len(external_api_calls),
+        "test_pass_rate": round(
+            sum(1 for t in test_reports if t.get("passed")) / max(len(test_reports), 1) * 100, 1
+        ) if test_reports else 0,
+    }
+
+    # ── CI/CD ──
+    ci_status = {
+        "total": len(ci_pipelines),
+        "running": len([p for p in ci_pipelines if p.get("status") == "running"]),
+        "success": len([p for p in ci_pipelines if p.get("status") == "success"]),
+        "failed": len([p for p in ci_pipelines if p.get("status") == "failed"]),
+    }
+
+    # ── 最近事件 ──
+    recent_events = event_log[-20:] if event_log else []
+
+    return {
+        "traffic": {
+            "EAST_WEST":   {"count": len(ew), "total_kb": sum(t["bytes"] for t in ew) // 1024},
+            "NORTH_SOUTH": {"count": len(ns), "total_kb": sum(t["bytes"] for t in ns) // 1024},
+            "INTERNAL":    {"count": len(it), "total_kb": sum(t["bytes"] for t in it) // 1024},
+        },
+        "task_stats": task_stats,
+        "ci_status": ci_status,
+        "recent_events": [{"round": e["round"], "type": e["event_type"],
+                           "source": e["source"], "target": e["target"],
+                           "action": e["action"], "detail": e["detail"]}
+                          for e in recent_events],
+    }
 
 
 # ============================================================
@@ -412,6 +523,7 @@ def query_dashboard(**kwargs):
         "model_submissions": len(model_submissions),
         "design_submissions": len(design_submissions),
         "documents": len(documents),
+        "reviews": len(reviews),
         "test_reports": len(test_reports),
         "external_api_calls": len(external_api_calls),
         "test_pass_rate": round(

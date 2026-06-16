@@ -2,28 +2,28 @@
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>AP Deployment — 园区部署态势</title>
 <style>
-:root{--bg:#0c1119;--panel-bg:rgba(14,20,32,0.85);--muted:#8892a4;--text:#d0d7e4;--white:#f0f4fa;--cyan:#5b9bd5;--green:#6bae85;--red:#c47b8b;--yellow:#d4a853;--purple:#9b8ec4}
+:root{--bg:#0c1119;--panel-bg:rgba(14,20,32,0.88);--muted:#8892a4;--text:#d0d7e4;--white:#f0f4fa;--cyan:#5b9bd5;--green:#6bae85;--red:#c47b8b;--yellow:#d4a853}
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font:14px 'Inter',system-ui,sans-serif;color:var(--text)}
-canvas{display:block}
-#tooltip{position:absolute;pointer-events:none;background:rgba(12,17,25,0.96);border:1px solid rgba(255,255,255,0.12);border-radius:5px;padding:7px 11px;font:11px 'JetBrains Mono',monospace;color:var(--white);white-space:nowrap;display:none;z-index:10;box-shadow:0 2px 16px rgba(0,0,0,0.5)}
-#hud{position:absolute;top:8px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;font:12px 'JetBrains Mono',monospace;color:var(--muted);pointer-events:none;z-index:5}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font:13px 'Inter',system-ui,sans-serif;color:var(--text)}
+canvas{display:block;cursor:crosshair}
+#tooltip{position:absolute;pointer-events:none;background:rgba(12,17,25,0.96);border:1px solid rgba(255,255,255,0.12);border-radius:5px;padding:7px 11px;font:10px 'JetBrains Mono',monospace;color:var(--white);white-space:nowrap;display:none;z-index:10;box-shadow:0 2px 14px rgba(0,0,0,0.5);line-height:1.5}
+#tooltip b{color:var(--white)}
+#tooltip .sub{color:var(--muted);font-size:9px}
+#hud{position:absolute;top:8px;left:0;right:0;display:flex;justify-content:space-between;padding:0 14px;font:11px 'JetBrains Mono',monospace;color:var(--muted);pointer-events:none;z-index:5}
 #hud .t{color:var(--white);font-weight:600}
-#stats{position:absolute;bottom:8px;left:8px;right:8px;display:flex;gap:12px;pointer-events:none;z-index:5;align-items:flex-end;flex-wrap:wrap}
-#stats .box{background:var(--panel-bg);border:1px solid rgba(255,255,255,0.06);border-radius:5px;padding:6px 10px;font:10px 'JetBrains Mono',monospace;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+#stats{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);pointer-events:none;z-index:5}
+#stats .box{background:var(--panel-bg);border:1px solid rgba(255,255,255,0.08);border-radius:5px;padding:5px 12px;font:9px 'JetBrains Mono',monospace;color:var(--muted);display:flex;gap:14px;align-items:center}
 #stats .v{color:var(--white);font-weight:600}
-#stats .g{color:var(--green)}#stats .r{color:var(--red)}#stats .y{color:var(--yellow)}
+.g{color:var(--green)}.y{color:var(--yellow)}.r{color:var(--red)}
 </style></head>
 <body>
-<div id="hud"><span class="t">AP DEPLOYMENT · 园区规划态势</span><span id="roundLabel">R0/-</span></div>
+<div id="hud"><span class="t">AP DEPLOYMENT</span><span id="roundLabel">R0/-</span></div>
 <div id="stats">
   <div class="box">
     <span>覆盖 <span class="v" id="sCov">--</span></span>
-    <span>目标 <span class="v">95%</span></span>
-    <span>AP数 <span class="v" id="sAP">0</span></span>
+    <span>AP <span class="v" id="sAP">0</span></span>
     <span>成本 <span class="v" id="sCost">0</span></span>
-    <span>预算 <span class="v">50K</span></span>
-    <span>AI调用 <span class="v" id="sAI">0</span></span>
+    <span>AI <span class="v" id="sAI">0</span></span>
     <span>可行性 <span class="v" id="sFeas">--</span></span>
     <span>状态 <span class="v" id="sStatus">--</span></span>
   </div>
@@ -32,161 +32,198 @@ canvas{display:block}
 <canvas id="c"></canvas>
 
 <script>
-const API_URL = window.location.pathname.replace('/panel','/state') || '/api/scenes/ap_deployment/state';
-const CAMPUS = {w:1000,h:400};
-const INTERFERENCE = [
+const CAMPUS={w:1000,h:400};
+const INTERFERENCE=[
   {id:'INT_01',x:150,y:80,radius:80,desc:'变电站电磁干扰'},
   {id:'INT_02',x:420,y:280,radius:120,desc:'大型电机设备'},
   {id:'INT_03',x:680,y:120,radius:60,desc:'微波通信塔'},
   {id:'INT_04',x:850,y:320,radius:100,desc:'高压输电线'},
   {id:'INT_05',x:300,y:350,radius:150,desc:'工业焊接车间'},
 ];
+const AP_R=60;
 
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 const tip=document.getElementById('tooltip');
-let data=null;
+let data=null,bgImg=null,bgRatio=1;
+const API_URL='/api/scenes/ap_deployment/state';
+
+// 标记所有可交互实体
+let hitTargets=[]; // [{type:'ap'|'int', x, y, radius, data}]
+let hovered=null;
+let mx=0,my=0;
+
+const bg=new Image();
+bg.onload=function(){
+  bgImg=bg;bgRatio=bg.naturalWidth/bg.naturalHeight;
+  layout();draw();
+};
+bg.src='background.png';
+
+// 布局：地图区域保持背景原比例
+let mapRect={x:0,y:0,w:0,h:0,scale:1};
 
 function layout(){
   canvas.width=window.innerWidth*devicePixelRatio;canvas.height=window.innerHeight*devicePixelRatio;
   ctx.setTransform(1,0,0,1,0,0);ctx.scale(devicePixelRatio,devicePixelRatio);
+  const pad={t:28,b:46,l:20,r:20},W=window.innerWidth,H=window.innerHeight;
+  const availW=W-pad.l-pad.r,availH=H-pad.t-pad.b;
+  // 用背景原比例决定地图尺寸
+  const imgRatio=bgImg?bgRatio:(CAMPUS.w/CAMPUS.h);
+  let mw, mh;
+  if(availW/availH>imgRatio){mh=availH;mw=mh*imgRatio;}
+  else{mw=availW;mh=mw/imgRatio;}
+  mapRect={x:pad.l+(availW-mw)/2,y:pad.t+(availH-mh)/2,w:mw,h:mh,scale:mw/CAMPUS.w};
 }
 
-function campusToScreen(cx,cy){
-  const pad={t:40,b:60,l:30,r:30};
-  const availW=window.innerWidth-pad.l-pad.r,availH=window.innerHeight-pad.t-pad.b;
-  const scale=Math.min(availW/CAMPUS.w,availH/CAMPUS.h);
-  const offsetX=pad.l+(availW-CAMPUS.w*scale)/2,offsetY=pad.t+(availH-CAMPUS.h*scale)/2;
-  return {x:offsetX+cx*scale,y:offsetY+cy*scale,s:scale};
+function toScreen(cx,cy){
+  return {x:mapRect.x+cx*mapRect.scale,y:mapRect.y+cy*mapRect.scale};
+}
+
+function toWorld(sx,sy){
+  return {x:(sx-mapRect.x)/mapRect.scale,y:(sy-mapRect.y)/mapRect.scale};
 }
 
 function draw(){
   const w=window.innerWidth,h=window.innerHeight;
   ctx.clearRect(0,0,w,h);
-  const {s:scale, x:ox, y:oy}=campusToScreen(0,0);
+  const ox=mapRect.x,oy=mapRect.y,mw=mapRect.w,mh=mapRect.h,sc=mapRect.scale;
 
-  // Grid
-  ctx.strokeStyle='rgba(255,255,255,0.02)';ctx.lineWidth=0.5;
-  for(let gx=0;gx<=CAMPUS.w;gx+=100){
-    const p=campusToScreen(gx,0);ctx.beginPath();ctx.moveTo(p.x,oy);ctx.lineTo(p.x,oy+CAMPUS.h*scale);ctx.stroke();
-  }
-  for(let gy=0;gy<=CAMPUS.h;gy+=100){
-    const p=campusToScreen(0,gy);ctx.beginPath();ctx.moveTo(ox,p.y);ctx.lineTo(ox+CAMPUS.w*scale,p.y);ctx.stroke();
-  }
+  // Background 70%
+  if(bgImg){ctx.globalAlpha=0.70;ctx.drawImage(bgImg,ox,oy,mw,mh);ctx.globalAlpha=1;}
 
   // Campus border
-  const tr=campusToScreen(CAMPUS.w,CAMPUS.h);
-  ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1.5;
-  ctx.strokeRect(ox,oy,CAMPUS.w*scale,CAMPUS.h*scale);
+  ctx.strokeStyle='rgba(255,255,255,0.28)';ctx.lineWidth=1.2;
+  ctx.strokeRect(ox,oy,mw,mh);
+
+  // Build hit targets
+  hitTargets=[];
+  const aps=data?.ap_placements||[];
 
   // Interference zones
   INTERFERENCE.forEach(src=>{
-    const p=campusToScreen(src.x,src.y);
-    ctx.beginPath();ctx.arc(p.x,p.y,src.radius*scale,0,Math.PI*2);
-    ctx.fillStyle='rgba(196,123,139,0.18)';ctx.fill();
-    ctx.strokeStyle='rgba(196,123,139,0.5)';ctx.lineWidth=1;ctx.setLineDash([6,4]);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='#c47b8b';ctx.font='9px monospace';ctx.textAlign='center';ctx.fillText(src.id,p.x,p.y-6);
-    ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='8px monospace';ctx.fillText(src.desc,p.x,p.y+src.radius*scale+10);
+    const p=toScreen(src.x,src.y),r=src.radius*sc;
+    const isHov=hovered&&hovered.type==='int'&&hovered.id===src.id;
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    ctx.fillStyle=isHov?'rgba(220,100,120,0.28)':'rgba(196,123,139,0.10)';ctx.fill();
+    ctx.setLineDash([8,5]);ctx.lineDashOffset=isHov?0:-Date.now()/300;
+    ctx.strokeStyle=isHov?'rgba(220,100,120,0.75)':'rgba(196,123,139,0.40)';ctx.lineWidth=isHov?2:1;ctx.stroke();ctx.setLineDash([]);
+    // Glow ring when hovered
+    if(isHov){ctx.beginPath();ctx.arc(p.x,p.y,r+6,0,Math.PI*2);ctx.strokeStyle='rgba(220,100,120,0.18)';ctx.lineWidth=3;ctx.stroke();}
+    ctx.fillStyle='#d07785';ctx.font='9px monospace';ctx.textAlign='center';ctx.fillText(src.id,p.x,p.y-8);
+    ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='7px monospace';ctx.fillText(src.desc,p.x,p.y+r+10);
+    hitTargets.push({type:'int',id:src.id,x:p.x,y:p.y,radius:r,data:src});
   });
 
-  // AP placements
-  const aps=data?.ap_placements||[];
+  // AP coverage circles
   aps.forEach((ap,i)=>{
-    const p=campusToScreen(ap.x,ap.y);
-    // Coverage circle
-    const cr=(ap.radius||60)*scale;
+    const p=toScreen(ap.x,ap.y),cr=(ap.radius||AP_R)*sc;
+    const apId=ap.id||('AP_'+(i+1));
+    const isHov=hovered&&hovered.type==='ap'&&hovered.id===apId;
     ctx.beginPath();ctx.arc(p.x,p.y,cr,0,Math.PI*2);
-    ctx.fillStyle='rgba(91,155,213,0.06)';ctx.fill();
-    ctx.strokeStyle='rgba(91,155,213,0.25)';ctx.lineWidth=0.5;ctx.stroke();
-    // AP dot
-    ctx.beginPath();ctx.arc(p.x,p.y,5,0,Math.PI*2);
-    ctx.fillStyle='#5b9bd5';ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1;ctx.stroke();
-    // Label
-    ctx.fillStyle='#5b9bd5';ctx.font='8px monospace';ctx.textAlign='center';
-    ctx.fillText(ap.id||('AP_'+(i+1)),p.x,p.y-9);
+    ctx.fillStyle=isHov?'rgba(91,155,213,0.18)':'rgba(91,155,213,0.05)';ctx.fill();
+    // Pulse ring
+    const pulseR=cr+Math.sin(Date.now()/800)*3;
+    ctx.beginPath();ctx.arc(p.x,p.y,pulseR,0,Math.PI*2);
+    ctx.strokeStyle=isHov?'rgba(91,155,213,0.55)':'rgba(91,155,213,0.18)';ctx.lineWidth=isHov?2:0.8;ctx.stroke();
+    if(isHov){ctx.beginPath();ctx.arc(p.x,p.y,cr+8,0,Math.PI*2);ctx.strokeStyle='rgba(91,155,213,0.15)';ctx.lineWidth=3;ctx.stroke();}
   });
 
-  // Blind spots (from coverage report)
+  // AP dots (on top)
+  aps.forEach((ap,i)=>{
+    const p=toScreen(ap.x,ap.y),apId=ap.id||('AP_'+(i+1));
+    const isHov=hovered&&hovered.type==='ap'&&hovered.id===apId;
+    const dotR=isHov?7:5;
+    ctx.beginPath();ctx.arc(p.x,p.y,dotR,0,Math.PI*2);
+    ctx.fillStyle=isHov?'#8cc8ff':'#5b9bd5';ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=isHov?1.5:1;ctx.stroke();
+    ctx.fillStyle=isHov?'#fff':'#a0d0f0';ctx.font=isHov?'bold 9px monospace':'8px monospace';ctx.textAlign='center';
+    ctx.fillText(apId,p.x,p.y-dotR-7);
+    hitTargets.push({type:'ap',id:apId,x:p.x,y:p.y,radius:isHov?dotR+6:dotR+3,data:ap,index:i});
+  });
+
+  // Blind spots
   const spots=data?.latest_coverage?.blind_spots_sample||[];
-  spots.forEach(s=>{
-    const p=campusToScreen(s.x,s.y);
-    ctx.fillStyle='rgba(196,123,139,0.5)';ctx.beginPath();ctx.arc(p.x,p.y,2,0,Math.PI*2);ctx.fill();
-  });
+  spots.forEach(s=>{const p=toScreen(s.x,s.y);ctx.beginPath();ctx.arc(p.x,p.y,2,0,Math.PI*2);ctx.fillStyle='rgba(220,100,120,0.55)';ctx.fill();});
 
-  // Coverage percentage overlay
+  // Coverage badge
   const cov=data?.latest_coverage?.coverage_pct;
   if(cov!=null){
-    ctx.fillStyle='rgba(12,17,25,0.8)';ctx.fillRect(ox+6,oy+4,180,20);
-    ctx.fillStyle=cov>=95?'#6bae85':'#d4a853';ctx.font='bold 11px monospace';ctx.textAlign='left';
-    ctx.fillText(`覆盖: ${cov}% ${cov>=95?'✓':'⚠'}`,ox+10,oy+17);
+    const bx=ox+5,by=oy+4,bw=cov>=95?150:130;
+    ctx.fillStyle='rgba(12,17,25,0.82)';ctx.beginPath();ctx.roundRect(bx,by,bw,21,4);ctx.fill();
+    ctx.fillStyle=cov>=95?'#6bae85':'#d4a853';ctx.font='bold 10px monospace';ctx.textAlign='left';
+    ctx.fillText((cov>=95?'✓':'⚠')+' 覆盖 '+cov+'%',bx+6,by+14);
   }
 
   // Scale bar
-  const sbY=oy+CAMPUS.h*scale+18,sbX=ox;
-  ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=2;
-  ctx.beginPath();ctx.moveTo(sbX,sbY);ctx.lineTo(sbX+100*scale,sbY);ctx.stroke();
-  ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='8px monospace';ctx.textAlign='center';
-  ctx.fillText('100m',sbX+50*scale,sbY-4);
+  const sbW=100*sc,sbY=oy+mh+18,sbX=ox;
+  ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=2.5;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(sbX,sbY);ctx.lineTo(sbX+sbW,sbY);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(sbX,sbY-5);ctx.lineTo(sbX,sbY+3);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(sbX+sbW,sbY-5);ctx.lineTo(sbX+sbW,sbY+3);ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='7px monospace';ctx.textAlign='center';ctx.fillText('100m',sbX+sbW/2,sbY-5);
 
-  // Event ticker top-right
-  const ev=(data?.event_log||[]).slice(-5);
-  ev.forEach((e,i)=>{
-    const y=40+i*16,x=w-260;
-    ctx.fillStyle='rgba(12,17,25,0.75)';ctx.fillRect(x,y-10,254,15);
-    ctx.fillStyle='#8892a4';ctx.font='9px monospace';ctx.fillText(`R${e.round} ${e.action} ${e.detail}`,x+4,y);
-  });
+  // Events top-right
+  const events=(data?.event_log||[]).slice(-5);
+  events.forEach((e,i)=>{const ey=36+i*15,ex=w-235;ctx.fillStyle='rgba(12,17,25,0.72)';ctx.fillRect(ex,ey-9,230,14);ctx.fillStyle='#8892a4';ctx.font='9px monospace';ctx.fillText('R'+e.round+' '+e.action+' '+e.detail.slice(0,35),ex+4,ey);});
 }
 
 function updateStats(){
-  const d=data;if(!d)return;
-  const cov=d.latest_coverage;
-  document.getElementById('sCov').textContent=cov?cov.coverage_pct+'%':'--';
-  document.getElementById('sAP').textContent=(d.ap_placements||[]).length;
-  const cost=d.latest_cost;
-  document.getElementById('sCost').textContent=cost?'¥'+(cost.total_cost/1000).toFixed(1)+'K':'0';
-  document.getElementById('sAI').textContent=(d.ai_call_log||[]).length;
-  const feas=d.feasibility_checks||[];
-  document.getElementById('sFeas').textContent=feas.length?Math.round(feas.filter(f=>f.feasible).length/feas.length*100)+'%':'--';
-  const rl=d.event_log||[];
-  document.getElementById('sStatus').textContent=cov&&cov.coverage_pct>=95?'✅达标':'⏳进行中';
-  document.getElementById('roundLabel').textContent='R'+(rl.length>0?rl[rl.length-1].round:'0');
+  if(!data)return;
+  const cov=data.latest_coverage;
+  const el=document.getElementById('sCov');el.textContent=cov?cov.coverage_pct+'%':'--';el.className='v '+(cov?cov.coverage_pct>=95?'g':'y':'');
+  document.getElementById('sAP').textContent=(data.ap_placements||[]).length;
+  const cost=data.latest_cost;document.getElementById('sCost').textContent=cost?'¥'+(cost.total_cost/1000).toFixed(1)+'K':'0';
+  document.getElementById('sAI').textContent=(data.ai_call_log||[]).length;
+  const feas=data.feasibility_checks||[];document.getElementById('sFeas').textContent=feas.length?Math.round(feas.filter(f=>f.feasible).length/feas.length*100)+'%':'--';
+  document.getElementById('sStatus').textContent=cov&&cov.coverage_pct>=95?'✓达标':'↻迭代';
+  document.getElementById('roundLabel').textContent='R'+((data.event_log||[]).length>0?data.event_log[data.event_log.length-1].round:'0');
 }
 
-async function poll(){
-  try{
-    const r=await fetch(API_URL);if(!r.ok)throw new Error('HTTP '+r.status);
-    data=await r.json();
-    if(data.error)return;
-  }catch(e){
-    // Use local state from skills.py if loaded
-    if(!data){console.log('Waiting for API...');return;}
+// Hover detection
+canvas.addEventListener('mousemove',function(e){
+  mx=e.clientX;my=e.clientY;hovered=null;
+  let best=-1;
+  for(const t of hitTargets){
+    const dx=mx-t.x,dy=my-t.y,dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<t.radius+8){if(best<0||dist<best){best=dist;hovered=t;}}
   }
+  if(hovered){
+    if(hovered.type==='ap'){
+      const ap=hovered.data;tip.innerHTML='<b>'+hovered.id+'</b> <span class=sub>('+ap.x+','+ap.y+') r='+(ap.radius||AP_R)+'m</span><br><span class=sub>覆盖半径'+(ap.radius||AP_R)+'m</span>';
+      tip.style.borderColor='#5b9bd5';
+    }else if(hovered.type==='int'){
+      const src=hovered.data;tip.innerHTML='<b>'+src.id+'</b> <span class=sub>'+src.desc+'</span><br><span class=sub>干扰半径'+src.radius+'m 中心('+src.x+','+src.y+')</span>';
+      tip.style.borderColor='#c47b8b';
+    }
+    tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-42)+'px';
+  }else{tip.style.display='none';}
+});
+canvas.addEventListener('mouseleave',function(){hovered=null;tip.style.display='none';});
+
+async function poll(){
+  try{const r=await fetch(API_URL);if(!r.ok)throw new Error('HTTP '+r.status);data=await r.json();}
+  catch(e){if(!data)return;}
   layout();draw();updateStats();
 }
 
-// Simulate 3 rounds of AP planning for local preview
+// File:// local mock
 if(window.location.protocol==='file:'){
   data={
-    campus:{width:1000,height:400},
-    interference:INTERFERENCE,
-    ap_placements:[
-      {id:'AP_1',x:130,y:70,radius:60},{id:'AP_2',x:300,y:130,radius:60},{id:'AP_3',x:500,y:80,radius:60},
-      {id:'AP_4',x:700,y:150,radius:60},{id:'AP_5',x:850,y:80,radius:60},{id:'AP_6',x:200,y:260,radius:60},
-      {id:'AP_7',x:550,y:300,radius:60},{id:'AP_8',x:800,y:340,radius:60},
-    ],
-    latest_coverage:{coverage_pct:94.2,ap_count:8,blind_spot_count:12,blind_spots_sample:[
-      {x:680,y:120},{x:690,y:125},{x:420,y:280},{x:425,y:285},{x:430,y:275},{x:300,y:350},{x:310,y:355},{x:150,y:80}
-    ]},
+    campus:{width:1000,height:400},interference:INTERFERENCE,
+    ap_placements:[{id:'AP_1',x:130,y:70,radius:60},{id:'AP_2',x:300,y:130,radius:60},{id:'AP_3',x:500,y:80,radius:60},{id:'AP_4',x:700,y:150,radius:60},{id:'AP_5',x:850,y:80,radius:60},{id:'AP_6',x:200,y:260,radius:60},{id:'AP_7',x:550,y:300,radius:60},{id:'AP_8',x:800,y:340,radius:60}],
+    latest_coverage:{coverage_pct:94.2,ap_count:8,blind_spot_count:12,blind_spots_sample:[{x:680,y:120},{x:690,y:125},{x:420,y:280},{x:425,y:285},{x:300,y:350},{x:310,y:355},{x:150,y:80}]},
     latest_cost:{ap_count:8,unit_cost:3500,extra_cost:5000,total_cost:33000,budget_remaining:17000,within_budget:true},
-    ai_call_log:[{round:1,caller:'PLANNER',latency_ms:450,tokens:1200},{round:2,caller:'PLANNER',latency_ms:380,tokens:900},{round:2,caller:'RF_ENGINEER',latency_ms:520,tokens:1500},{round:3,caller:'VERIFIER',latency_ms:310,tokens:600}],
-    feasibility_checks:[{ap_id:'AP_1',feasible:true},{ap_id:'AP_2',feasible:true},{ap_id:'AP_3',feasible:false,issue:'电源不可达'},{ap_id:'AP_4',feasible:true},{ap_id:'AP_5',feasible:true},{ap_id:'AP_6',feasible:true},{ap_id:'AP_7',feasible:true},{ap_id:'AP_8',feasible:true}],
-    event_log:[{round:1,action:'optimize_ap_positions',detail:'8 APs, 450ms, 1200 tokens'},{round:1,action:'simulate_coverage',detail:'87.3%'},{round:2,action:'optimize_ap_positions',detail:'8 APs, 380ms, 900 tokens'},{round:2,action:'evaluate_cost',detail:'8 APs × 3500 + 5000 = 33000'},{round:3,action:'verify_coverage',detail:'94.2% FAIL (target:95%)'},{round:3,action:'optimize_ap_positions',detail:'adjusting AP_3, AP_7 positions...'}],
-    budget:{total:50000,unit_ap_cost:3500,target_coverage_pct:95},
+    ai_call_log:[{round:1,caller:'PLANNER',latency_ms:450,tokens:1200},{round:2,caller:'RF_ENGINEER',latency_ms:520,tokens:1500},{round:3,caller:'VERIFIER',latency_ms:310,tokens:600}],
+    feasibility_checks:[{ap_id:'AP_1',feasible:true},{ap_id:'AP_2',feasible:true},{ap_id:'AP_3',feasible:false},{ap_id:'AP_4',feasible:true},{ap_id:'AP_5',feasible:true},{ap_id:'AP_6',feasible:true},{ap_id:'AP_7',feasible:true},{ap_id:'AP_8',feasible:true}],
+    event_log:[{round:1,action:'optimize_ap',detail:'8 APs 450ms 1200t'},{round:1,action:'sim_coverage',detail:'87.3%'},{round:2,action:'evaluate_cost',detail:'8AP ¥33K'},{round:3,action:'verify',detail:'94.2% FAIL'},{round:3,action:'optimize_ap',detail:'adjusting AP_3...'}],
   };
 }
 
 layout();draw();updateStats();
 setInterval(poll,2000);
-window.addEventListener('resize',()=>{layout();draw();});
+// Animation loop for pulse effects
+function anim(){draw();requestAnimationFrame(anim);}
+anim();
+window.addEventListener('resize',()=>{layout();if(!bgImg&&bg.complete)bgImg=bg;});
 </script>
 </body></html>

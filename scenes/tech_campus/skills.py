@@ -296,6 +296,40 @@ def handle_push(**kwargs):
 SkillRegistry.register("handle_push", handle_push)
 
 
+def review_code(**kwargs):
+    """
+    仓库管理员审阅代码提交，决定是否合并。
+    参数: reviewer(str), commit_id(str), author(str), files_changed(int), round(int)
+    流量: reviewer→author (东西向通知)
+    """
+    reviewer = kwargs.get("reviewer", "REPO_ADMIN")
+    commit_id = kwargs.get("commit_id", "unknown")
+    author = kwargs.get("author", "unknown")
+    files = kwargs.get("files_changed", random.randint(1, 10))
+    current_round = kwargs.get("round", 0)
+
+    # 审查决策：代码质量 + 测试覆盖
+    passed = random.random() > 0.2
+    issues = []
+    if not passed:
+        issues = random.sample(["代码风格不符合规范", "缺少单元测试", "存在潜在空指针", "未处理边界条件", "缺少错误处理"], random.randint(1, 2))
+
+    _emit_traffic(current_round, "EAST_WEST", reviewer, author, "code_review", files * 1024)
+
+    if not passed and issues:
+        SkillRegistry.execute("notify_team", sender=reviewer, target=author,
+                              message=f"代码审查未通过: {commit_id} - {'; '.join(issues)}", round=current_round)
+
+    _emit_event("CODE_REVIEWED", current_round, reviewer, author,
+                "approved" if passed else "rejected", f"{commit_id} ({files} files)")
+
+    return {
+        "status": "success", "result": "approved" if passed else "rejected",
+        "data": {"commit_id": commit_id, "passed": passed, "issues": issues, "files": files, "round": current_round}
+    }
+SkillRegistry.register("review_code", review_code)
+
+
 def trigger_ci_cd(**kwargs):
     """
     手动触发CI/CD流水线。
