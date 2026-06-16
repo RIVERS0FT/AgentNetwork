@@ -344,6 +344,46 @@ const STATUS_COLORS = {
   idle: '#38D5FF', thinking: '#BFEAFF', acting: '#58F0C2',
   error: '#FF4E5E',
 };
+const TAU = Math.PI * 2;
+
+function hashAgentPhase(agentId) {
+  const text = String(agentId || '');
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return (Math.abs(hash) % 6283) / 1000;
+}
+
+function drawThinkingSweepArc(p, r, color, now, agentId) {
+  const spinSpeed = REDUCED_MOTION ? 0.0014 : 0.006;
+  const spinAngle = (now * spinSpeed + hashAgentPhase(agentId)) % TAU;
+  const outerR = r + 4;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.shadowColor = color;
+  ctx.shadowBlur = REDUCED_MOTION ? 8 : 16;
+
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy, outerR, spinAngle - 0.55, spinAngle + Math.PI * 0.9);
+  ctx.strokeStyle = 'rgba(191,234,255,0.35)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy, outerR, spinAngle, spinAngle + Math.PI * 0.58);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.4;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy, outerR + 3, spinAngle + Math.PI * 1.12, spinAngle + Math.PI * 1.34);
+  ctx.strokeStyle = 'rgba(56,213,255,0.42)';
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.restore();
+}
 
 const canvas = document.getElementById('agent-canvas');
 const ctx = canvas?.getContext('2d');
@@ -777,14 +817,7 @@ function drawAgents(agents, hoveredId, time) {
 
     // thinking sweep arc
     if (a.status === 'thinking') {
-      const spinAngle = REDUCED_MOTION ? 0 : (now / 220) % (Math.PI * 2);
-      ctx.setLineDash([4, 6]);
-      ctx.beginPath();
-      ctx.arc(p.sx, p.sy, r + 3, spinAngle, spinAngle + Math.PI * 1.35);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.setLineDash([]);
+      drawThinkingSweepArc(p, r, color, now, a.agent_id);
     }
     ctx.restore();
 
