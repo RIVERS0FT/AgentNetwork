@@ -248,53 +248,43 @@ function updateHUD(){
   document.getElementById('pass').textContent=(S.tst?Math.round((S.tst-S.fail)/S.tst*100):0)+'%';
 }
 
-// ── Data source: API first, local fallback ──
-const API_URL = '/api/scenes/tech_campus/state';
-let useApi = false;
-
-async function fetchState(){
-  try{
-    const r=await fetch(API_URL);
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const d=await r.json();
-    useApi=true;
-    // Map API data to local state
-    S.r=d.round||0;
-    S.ew_kb=(d.traffic?.EAST_WEST?.total_kb)||0;
-    S.ns_kb=(d.traffic?.NORTH_SOUTH?.total_kb)||0;
-    S.int_kb=(d.traffic?.INTERNAL?.total_kb)||0;
-    S.com=d.task_stats?.git_commits||0;
-    S.mod=d.task_stats?.model_submissions||0;
-    S.doc=d.task_stats?.documents||0;
-    S.tst=d.task_stats?.test_reports||0;
-    S.api=d.task_stats?.external_api_calls||0;
-    S.ci_ok=d.ci_status?.success||0;
-    S.ci_fail=d.ci_status?.failed||0;
-    S.events=(d.events||[]).slice(-50);
-    // Update progress from events
-    for(const[id,ag]of Object.entries(AGENTS)){
-      const cnt=(d.events||[]).filter(e=>e.detail&&e.detail.includes(ag.name)).length;
-      progress[id]=Math.min(cnt,ag.goal);
-    }
-    document.getElementById('roundLabel').textContent='R'+S.r+' [API]';
-  }catch(e){
-    useApi=false;
-    document.getElementById('roundLabel').textContent='R'+S.r+' [local]';
-    // fallback: keep local sim running
+  // Count by status
+  let idle=0,think=0,act=0,err=0,done=0;
+  for(const a of state.agents){
+    if(a.status==='idle') idle++;
+    else if(a.status==='thinking') think++;
+    else if(a.status==='acting') act++;
+    else if(a.status==='error') err++;
   }
-}
+  done = Object.values(state.custom?.agent_progress||{}).reduce((s,p)=>s+(p.done||0),0);
+  document.getElementById('nIdle').textContent=idle;
+  document.getElementById('nThink').textContent=think;
+  document.getElementById('nAct').textContent=act;
+  document.getElementById('nErr').textContent=err;
+  document.getElementById('nDone').textContent=done;
 
-function pollOrSim(){
-  fetchState();
-  if(!useApi) sim();
+// ── API polling ──
+async function poll(){
+  try{
+    const r=await fetch('/api/scenes/state');
+    if(!r.ok)return;
+    state = await r.json();
+    // Update per-agent progress from skills data
+    const ap = state.custom?.agent_progress;
+    if(ap){
+      for(const[id, p] of Object.entries(ap)){
+        if(AGENTS[id]) progress[id] = Math.min(p.done, AGENTS[id].goal);
+      }
+    }
+    updateHUD();
+  }catch(e){}
 }
 
 layout();
-for(let i=0;i<4;i++)sim();
-fetchState();
+poll();
 function frame(){layout();draw();updateHUD();requestAnimationFrame(frame);}
 frame();
-setInterval(pollOrSim,2000);
+setInterval(poll,1000);
 window.addEventListener('resize',layout);
 </script>
 </body></html>

@@ -373,7 +373,33 @@ def get_panel_state():
     # ── 最近事件 ──
     recent_events = event_log[-20:] if event_log else []
 
+    # ── 每个 Agent 的进度（从技能执行数据统计） ──
+    from collections import Counter
+    agent_progress = {}
+    # 代码提交: DEV_FE, DEV_BE, DEV_FW → goal 3,2,3
+    commit_counts = Counter(c.get("developer", "").lower() for c in git_commits)
+    # 模型提交: DEV_AI → goal 1
+    model_counts = Counter(m.get("developer", "").lower() for m in model_submissions)
+    # 设计提交: DEV_IC → goal 1
+    design_counts = Counter(d.get("developer", "").lower() for d in design_submissions)
+    # 文档: PM → goal 3, DOC_WRITER → goal 4
+    doc_counts = Counter(d.get("author", "").lower() for d in documents)
+    # 测试: QA → goal 3
+    test_counts = Counter(t.get("tester", "").lower() for t in test_reports)
+    # 审查: ARCHITECT → goal 5
+    review_counts = Counter(r.get("reviewer", "").lower() for r in reviews)
+
+    goals = {"dev_fe": 3, "dev_be": 2, "dev_fw": 3, "dev_ai": 1, "dev_ic": 1,
+             "architect": 5, "pm": 3, "doc_writer": 4, "qa": 3,
+             "repo_admin": 5, "dev_ops": 3}
+    for aid, goal in goals.items():
+        done = (commit_counts.get(aid, 0) + model_counts.get(aid, 0) +
+                design_counts.get(aid, 0) + doc_counts.get(aid, 0) +
+                test_counts.get(aid, 0) + review_counts.get(aid, 0))
+        agent_progress[aid.upper()] = {"done": done, "goal": goal}
+
     return {
+        "agent_progress": agent_progress,
         "traffic": {
             "EAST_WEST":   {"count": len(ew), "total_kb": sum(t["bytes"] for t in ew) // 1024},
             "NORTH_SOUTH": {"count": len(ns), "total_kb": sum(t["bytes"] for t in ns) // 1024},

@@ -623,7 +623,7 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
 
 def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]:
     """Step 2: 拉起 Agent 并运行仿真 — Docker 不可用时回退到直连模式"""
-    global _current_relationships, _simulation_active
+    global _current_relationships, _simulation_active, _current_turn
 
     if scene_def is None:
         scene_def = _pending_scene_def

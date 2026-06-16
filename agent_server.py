@@ -127,15 +127,6 @@ elif BACKEND == "openclaw":
             },
         },
         {
-            "name": "analyze_situation",
-            "description": "分析当前局势，评估各方立场和策略。",
-            "input_schema": {
-                "type": "object",
-                "properties": {"focus": {"type": "string", "description": "分析重点"}},
-                "required": ["focus"],
-            },
-        },
-        {
             "name": "plan_strategy",
             "description": "制定下一步行动计划。",
             "input_schema": {
