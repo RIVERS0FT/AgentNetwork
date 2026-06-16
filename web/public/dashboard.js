@@ -18,7 +18,7 @@ function normalizeLogRecord(record, origin) {
   if (!dedupKey && origin !== 'frontend') {
     // 兼容旧格式：时间+来源+事件+actor+message 组合
     const actorId = (record.actor || {}).id || record.agent_id || '';
-    dedupKey = [ts, src || origin, evt, actorId, (record.message || '').slice(0, 40)].join('|');
+    dedupKey = [ts, src || origin, evt, actorId, String(record.message || '').slice(0, 40)].join('|');
   }
   if (dedupKey && _seenLogKeys.has(dedupKey)) return null;
   if (dedupKey) {

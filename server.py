@@ -127,6 +127,9 @@ _simulation_stop_requested = False  # 仿真停止标志
 _simulation_active = False          # 仅仿真运行期间接收 network_capture 包日志
 
 _current_relationships: List[Dict[str, Any]] = []  # 当前关系链
+_current_turn = 0               # 当前仿真轮次
+_current_scene_name = ""        # 当前场景名
+_current_max_rounds = 20        # 当前场景最大轮次
 _termination_config: Dict[str, int] = {"max_rounds": 10, "stalemate_rounds": 3}  # 终止条件默认值
 
 
@@ -859,6 +862,9 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
         _termination_config["max_rounds"] = int(smeta["max_rounds"])
     if smeta.get("stalemate_rounds"):
         _termination_config["stalemate_rounds"] = int(smeta["stalemate_rounds"])
+    global _current_scene_name, _current_max_rounds
+    _current_scene_name = scene_name
+    _current_max_rounds = _termination_config.get("max_rounds", 20)
     roles = meta.get("roles", {})
     containers = instances.get("container_instances", {})
 
@@ -1026,7 +1032,7 @@ async def list_scenes():
 
 
 @app.get("/api/scenes/state")
-async def scene_state():
+async def scene_state_unified():
     """统一的场景面板数据端点"""
     agents = [a.get_status() for a in AgentRegistry.list_all()]
     custom = None

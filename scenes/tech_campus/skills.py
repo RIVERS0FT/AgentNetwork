@@ -610,25 +610,4 @@ SkillRegistry.register("query_task_progress", query_task_progress)
 # panel.html 数据接口 — GET /api/scenes/{name}/state 调用
 # ============================================================
 
-def get_panel_state(**kwargs):
-    """
-    返回面板所需的全部 JSON 数据。
-    由 server.py 的 /api/scenes/{name}/state 路由调用。
-    """
-    # 复用 query_dashboard 逻辑
-    state = query_dashboard(**kwargs)
-    if state.get("status") != "success":
-        return state
-    return {
-        "round": state["data"]["round"],
-        "agents": state["data"]["agents"],
-        "topology_edges": state["data"]["topology_edges"],
-        "biz_links": state["data"]["biz_links"],
-        "traffic": state["data"]["traffic"],
-        "events": state["data"].get("events", []),
-        "task_stats": state["data"]["task_stats"],
-        "ci_status": state["data"]["ci_status"],
-        "traffic_log": state["data"].get("traffic_log", []),
-        "event_log": state["data"].get("event_log", []),
-    }
-SkillRegistry.register("get_panel_state", get_panel_state)
+

@@ -36,13 +36,21 @@ canvas{display:block}
     <div class="bar-row"><span class="bar-label">INT</span><div class="bar-track"><div class="bar-fill" id="bINT" style="width:0%;background:var(--int)"></div></div><span class="bar-val" id="vINT">0 KB</span></div>
   </div>
   <div id="statBox">
-    <span>提交 <span class="v" id="com">0</span></span>
-    <span>模型 <span class="v" id="mod">0</span></span>
-    <span>文档 <span class="v" id="doc">0</span></span>
-    <span>测试 <span class="v" id="tst">0</span></span>
-    <span>API <span class="v" id="api">0</span></span>
-    <span>CI <span class="v" id="ci">0/0</span></span>
-    <span>通过率 <span class="v" id="pass">0%</span></span>
+    <span>空闲 <span class="v" id="nIdle">0</span></span>
+    <span>思考 <span class="v" id="nThink">0</span></span>
+    <span>执行 <span class="v" id="nAct">0</span></span>
+    <span>异常 <span class="v" id="nErr">0</span></span>
+    <span>已完成 <span class="v" id="nDone">0</span></span>
+    <span>进度 <span class="v" id="totalPct">0%</span></span>
+    <span>|</span>
+    <span>提交 <span class="v" id="sCommit">0</span></span>
+    <span>文档 <span class="v" id="sDoc">0</span></span>
+    <span>测试 <span class="v" id="sTest">0</span></span>
+    <span>CI <span class="v" id="sCI">0</span></span>
+    <span>API <span class="v" id="sAPI">0</span></span>
+    <span>EW <span class="v" id="sEW">0</span>KB</span>
+    <span>NS <span class="v" id="sNS">0</span>KB</span>
+    <span style="display:none"><span id="com"></span><span id="mod"></span><span id="doc"></span><span id="tst"></span><span id="api"></span><span id="ci"></span><span id="pass"></span></span>
   </div>
 </div>
 <div id="tooltip"></div>
@@ -91,31 +99,7 @@ const GROUPS = {
   infra:{ids:['REPO_ADMIN','DEV_OPS'],cx:0.68,cy:0.64,spread:55},
 };
 
-let S={r:0,com:0,mod:0,doc:0,tst:0,fail:0,api:0,ci_ok:0,ci_fail:0,ew_kb:0,ns_kb:0,int_kb:0,events:[]};
-
-function sim(){
-  S.r++;
-  const pick=(arr)=>arr[Math.floor(Math.random()*arr.length)];
-  // Random agent makes progress
-  const activeIds=Object.keys(AGENTS);
-  for(let i=0;i<3;i++){
-    const id=pick(activeIds),ag=AGENTS[id];
-    if(progress[id]>=ag.goal) continue; // already done
-    if(Math.random()<0.5) continue;
-    progress[id]++;
-    const pct=Math.round(progress[id]/ag.goal*100);
-    S.events.push({r:S.r,t:ag.task,d:ag.name+' '+progress[id]+'/'+ag.goal+' ('+pct+'%)'});
-    // Traffic
-    if(ag.cat==='dev'||ag.cat==='mgmt'||ag.cat==='content'){S.com++;S.ew_kb+=4;}
-    else if(ag.cat==='ai_ic'){if(Math.random()>0.5){S.mod++;S.int_kb+=256000}else{S.api++;S.ns_kb+=500}}
-    else if(ag.cat==='infra'){S.ci_ok++;S.int_kb+=278528}
-  }
-  // Random test
-  if(Math.random()>0.5){S.tst++;const p=Math.random()>0.3;if(!p)S.fail++;S.ew_kb+=2;S.events.push({r:S.r,t:p?'PASS':'FAIL',d:'test_'+S.tst});}
-  // Reset completed tasks occasionally
-  for(const[id,ag]of Object.entries(AGENTS)){if(progress[id]>=ag.goal&&Math.random()<0.15){progress[id]=0;S.events.push({r:S.r,t:'RESET',d:ag.name+' 目标重置'});}}
-  if(S.events.length>60)S.events=S.events.slice(-60);
-}
+let state = {running:false, round:0, max_rounds:0, agents:[], custom:null};
 
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 const tip=document.getElementById('tooltip');
@@ -205,12 +189,12 @@ function draw(){
   });
 
   // Event feed top-right
-  const ev=S.events.slice(-6);
+  const ev=(state.custom?.recent_events||[]).slice(-6);
   ev.forEach((e,i)=>{
     const y=48+i*18,x=w-280;
-    const cl=e.t==='PASS'?'#6bae85':e.t==='FAIL'?'#c47b8b':e.t==='RESET'?'#e07b5a':'#8892a4';
     ctx.fillStyle='rgba(12,17,25,0.78)';ctx.fillRect(x,y-11,274,17);
-    ctx.fillStyle=cl;ctx.font='10px monospace';ctx.fillText('R'+e.r+' '+e.d,x+5,y);
+    ctx.fillStyle='#8892a4';ctx.font='10px monospace';
+    ctx.fillText('R'+(e.round||'')+' '+(e.type||'')+' '+(e.detail||'').slice(0,30),x+5,y);
   });
 
   // Overall progress bar — centered top
@@ -236,39 +220,66 @@ canvas.onmousemove=function(e){
 canvas.onmouseleave=function(){tip.style.display='none';};
 
 function updateHUD(){
-  document.getElementById('roundLabel').textContent='R'+S.r;
-  const ew=S.ew_kb,ns=S.ns_kb,it=S.int_kb,mx=Math.max(ew,ns,it,1);
-  document.getElementById('bEW').style.width=(ew/mx*100)+'%';document.getElementById('vEW').textContent=ew+' KB';
-  document.getElementById('bNS').style.width=(ns/mx*100)+'%';document.getElementById('vNS').textContent=ns+' KB';
-  document.getElementById('bINT').style.width=(it/mx*100)+'%';document.getElementById('vINT').textContent=it+' KB';
-  document.getElementById('com').textContent=S.com;document.getElementById('mod').textContent=S.mod;
-  document.getElementById('doc').textContent=S.doc;document.getElementById('tst').textContent=S.tst;
-  document.getElementById('api').textContent=S.api;
-  document.getElementById('ci').textContent=S.ci_ok+'/'+(S.ci_ok+S.ci_fail);
-  document.getElementById('pass').textContent=(S.tst?Math.round((S.tst-S.fail)/S.tst*100):0)+'%';
-}
+  document.getElementById('roundLabel').textContent=
+    (state.running?'▶ R'+state.round+'/'+state.max_rounds:
+    state.round>0?'⏹ R'+state.round+'/'+state.max_rounds+' (已结束)':'R0/'+state.max_rounds)
+    +' ['+_pollCount+']';
 
-  // Count by status
-  let idle=0,think=0,act=0,err=0,done=0;
+  // Status counts
+  let idle=0,think=0,act=0,err=0;
   for(const a of state.agents){
     if(a.status==='idle') idle++;
     else if(a.status==='thinking') think++;
     else if(a.status==='acting') act++;
     else if(a.status==='error') err++;
   }
-  done = Object.values(state.custom?.agent_progress||{}).reduce((s,p)=>s+(p.done||0),0);
+  const done = Object.values(state.custom?.agent_progress||{}).reduce((s,p)=>s+(p.done||0),0);
   document.getElementById('nIdle').textContent=idle;
   document.getElementById('nThink').textContent=think;
   document.getElementById('nAct').textContent=act;
   document.getElementById('nErr').textContent=err;
   document.getElementById('nDone').textContent=done;
+  document.getElementById('totalPct').textContent=
+    Math.round(Object.values(state.custom?.agent_progress||{}).reduce((s,p)=>s+(p.done||0),0)/
+    Object.values(AGENTS).reduce((a,b)=>a+b.goal,0)*100)+'%';
+
+  // Custom stats from skills
+  const c=state.custom;
+  if(c){
+    document.getElementById('sCommit').textContent=(c.task_stats?.git_commits||0)+(c.task_stats?.design_submissions||0);
+    document.getElementById('sDoc').textContent=c.task_stats?.documents||0;
+    document.getElementById('sTest').textContent=c.task_stats?.test_reports||0;
+    document.getElementById('sCI').textContent=(c.ci_status?.total||0);
+    document.getElementById('sAPI').textContent=c.task_stats?.external_api_calls||0;
+    document.getElementById('sEW').textContent=c.traffic?.EAST_WEST?.total_kb||0;
+    document.getElementById('sNS').textContent=c.traffic?.NORTH_SOUTH?.total_kb||0;
+  }
+
+  // Traffic bars
+  const ew=c?.traffic?.EAST_WEST?.total_kb||0;
+  const ns=c?.traffic?.NORTH_SOUTH?.total_kb||0;
+  const it=c?.traffic?.INTERNAL?.total_kb||0;
+  const mx=Math.max(ew,ns,it,1);
+  document.getElementById('bEW').style.width=(ew/mx*100)+'%';document.getElementById('vEW').textContent=ew+' KB';
+  document.getElementById('bNS').style.width=(ns/mx*100)+'%';document.getElementById('vNS').textContent=ns+' KB';
+  document.getElementById('bINT').style.width=(it/mx*100)+'%';document.getElementById('vINT').textContent=it+' KB';
+  document.getElementById('com').textContent=(c?.task_stats?.git_commits||0);
+  document.getElementById('mod').textContent=(c?.task_stats?.model_submissions||0);
+  document.getElementById('doc').textContent=(c?.task_stats?.documents||0);
+  document.getElementById('tst').textContent=(c?.task_stats?.test_reports||0);
+  document.getElementById('api').textContent=(c?.task_stats?.external_api_calls||0);
+  document.getElementById('ci').textContent=(c?.ci_status?.success||0)+'/'+(c?.ci_status?.total||0);
+  document.getElementById('pass').textContent=(c?.task_stats?.test_pass_rate||0)+'%';
+}
 
 // ── API polling ──
+let _pollCount = 0;
 async function poll(){
   try{
     const r=await fetch('/api/scenes/state');
-    if(!r.ok)return;
+    if(!r.ok){console.error('poll HTTP',r.status);return;}
     state = await r.json();
+    _pollCount++;
     // Update per-agent progress from skills data
     const ap = state.custom?.agent_progress;
     if(ap){
@@ -277,7 +288,7 @@ async function poll(){
       }
     }
     updateHUD();
-  }catch(e){}
+  }catch(e){console.error('poll error',e);}
 }
 
 layout();
