@@ -147,6 +147,7 @@ class ContainerRuntime:
                 img = cfg["image"]
                 cmd = cfg["cmd"]
                 env = {
+                    "TZ": os.environ.get("TZ", "Asia/Shanghai"),
                     "AGENT_ID": auto_name,
                     "AGENT_NAME": auto_name,
                     "AGENT_ROLE": backend,

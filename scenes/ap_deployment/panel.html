@@ -89,7 +89,7 @@ function draw(){
   const ox=mapRect.x,oy=mapRect.y,mw=mapRect.w,mh=mapRect.h,sc=mapRect.scale;
 
   // Background 70%
-  if(bgImg){ctx.globalAlpha=0.70;ctx.drawImage(bgImg,ox,oy,mw,mh);ctx.globalAlpha=1;}
+  if(bgImg){ctx.globalAlpha=1;ctx.drawImage(bgImg,ox,oy,mw,mh);ctx.globalAlpha=1;}
 
   // Campus border
   ctx.strokeStyle='rgba(255,255,255,0.28)';ctx.lineWidth=1.2;
@@ -104,7 +104,7 @@ function draw(){
     const p=toScreen(src.x,src.y),r=src.radius*sc;
     const isHov=hovered&&hovered.type==='int'&&hovered.id===src.id;
     ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
-    ctx.fillStyle=isHov?'rgba(220,100,120,0.28)':'rgba(196,123,139,0.10)';ctx.fill();
+    ctx.fillStyle=isHov?'rgba(220,100,120,0.8)':'rgba(196,123,139,0.5)';ctx.fill();
     ctx.setLineDash([8,5]);ctx.lineDashOffset=isHov?0:-Date.now()/300;
     ctx.strokeStyle=isHov?'rgba(220,100,120,0.75)':'rgba(196,123,139,0.40)';ctx.lineWidth=isHov?2:1;ctx.stroke();ctx.setLineDash([]);
     // Glow ring when hovered

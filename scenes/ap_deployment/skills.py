@@ -448,7 +448,7 @@ SkillRegistry.register("archive_solution", archive_solution)
 
 
 # ============================================================
-# get_panel_state — 供 GET /api/scenes/{name}/state 调用
+# get_panel_state — 供 GET /api/scenes/state 调用
 # ============================================================
 def get_panel_state(**kwargs):
     """符合 PANEL_API.md custom 对象结构"""
