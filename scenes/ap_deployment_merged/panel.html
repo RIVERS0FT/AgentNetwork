@@ -45,7 +45,7 @@ const AP_R=60;
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 const tip=document.getElementById('tooltip');
 let data=null,bgImg=null,bgRatio=1;
-const API_URL='/api/scenes/ap_deployment/state';
+const API_URL='/api/scenes/state';
 
 // 标记所有可交互实体
 let hitTargets=[]; // [{type:'ap'|'int', x, y, radius, data}]
