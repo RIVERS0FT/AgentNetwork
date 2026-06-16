@@ -2052,7 +2052,18 @@ def _load_dashboard() -> str:
 # ═══════════════════════════════════════════════
 
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 app.mount('/static', StaticFiles(directory=str(_WEB_STATIC_DIR)), name='static')
+
+
+@app.get("/api/scenes/{scene_name}/{filename:path}")
+async def scene_asset(scene_name: str, filename: str):
+    """提供场景文件夹中的静态资源（图片等）— 必须放在 panel/state 等具体路由之后"""
+    folder = _SCENES_DIR / scene_name
+    file_path = folder / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail=f"Asset '{filename}' not found in scene '{scene_name}'")
+    return FileResponse(str(file_path))
 
 
 # ═══════════════════════════════════════════════
