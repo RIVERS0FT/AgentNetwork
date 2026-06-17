@@ -167,7 +167,7 @@ def plan_next_ap(**kwargs):
     round_num = kwargs.get("round", _current_round)
     _current_round = round_num
 
-    existing = ap_placements + proposed_aps
+    existing = ap_placements
     SAFE_THRESHOLD = 5  # safe_dist < 5m 视为干扰区内
 
     # ── Stage A: 细网格候选生成 ──
@@ -180,7 +180,7 @@ def plan_next_ap(**kwargs):
             # 扩大微调搜索半径 (±15% → 150m×60m)，帮下半区候选逃离干扰区
             for dx in [-CAMPUS_W*0.15, -CAMPUS_W*0.075, 0, CAMPUS_W*0.075, CAMPUS_W*0.15]:
                 for dy in [-CAMPUS_H*0.15, -CAMPUS_H*0.075, 0, CAMPUS_H*0.075, CAMPUS_H*0.15]:
-                    tx = max(10, min(CAMPUS_W-10, bx+dx)); ty = max(10, min(CAMPUS_H-10, by+dy))
+                    tx = max(30, min(CAMPUS_W-30, bx+dx)); ty = max(30, min(CAMPUS_H-30, by+dy))
                     d = _min_interference_dist(tx, ty)
                     if d > best_dist + 2:  # 显著更好才替换
                         best_x, best_y, best_dist = tx, ty, d
@@ -199,8 +199,8 @@ def plan_next_ap(**kwargs):
     # ── Stage B: 候选不足时全园区随机补点 ──
     if len(safe_candidates) < 6:
         for _ in range(20):
-            rx = random.uniform(15, CAMPUS_W-15)
-            ry = random.uniform(15, CAMPUS_H-15)
+            rx = random.uniform(30, CAMPUS_W-30)
+            ry = random.uniform(30, CAMPUS_H-30)
             sd = _min_interference_dist(rx, ry)
             if sd > SAFE_THRESHOLD:
                 tc = any(math.sqrt((rx-ap["x"])**2+(ry-ap["y"])**2)<MIN_AP_SPACING for ap in existing)
@@ -236,7 +236,7 @@ def plan_next_ap(**kwargs):
         # 自动微调
         for _ in range(80):
             tx = best["x"] + (random.random()-0.5)*120; ty = best["y"] + (random.random()-0.5)*80
-            tx = max(10, min(CAMPUS_W-10, tx)); ty = max(10, min(CAMPUS_H-10, ty))
+            tx = max(30, min(CAMPUS_W-30, tx)); ty = max(30, min(CAMPUS_H-30, ty))
             if _min_interference_dist(tx, ty) < SAFE_THRESHOLD:
                 continue  # 不调进干扰区
             tc = any(math.sqrt((tx-ap["x"])**2+(ty-ap["y"])**2)<MIN_AP_SPACING for ap in existing)
@@ -273,6 +273,9 @@ def confirm_ap(**kwargs):
     ap_id = kwargs.get("ap_id","")
 
     ap = next((a for a in proposed_aps if a["id"]==ap_id), None)
+    if not ap and proposed_aps:
+        ap = proposed_aps[-1]
+        ap_id = ap["id"]
     if not ap: return {"status":"error","result":"not_found","data":{}}
 
     proposed_aps.remove(ap)
@@ -398,7 +401,7 @@ SkillRegistry.register("evaluate_single_ap", evaluate_single_ap)
 
 def simulate_coverage(**kwargs):
     round_num = kwargs.get("round", _current_round)
-    aps = ap_placements + proposed_aps
+    aps = ap_placements
     if not aps: return {"status":"error","result":"no_aps","data":{}}
     samples, covered, blind = 2000, 0, []
     for _ in range(samples):
@@ -429,7 +432,7 @@ SkillRegistry.register("analyze_interference", analyze_interference)
 
 def generate_heatmap(**kwargs):
     round_num = kwargs.get("round", _current_round)
-    aps = ap_placements + proposed_aps; grid = []
+    aps = ap_placements; grid = []
     for gx in range(0,CAMPUS_W+1,25):
         for gy in range(0,CAMPUS_H+1,25):
             best=-90

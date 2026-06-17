@@ -1295,7 +1295,7 @@ async def scene_panel(scene_name: str):
     panel_path = folder / "panel.html"
     if panel_path.exists():
         return HTMLResponse(content=panel_path.read_text(encoding='utf-8'))
-    return HTMLResponse(content='<html><body style="background:#ECE8DF;color:#6A665F;display:flex;align-items:center;justify-content:center;height:100%;font-family:Inter,sans-serif;font-size:12px">无可视化面板</body></html>')
+    return HTMLResponse(content='<html><body style="background:radial-gradient(circle at 18% 8%,rgba(47,140,255,0.13),transparent 34%),radial-gradient(circle at 86% 22%,rgba(56,213,255,0.09),transparent 32%),linear-gradient(135deg,#020611,#071426 48%,#030811);color:#7F9BB5;display:flex;align-items:center;justify-content:center;height:100%;font-family:Inter,IBM Plex Sans,system-ui,sans-serif;font-size:13px">无可视化面板</body></html>')
 
 # ═══════════════════════════════════════════════
 # API 配置管理
