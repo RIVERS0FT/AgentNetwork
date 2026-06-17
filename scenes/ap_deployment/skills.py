@@ -158,48 +158,75 @@ class SkillRegistry:
 def plan_next_ap(**kwargs):
     """
     PLANNER调用AI获取下一个AP的候选位置（每次只返回1个最优位置）。
+    两阶段策略：
+      Stage A — 7×5 细网格 + 扩大微调半径，过滤干扰区内候选，safe_dist(35%) + gap_dist(65%)
+      Stage B — 候选不足时全园区随机撒点，保证覆盖下半区
     visual_effect: "proposed" → 前端显示虚线闪烁新AP
     """
     global _current_round, pending_action
     round_num = kwargs.get("round", _current_round)
     _current_round = round_num
 
-    # 排除已有AP太近的位置
     existing = ap_placements + proposed_aps
-    cols, rows = 5, 3
+    SAFE_THRESHOLD = 5  # safe_dist < 5m 视为干扰区内
+
+    # ── Stage A: 细网格候选生成 ──
+    cols, rows = 7, 5  # 35 个网格点覆盖全园区
     candidates = []
     for r in range(1, rows+1):
         for c in range(1, cols+1):
             bx = CAMPUS_W*c/(cols+1); by = CAMPUS_H*r/(rows+1)
             best_x, best_y, best_dist = bx, by, _min_interference_dist(bx, by)
-            for dx in [-CAMPUS_W*0.06, 0, CAMPUS_W*0.06]:
-                for dy in [-CAMPUS_H*0.06, 0, CAMPUS_H*0.06]:
+            # 扩大微调搜索半径 (±15% → 150m×60m)，帮下半区候选逃离干扰区
+            for dx in [-CAMPUS_W*0.15, -CAMPUS_W*0.075, 0, CAMPUS_W*0.075, CAMPUS_W*0.15]:
+                for dy in [-CAMPUS_H*0.15, -CAMPUS_H*0.075, 0, CAMPUS_H*0.075, CAMPUS_H*0.15]:
                     tx = max(10, min(CAMPUS_W-10, bx+dx)); ty = max(10, min(CAMPUS_H-10, by+dy))
                     d = _min_interference_dist(tx, ty)
-                    if d > best_dist: best_x, best_y, best_dist = tx, ty, d
-            # 检查与已有AP的间距
+                    if d > best_dist + 2:  # 显著更好才替换
+                        best_x, best_y, best_dist = tx, ty, d
             too_close = any(math.sqrt((best_x-ap["x"])**2+(best_y-ap["y"])**2)<MIN_AP_SPACING for ap in existing)
-            candidates.append({"x": round(best_x,1), "y": round(best_y,1), "safe_dist": round(best_dist,1), "too_close": too_close})
+            candidates.append({"x": round(best_x,1), "y": round(best_y,1),
+                               "safe_dist": round(best_dist,1), "too_close": too_close})
 
-    # 加权选候选：safe_dist(40%) + 覆盖分散度(60%)，避免全部堆在右上角
+    # ── 过滤干扰区内候选 ──
+    safe_candidates = [c for c in candidates if c["safe_dist"] > SAFE_THRESHOLD]
+    if not safe_candidates:
+        # 极端情况：全园区无安全点，放宽阈值
+        safe_candidates = [c for c in candidates if c["safe_dist"] > -20]
+    if not safe_candidates:
+        safe_candidates = candidates  # 最后兜底
+
+    # ── Stage B: 候选不足时全园区随机补点 ──
+    if len(safe_candidates) < 6:
+        for _ in range(20):
+            rx = random.uniform(15, CAMPUS_W-15)
+            ry = random.uniform(15, CAMPUS_H-15)
+            sd = _min_interference_dist(rx, ry)
+            if sd > SAFE_THRESHOLD:
+                tc = any(math.sqrt((rx-ap["x"])**2+(ry-ap["y"])**2)<MIN_AP_SPACING for ap in existing)
+                safe_candidates.append({"x": round(rx,1), "y": round(ry,1),
+                                        "safe_dist": round(sd,1), "too_close": tc, "random_sample": True})
+
+    # ── 加权评分: safe_dist(35%) + 覆盖分散度(65%) ──
     if existing:
-        for c in candidates:
+        for c in safe_candidates:
             nearest_ap = min(math.sqrt((c["x"]-ap["x"])**2+(c["y"]-ap["y"])**2) for ap in existing)
-            c["gap_dist"] = min(nearest_ap, 300)  # cap 300m 防止极端值
-        max_safe = max(c["safe_dist"] for c in candidates) or 1
-        max_gap = max(c["gap_dist"] for c in candidates) or 1
-        for c in candidates:
-            c["score"] = (c["safe_dist"]/max_safe)*0.4 + (c["gap_dist"]/max_gap)*0.6
+            c["gap_dist"] = min(nearest_ap, 300)
+        max_safe = max(c["safe_dist"] for c in safe_candidates) or 1
+        max_gap = max(c.get("gap_dist", 0) for c in safe_candidates) or 1
+        for c in safe_candidates:
+            c["score"] = (c["safe_dist"]/max_safe)*0.35 + (c.get("gap_dist",0)/max_gap)*0.65
     else:
-        for c in candidates:
+        for c in safe_candidates:
             c["gap_dist"] = 0
             c["score"] = c["safe_dist"]
 
-    candidates.sort(key=lambda c: (-c["score"], c["too_close"]))
-    # 从前3名中随机选，避免确定性聚集
-    pool = [c for c in candidates[:min(4, len(candidates))] if not c["too_close"]]
+    safe_candidates.sort(key=lambda c: (-c["score"], c["too_close"]))
+
+    # ── Top-4 随机选取 ──
+    pool = [c for c in safe_candidates[:min(6, len(safe_candidates))] if not c["too_close"]]
     if not pool:
-        pool = candidates[:min(4, len(candidates))]
+        pool = safe_candidates[:min(4, len(safe_candidates))]
     best = random.choice(pool)
     ap_id = _next_ap_id()
     best["id"] = ap_id
@@ -207,9 +234,11 @@ def plan_next_ap(**kwargs):
 
     if best["too_close"]:
         # 自动微调
-        for _ in range(50):
-            tx = best["x"] + (random.random()-0.5)*80; ty = best["y"] + (random.random()-0.5)*80
+        for _ in range(80):
+            tx = best["x"] + (random.random()-0.5)*120; ty = best["y"] + (random.random()-0.5)*80
             tx = max(10, min(CAMPUS_W-10, tx)); ty = max(10, min(CAMPUS_H-10, ty))
+            if _min_interference_dist(tx, ty) < SAFE_THRESHOLD:
+                continue  # 不调进干扰区
             tc = any(math.sqrt((tx-ap["x"])**2+(ty-ap["y"])**2)<MIN_AP_SPACING for ap in existing)
             if not tc:
                 best["x"]=round(tx,1); best["y"]=round(ty,1); best["too_close"]=False; break
