@@ -9,26 +9,26 @@
   --muted:#8892a4;--text:#d0d7e4;--white:#f0f4fa;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font:15px 'Inter','Segoe UI',system-ui,sans-serif;color:var(--text)}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font:16px 'Inter','IBM Plex Sans',system-ui,sans-serif;color:var(--text)}
 canvas{display:block}
-#tooltip{position:absolute;pointer-events:none;background:rgba(12,17,25,0.96);border:1px solid rgba(255,255,255,0.12);border-radius:5px;padding:8px 12px;font:11px 'JetBrains Mono',monospace;color:var(--white);white-space:nowrap;display:none;z-index:10;box-shadow:0 2px 16px rgba(0,0,0,0.5)}
-#hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 18px;font:11px 'JetBrains Mono',monospace;color:var(--muted);pointer-events:none;z-index:5}
+#tooltip{position:absolute;pointer-events:none;background:rgba(12,17,25,0.96);border:1px solid rgba(255,255,255,0.12);border-radius:5px;padding:8px 12px;font:12px 'JetBrains Mono',monospace;color:var(--white);white-space:nowrap;display:none;z-index:10;box-shadow:0 2px 16px rgba(0,0,0,0.5)}
+#hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 18px;font:13px 'JetBrains Mono','IBM Plex Mono',monospace;color:var(--muted);pointer-events:none;z-index:5}
 #hud .title{color:var(--white);font-weight:600;letter-spacing:0.06em}
 #bottom{position:absolute;bottom:10px;left:10px;right:10px;display:flex;gap:14px;pointer-events:none;z-index:5;align-items:flex-end}
 #trafficBox{display:flex;flex-direction:column;gap:5px;min-width:200px;background:var(--panel-bg);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:8px 10px}
-.bar-row{display:flex;align-items:center;gap:8px;font:10px 'JetBrains Mono',monospace}
+.bar-row{display:flex;align-items:center;gap:8px;font:12px 'JetBrains Mono',monospace}
 .bar-label{width:28px;text-align:right;color:var(--muted)}
 .bar-track{flex:1;height:12px;border-radius:5px;background:rgba(255,255,255,0.04);overflow:hidden}
 .bar-fill{height:100%;border-radius:5px;transition:width 0.5s}
-.bar-val{width:54px;text-align:right;font-size:9px;color:var(--text)}
-#statBox{flex:1;display:flex;gap:14px;flex-wrap:wrap;font:10px 'JetBrains Mono',monospace;color:var(--muted);background:var(--panel-bg);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:8px 12px;align-items:center}
+.bar-val{width:54px;text-align:right;font-size:12px;color:var(--text)}
+#statBox{flex:1;display:flex;gap:14px;flex-wrap:wrap;font:12px 'JetBrains Mono','IBM Plex Mono',monospace;color:var(--muted);background:var(--panel-bg);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:8px 12px;align-items:center}
 #statBox span{white-space:nowrap}
 #statBox .v{color:var(--white);font-weight:600}
 
 /* 分类图例 */
 </style></head>
 <body>
-<div id="hud"><span class="title">TECH CAMPUS · 任务态势</span><span id="roundLabel">R0</span></div>
+<div id="hud"><span class="title">TECH CAMPUS · 任务态势</span><span id="roundLabel" style="text-align:right">R0</span></div>
 <div id="bottom">
   <div id="trafficBox">
     <div class="bar-row"><span class="bar-label">EW</span><div class="bar-track"><div class="bar-fill" id="bEW" style="width:0%;background:var(--ew)"></div></div><span class="bar-val" id="vEW">0 KB</span></div>
@@ -102,15 +102,15 @@ const GROUPS = {
 const NODE_POS = {
   PM:[0.30,0.18],
   ARCHITECT:[0.48,0.18],
-  DEV_FE:[0.14,0.34],
-  DEV_BE:[0.20,0.52],
-  DEV_FW:[0.14,0.70],
-  DEV_AI:[0.36,0.44],
-  DEV_IC:[0.38,0.78],
+  DEV_FE:[0.10,0.28],
+  DEV_BE:[0.16,0.44],
+  DEV_FW:[0.10,0.62],
+  DEV_AI:[0.40,0.48],
+  DEV_IC:[0.44,0.70],
   DOC_WRITER:[0.66,0.24],
-  QA:[0.70,0.60],
-  REPO_ADMIN:[0.86,0.34],
-  DEV_OPS:[0.86,0.76],
+  QA:[0.66,0.50],
+  REPO_ADMIN:[0.85,0.36],
+  DEV_OPS:[0.85,0.68],
 };
 
 let state = {running:false, round:0, max_rounds:0, agents:[], custom:null};
@@ -123,7 +123,7 @@ function layout(){
   canvas.width=window.innerWidth*devicePixelRatio;canvas.height=window.innerHeight*devicePixelRatio;
   ctx.setTransform(1,0,0,1,0,0);ctx.scale(devicePixelRatio,devicePixelRatio);
   const W=window.innerWidth,H=window.innerHeight;
-  const safe={left:Math.max(72,W*0.06),right:Math.max(120,W*0.08),top:Math.max(70,H*0.13),bottom:Math.max(106,H*0.22)};
+  const safe={left:Math.max(48,W*0.04),right:Math.max(48,W*0.04),top:Math.max(40,H*0.06),bottom:Math.max(72,H*0.14)};
   const areaW=Math.max(1,W-safe.left-safe.right),areaH=Math.max(1,H-safe.top-safe.bottom);
   const nodeR=Math.max(15,Math.min(22,Math.min(W,H)/32));
   nodes=[];
@@ -145,16 +145,22 @@ function draw(){
   for(let x=0;x<w;x+=70){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
   for(let y=0;y<h;y+=70){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
 
-  // ── 职能分组区域 + 分类标签 ──
+  // ── 职能分组区域 + 分类标签（根据实际节点位置计算包围盒）──
   const CAT_LABELS={dev:'🖥 开发',ai_ic:'🔬 AI/芯片',mgmt:'📋 管理',content:'📝 文档/测试',infra:'⚙ 基础设施'};
+  const pad=72;
   for(const[gid,g]of Object.entries(GROUPS)){
-    const cx=g.cx*w,cy=g.cy*h,r=g.spread+45;
+    const gn=g.ids.map(id=>nodes.find(n=>n.id===id)).filter(Boolean);
+    if(!gn.length) continue;
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    gn.forEach(n=>{minX=Math.min(minX,n.x);minY=Math.min(minY,n.y);maxX=Math.max(maxX,n.x);maxY=Math.max(maxY,n.y);});
+    const rx=Math.max(0,minX-pad),ry=Math.max(0,minY-pad);
+    const rw=Math.min(w-rx,maxX-minX+pad*2),rh=Math.min(h-ry,maxY-minY+pad*2+14);
     ctx.fillStyle=CAT_COLORS[gid];ctx.globalAlpha=0.03;
-    ctx.beginPath();ctx.roundRect(cx-r,cy-r,r*2,r*2,14);ctx.fill();
+    ctx.beginPath();ctx.roundRect(rx,ry,rw,rh,14);ctx.fill();
     ctx.strokeStyle=CAT_COLORS[gid];ctx.globalAlpha=0.10;ctx.lineWidth=0.6;
-    ctx.beginPath();ctx.roundRect(cx-r,cy-r,r*2,r*2,14);ctx.stroke();ctx.globalAlpha=1;
-    ctx.fillStyle=CAT_COLORS[gid];ctx.globalAlpha=0.4;ctx.font='10px monospace';ctx.textAlign='left';
-    ctx.fillText(CAT_LABELS[gid],cx-r+8,cy-r-6);ctx.globalAlpha=1;
+    ctx.beginPath();ctx.roundRect(rx,ry,rw,rh,14);ctx.stroke();ctx.globalAlpha=1;
+    ctx.fillStyle=CAT_COLORS[gid];ctx.globalAlpha=0.4;ctx.font='12px JetBrains Mono,IBM Plex Mono,monospace';ctx.textAlign='left';
+    ctx.fillText(CAT_LABELS[gid],Math.max(4,rx+8),Math.min(h-4,ry+rh+14));ctx.globalAlpha=1;
   }
 
   // ── 通信链路 — 极淡 ──
@@ -176,10 +182,10 @@ function draw(){
     ctx.beginPath();ctx.moveTo(sn.x,sn.y);ctx.lineTo(tx,ty);
     ctx.strokeStyle='#d4a853';ctx.lineWidth=0.6;ctx.globalAlpha=0.4;ctx.stroke();ctx.globalAlpha=1;
     ctx.setLineDash([]);
-    ctx.fillStyle='#d4a853';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(l.t,(sn.x+tx)/2,(sn.y+ty)/2-5);
+    ctx.fillStyle='#d4a853';ctx.font='12px JetBrains Mono,IBM Plex Mono,monospace';ctx.textAlign='center';ctx.fillText(l.t,(sn.x+tx)/2,(sn.y+ty)/2-5);
     // 外部端点圆点
     ctx.beginPath();ctx.arc(tx,ty,4,0,Math.PI*2);ctx.fillStyle='#d4a853';ctx.globalAlpha=0.3;ctx.fill();ctx.globalAlpha=1;
-    ctx.fillStyle='#d4a853';ctx.font='7px monospace';ctx.fillText(l.t,tx,ty-10);
+    ctx.fillStyle='#d4a853';ctx.font='12px JetBrains Mono,IBM Plex Mono,monospace';ctx.fillText(l.t,tx,ty-10);
   });
 
   // ── Agent 节点 + 任务进度环 ──
@@ -196,21 +202,21 @@ function draw(){
     }
     // 图标
     ctx.font=Math.round(r)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(n.icon,n.x,n.y-2);
-    // 名称
-    ctx.fillStyle='#d0d7e4';ctx.font=(r<18?'8px':'9px')+' monospace';ctx.textAlign='center';ctx.fillText(n.name,n.x,n.y+r+13);
+    // 名称（节点上方）
+    ctx.fillStyle='#d0d7e4';ctx.font=(r<18?'11px':'12px')+' JetBrains Mono,IBM Plex Mono,monospace';ctx.textAlign='center';ctx.fillText(n.name,n.x,n.y+r+13);
     // 进度分数
-    ctx.fillStyle=n.color;ctx.font=(r<18?'9px':'10px')+' monospace';ctx.fillText(n.progress+'/'+n.goal,n.x,n.y+r+24);
+    ctx.fillStyle=n.color;ctx.font='12px JetBrains Mono,IBM Plex Mono,monospace';ctx.fillText(n.progress+'/'+n.goal,n.x,n.y+r+24);
     // 任务标签
-    ctx.fillStyle='#8892a4';ctx.font='8px monospace';ctx.fillText(n.task,n.x,n.y+r+34);
+    ctx.fillStyle='#8892a4';ctx.font='12px JetBrains Mono,IBM Plex Mono,monospace';ctx.fillText(n.task,n.x,n.y+r+34);
   });
 
   // ── 右上角事件摘要 ──
   const ev=(state.custom?.recent_events||[]).slice(-6);
   ev.forEach((e,i)=>{
-    const y=48+i*18,x=w-280;
+    const y=48+i*18,x=Math.max(0,w-280);
     ctx.fillStyle='rgba(12,17,25,0.78)';ctx.fillRect(x,y-11,274,17);
-    ctx.fillStyle='#8892a4';ctx.font='10px monospace';
-    ctx.fillText('R'+(e.round||'')+' '+(e.type||'')+' '+(e.detail||'').slice(0,30),x+5,y);
+    ctx.fillStyle='#8892a4';ctx.font='12px JetBrains Mono,IBM Plex Mono,monospace';
+    ctx.textAlign='right';ctx.fillText('R'+(e.round||'')+' '+(e.type||'')+' '+(e.detail||'').slice(0,30),x+269,y);ctx.textAlign='left';
   });
 
   // ── 顶部居中总体进度条 ──
@@ -220,7 +226,7 @@ function draw(){
   const barW=360,barH=8,barX=w/2-barW/2,barY=30;
   ctx.fillStyle='rgba(255,255,255,0.05)';ctx.beginPath();ctx.roundRect(barX,barY,barW,barH,4);ctx.fill();
   ctx.fillStyle='#6bae85';ctx.beginPath();ctx.roundRect(barX,barY,barW*overallPct,barH,4);ctx.fill();
-  ctx.fillStyle='#8892a4';ctx.font='10px monospace';ctx.textAlign='center';
+  ctx.fillStyle='#8892a4';ctx.font='12px JetBrains Mono,IBM Plex Mono,monospace';ctx.textAlign='center';
   ctx.fillText('总体进度 '+Math.round(overallPct*100)+'%  ('+totalProgress+'/'+totalGoal+')',w/2,barY-7);
 }
 
@@ -242,7 +248,7 @@ function updateHUD(){
   document.getElementById('roundLabel').textContent=
     (state.running?'▶ R'+state.round+'/'+state.max_rounds:
     state.round>0?'⏹ R'+state.round+'/'+state.max_rounds+' (已结束)':'R0/'+state.max_rounds)
-    +' ['+_pollCount+']';
+
 
   // ── Agent 状态统计：空闲/思考/执行/异常 ──
   let idle=0,think=0,act=0,err=0;
@@ -302,13 +308,11 @@ function updateHUD(){
 }
 
 // ========== API 轮询 — 每秒从 /api/scenes/state 获取最新面板数据 ==========
-let _pollCount = 0;
 async function poll(){
   try{
     const r=await fetch('/api/scenes/state');
     if(!r.ok){console.error('poll HTTP',r.status);return;}
     state = await r.json();               // state = {scene, running, round, max_rounds, agents, custom}
-    _pollCount++;
     // 从 skills.py 的 get_panel_state() 返回的 agent_progress 更新每个 Agent 的 done/goal
     // agent_progress 由 skills.py 中各列表（git_commits, documents, test_reports, ci_pipelines...）统计得到
     const ap = state.custom?.agent_progress;
