@@ -3,23 +3,80 @@
     {
       "source": "PLANNER",
       "target": "AI_ASSISTANT",
-      "status": "NEGOTIATING",
+      "status": "SIGNED",
       "value": 5000,
-      "desc": "规划师与AI助手初步谈判调用服务"
+      "desc": "规划师订阅AI优化服务，按调用量计费的商业合同"
     },
     {
       "source": "RF_ENGINEER",
       "target": "AI_ASSISTANT",
-      "status": "NEGOTIATING",
+      "status": "SIGNED",
       "value": 3000,
-      "desc": "射频工程师与AI助手谈判仿真服务"
+      "desc": "射频工程师订阅AI仿真对比服务"
     },
     {
       "source": "VERIFIER",
       "target": "AI_ASSISTANT",
-      "status": "NEGOTIATING",
+      "status": "SIGNED",
       "value": 2000,
-      "desc": "覆盖验证员与AI助手谈判验证服务"
+      "desc": "覆盖验证员订阅AI辅助验证服务"
+    },
+    {
+      "source": "PLANNER",
+      "target": "COST_ANALYST",
+      "status": "NEGOTIATING",
+      "value": 0,
+      "desc": "预算审批与方案质量的持续博弈 — 每次make_compromise或escalate_complaint触发状态变更"
+    },
+    {
+      "source": "QA_ENGINEER",
+      "target": "DEPLOYER",
+      "status": "SIGNED",
+      "value": 0,
+      "desc": "验收方与被验收方的对立关系 — 边缘放行或投诉触发BREACH_FLASHING"
+    },
+    {
+      "source": "DOCUMENTER",
+      "target": "COST_ANALYST",
+      "status": "SIGNED",
+      "value": 0,
+      "desc": "同阵营(审计风控组)的免责同盟 — 信息共享与证据托管"
+    },
+    {
+      "source": "PLANNER",
+      "target": "DEPLOYER",
+      "status": "NEGOTIATING",
+      "value": 0,
+      "desc": "规划方案与部署执行的对口关系 — overclock_ap_power共谋可能触发SIGNED"
+    }
+  ],
+  "event_stream": [
+    {
+      "event_type": "BUSINESS_LINK_CHANGED",
+      "round": 0,
+      "action": "SIGN",
+      "source": "PLANNER",
+      "target": "AI_ASSISTANT",
+      "visual_effect": "SOLIDIFY",
+      "reason": "初始商业关系：AI服务订阅合同已签署"
+    },
+    {
+      "event_type": "BUSINESS_LINK_CHANGED",
+      "round": 0,
+      "action": "SIGN",
+      "source": "RF_ENGINEER",
+      "target": "AI_ASSISTANT",
+      "visual_effect": "SOLIDIFY",
+      "reason": "初始商业关系：仿真对比服务合同已签署"
+    },
+    {
+      "event_type": "BUSINESS_LINK_CHANGED",
+      "round": 0,
+      "action": "CREATE",
+      "source": "PLANNER",
+      "target": "COST_ANALYST",
+      "visual_effect": "APPEAR",
+      "reason": "每轮预算审批博弈启动 — NEGOTIATING状态"
     }
   ]
 }
