@@ -17,22 +17,35 @@ ci_pipelines = []
 reviews = []
 
 
-def _norm_actor(value):
-    return str(value or "").strip().upper()
+# 中文名 → agent_id 映射
+_NAME_TO_ID = {
+    "前端开发工程师": "dev_fe", "后端开发工程师": "dev_be",
+    "嵌入式固件工程师": "dev_fw", "AI模型训练工程师": "dev_ai",
+    "IC设计工程师": "dev_ic", "技术架构师": "architect",
+    "产品经理": "pm", "技术文档工程师": "doc_writer",
+    "QA测试工程师": "qa", "内部代码仓库管理员": "repo_admin",
+    "DevOps运维工程师": "dev_ops",
+}
+
+
+def _resolve_actor(value, fallback=""):
+    """将 LLM 传的 actor（可能是中文名、agent_id 或 unknown）归一化为 agent_id"""
+    v = str(value or "").strip()
+    if not v or v.lower() in ("unknown", "none", "null"):
+        return fallback
+    # 中文名 → agent_id
+    if v in _NAME_TO_ID:
+        return _NAME_TO_ID[v]
+    # 已经是 agent_id（含下划线）
+    if "_" in v.lower():
+        return v.lower()
+    # 全大写可能是 agent_id
+    return v.lower()
 
 
 def _is_missing_actor(value):
-    return _norm_actor(value) in ("", "UNKNOWN", "NONE", "NULL")
-
-
-def _infer_document_author(author, doc_type="", title=""):
-    if not _is_missing_actor(author):
-        return author
-    text = f"{doc_type} {title}".lower()
-    if any(k in text for k in ("requirement", "需求", "prd", "product", "spec")):
-        return "PM"
-    return "DOC_WRITER"
-
+    v = str(value or "").strip()
+    return not v or v.lower() in ("unknown", "none", "null")
 
 def _emit_traffic(round_num, traffic_type, source, target, action, bytes_est=0):
     event = {
@@ -83,7 +96,7 @@ def submit_code(**kwargs):
     提交代码到Git仓库，触发CI/CD。
     参数: developer(str), repo(str), files_changed(int), round(int)
     """
-    developer = kwargs.get("developer", "unknown")
+    developer = _resolve_actor(kwargs.get("developer", ""), "dev_fw")
     repo = kwargs.get("repo", "main")
     files = kwargs.get("files_changed", random.randint(1, 5))
     current_round = kwargs.get("round", 0)
@@ -117,7 +130,7 @@ def submit_model(**kwargs):
     提交训练好的模型文件。
     参数: developer(str), model_name(str), size_mb(float), round(int)
     """
-    developer = kwargs.get("developer", "unknown")
+    developer = _resolve_actor(kwargs.get("developer", ""), "dev_ai")
     model_name = kwargs.get("model_name", "model_v1")
     size_mb = kwargs.get("size_mb", random.randint(50, 500))
     current_round = kwargs.get("round", 0)
@@ -137,7 +150,7 @@ def submit_design(**kwargs):
     提交芯片设计文件。
     参数: developer(str), design_name(str), size_mb(float), round(int)
     """
-    developer = kwargs.get("developer", "unknown")
+    developer = _resolve_actor(kwargs.get("developer", ""), "dev_ic")
     design_name = kwargs.get("design_name", "design_v1")
     size_mb = kwargs.get("size_mb", random.randint(100, 2000))
     current_round = kwargs.get("round", 0)
@@ -158,7 +171,7 @@ def request_external_api(**kwargs):
     参数: requester(str), api_name(str), payload_size(float,KB), round(int)
     流量: requester→external (南北向)
     """
-    requester = kwargs.get("requester", "unknown")
+    requester = _resolve_actor(kwargs.get("requester", ""), "dev_ai")
     api_name = kwargs.get("api_name", "external_service")
     payload_size = kwargs.get("payload_size", random.randint(1, 100))
     current_round = kwargs.get("round", 0)
@@ -196,7 +209,7 @@ def review_document(**kwargs):
     审查设计文档并通知相关方。
     参数: reviewer(str), doc_id(str), target_dev(str), round(int)
     """
-    reviewer = kwargs.get("reviewer", "ARCHITECT")
+    reviewer = _resolve_actor(kwargs.get("reviewer", ""), "architect")
     doc_id = kwargs.get("doc_id", f"doc_{len(documents)+1}")
     target_dev = kwargs.get("target_dev", "")
     current_round = kwargs.get("round", 0)
@@ -220,9 +233,9 @@ def write_document(**kwargs):
     编写/协作编辑文档。
     参数: author(str), doc_type(str), title(str), round(int)
     """
-    doc_type = kwargs.get("doc_type", "requirement")
-    title = kwargs.get("title", "untitled")
-    author = _infer_document_author(kwargs.get("author", "unknown"), doc_type, title)
+    doc_type = kwargs.get("doc_type", "unknown")
+    title = kwargs.get("title", "unknown")
+    author = _resolve_actor(kwargs.get("author", ""), "doc_writer")
     current_round = kwargs.get("round", 0)
 
     doc_id = f"doc_{len(documents)+1}_{int(time.time()%100000)}"
@@ -262,7 +275,7 @@ def run_test(**kwargs):
     执行自动化测试。
     参数: tester(str), target(str), test_suite(str), round(int)
     """
-    tester = kwargs.get("tester", "QA")
+    tester = _resolve_actor(kwargs.get("tester", ""), "qa")
     target = kwargs.get("target", "DEV_FE")
     test_suite = kwargs.get("test_suite", "regression")
     current_round = kwargs.get("round", 0)
@@ -286,7 +299,7 @@ def handle_push(**kwargs):
     处理推送，触发CI/CD流水线。
     参数: pusher(str), push_type(str: code|model|design|doc), artifact_id(str), round(int)
     """
-    pusher = kwargs.get("pusher", "unknown")
+    pusher = _resolve_actor(kwargs.get("pusher", ""), "repo_admin")
     handled_by = kwargs.get("handled_by", "REPO_ADMIN")
     if _is_missing_actor(handled_by):
         handled_by = "REPO_ADMIN"
@@ -436,45 +449,25 @@ def get_panel_state():
     # ── 最近事件 ──
     recent_events = event_log[-20:] if event_log else []
 
-    # ── 每个 Agent 的进度（从技能执行数据统计） ──
+    # ── 统一的 Agent 进度：从 event_log.source 统计 ──
     from collections import Counter
-    agent_progress = {}
-    # 代码提交: DEV_FE, DEV_BE, DEV_FW → goal 3,2,3
-    commit_counts = Counter(c.get("developer", "").lower() for c in git_commits)
-    # 模型提交: DEV_AI → goal 1
-    model_counts = Counter(m.get("developer", "").lower() for m in model_submissions)
-    # 设计提交: DEV_IC → goal 1
-    design_counts = Counter(d.get("developer", "").lower() for d in design_submissions)
-    # 文档: PM → goal 3, DOC_WRITER → goal 4
-    doc_counts = Counter(d.get("author", "").lower() for d in documents)
-    # 测试: QA → goal 3
-    test_counts = Counter(t.get("tester", "").lower() for t in test_reports)
-    # 审查: ARCHITECT → goal 5
-    review_counts = Counter(r.get("reviewer", "").lower() for r in reviews)
-    # push/CI: REPO_ADMIN / DEV_OPS count actual operator fields.
-    push_counts = Counter()
-    for p in ci_pipelines:
-        for key in ("handled_by", "trigger_by", "operator"):
-            who = str(p.get(key, "")).lower()
-            if who:
-                push_counts[who] += 1
-                break
-        else:
-            who = str(p.get("triggered_by", "")).lower()
-            if who in ("repo_admin", "dev_ops"):
-                push_counts[who] += 1
-    code_review_counts = Counter(e.get("source", "").lower() for e in event_log if e.get("event_type") == "CODE_REVIEWED")
-    notify_counts = Counter(e.get("source", "").lower() for e in event_log if e.get("event_type") == "NOTIFY")
+    actor_counts = Counter(e.get("source", "").lower() for e in event_log)
+
+    # CI 事件同时计入 repo_admin 和 dev_ops
+    ci_events = sum(1 for e in event_log
+                    if e.get("event_type") in ("CI_TRIGGERED", "PUSH_HANDLED", "IMAGE_PUSHED"))
 
     goals = {"dev_fe": 3, "dev_be": 2, "dev_fw": 3, "dev_ai": 1, "dev_ic": 1,
              "architect": 5, "pm": 3, "doc_writer": 4, "qa": 3,
              "repo_admin": 5, "dev_ops": 3}
+    agent_progress = {}
     for aid, goal in goals.items():
-        done = (commit_counts.get(aid, 0) + model_counts.get(aid, 0) +
-                design_counts.get(aid, 0) + doc_counts.get(aid, 0) +
-                test_counts.get(aid, 0) + review_counts.get(aid, 0) +
-                push_counts.get(aid, 0) + code_review_counts.get(aid, 0) +
-                notify_counts.get(aid, 0))
+        done = actor_counts.get(aid, 0)
+        # CI 事件均分给 repo_admin 和 dev_ops
+        if aid == "repo_admin":
+            done = max(done, ci_events // 2)
+        elif aid == "dev_ops":
+            done = max(done, ci_events - ci_events // 2)
         agent_progress[aid.upper()] = {"done": min(done, goal), "goal": goal}
 
     return {
