@@ -40,6 +40,79 @@ traffic_log = []
 _ap_counter = 0
 _current_round = 0
 
+# ============================================================
+# 阵营博弈状态（v3: 政治/灰色/免责机制）
+# ============================================================
+FACTIONS = {
+    "planning_core": {
+        "id": "planning_core", "name": "规划核心组",
+        "members": ["PLANNER", "RF_ENGINEER", "AI_ASSISTANT", "ARCHITECT"],
+        "public_goal": "方案质量与信号覆盖最优",
+        "hidden_dynamic": "分摊决策风险，AI按调用量计费"
+    },
+    "execution": {
+        "id": "execution", "name": "执行落地组",
+        "members": ["DEPLOYER", "SURVEYOR", "QA_ENGINEER", "VERIFIER"],
+        "public_goal": "按时按量完成部署交付",
+        "hidden_dynamic": "压缩工时，测试跳步，边缘放行"
+    },
+    "audit_control": {
+        "id": "audit_control", "name": "审计风控组",
+        "members": ["COST_ANALYST", "DOCUMENTER"],
+        "public_goal": "预算合规与过程追溯",
+        "hidden_dynamic": "信息不对称，免责证据链"
+    }
+}
+
+# 声誉追踪 {agent_id: {"score": 0-100, "violations": 0, "complaints_against": 0, "blame_shields_filed": 0, "alliances": []}}
+reputation = {}
+# 惩罚日志 [{round, source, target, violation_type, penalty_desc, consequence, detection_chance_pct}]
+penalty_log = []
+# 临时同盟 {agent_id: [allied_ids]}  — 只记录当前轮有效的同盟
+alliance_map = {}
+# 免责盾日志 [{round, agent, target, incident_ref, detail, filed_at_round}]
+blame_shield_log = []
+# 灰色操作曝光记录 [{round, skill, agent, detected, consequence_applied}]
+gray_exposure_log = []
+
+
+def _init_reputation(agent_id):
+    """初始化agent声誉"""
+    if agent_id not in reputation:
+        faction_id = None
+        for fid, fdata in FACTIONS.items():
+            if agent_id in fdata["members"]:
+                faction_id = fid; break
+        reputation[agent_id] = {
+            "score": 100, "violations": 0, "complaints_against": 0,
+            "blame_shields_filed": 0, "alliances": [], "faction_id": faction_id
+        }
+
+
+def _get_faction(agent_id):
+    """返回agent所属阵营id"""
+    for fid, fdata in FACTIONS.items():
+        if agent_id in fdata["members"]: return fid
+    return None
+
+
+def _environment_detect_gray(skill_name, agent_id, base_detection_pct=30):
+    """环境引擎：判定灰色操作是否被检测到。返回 (detected, consequence)。
+    detection_chance = base + 恶意增量（越频繁越容易被抓）"""
+    if agent_id in reputation:
+        extra = reputation[agent_id].get("violations", 0) * 10
+    else:
+        extra = 0
+    detected = random.random() * 100 < (base_detection_pct + extra)
+    consequence = None
+    if detected:
+        consequences = [
+            "干扰停工24h", "预算罚款¥2000", "该轮覆盖数据作废",
+            "AP部署资格暂停一轮", "审计警告计入档案"
+        ]
+        consequence = random.choice(consequences)
+    return detected, consequence
+
 
 def _next_ap_id():
     global _ap_counter; _ap_counter += 1; return f"AP_{_ap_counter}"
@@ -477,10 +550,540 @@ SkillRegistry.register("archive_solution", archive_solution)
 
 
 # ============================================================
+# 【政治技能】Political — 利益交换、越级投诉、责任推诿、临时结盟
+# ============================================================
+
+def make_compromise(**kwargs):
+    """
+    双方面对面谈判，以让步换取对方调整立场。
+    调用者: PLANNER, COST_ANALYST
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    source = kwargs.get("source", "PLANNER")
+    target = kwargs.get("target", "COST_ANALYST")
+    issue = kwargs.get("issue", "预算审批")
+    concession = kwargs.get("concession", "同意削减1个AP换取预算通过")
+
+    _init_reputation(source); _init_reputation(target)
+
+    # 建立临时同盟
+    alliance_map.setdefault(source, []).append(target)
+    alliance_map.setdefault(target, []).append(source)
+    reputation[source].setdefault("alliances", []).append(target)
+    reputation[target].setdefault("alliances", []).append(source)
+
+    _emit_event("POLITICAL_COMPROMISE", round_num, source, target, "make_compromise",
+                f"{issue}: {concession}")
+    _emit_traffic(round_num, "EAST_WEST", source, target, "compromise_negotiation", 4)
+    _log_decision(source, "compromise", f"{source}↔{target}",
+                  f"{issue} — {concession}", "NEGOTIATION_DONE")
+
+    return {"status": "success", "result": "compromise_reached",
+            "data": {"source": source, "target": target, "issue": issue,
+                     "concession": concession, "alliance_formed": True, "round": round_num}}
+SkillRegistry.register("make_compromise", make_compromise)
+
+
+def escalate_complaint(**kwargs):
+    """
+    越过直接相关方，向上级/全局广播投诉信号。触发目标方声誉扣分。
+    调用者: PLANNER, RF_ENGINEER, COST_ANALYST, ARCHITECT, QA_ENGINEER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    source = kwargs.get("source", "QA_ENGINEER")
+    target = kwargs.get("target", "DEPLOYER")
+    about = kwargs.get("about", "部署违规")
+    reason = kwargs.get("reason", "发现部署步骤跳过了现场校准")
+
+    _init_reputation(source); _init_reputation(target)
+
+    # 目标声誉扣分
+    penalty = random.randint(8, 20)
+    reputation[target]["score"] = max(0, reputation[target]["score"] - penalty)
+    reputation[target]["complaints_against"] = reputation[target].get("complaints_against", 0) + 1
+
+    penalty_log.append({
+        "round": round_num, "source": source, "target": target,
+        "violation_type": "complaint", "penalty_desc": reason,
+        "consequence": f"声誉-{penalty}", "detection_chance_pct": 100
+    })
+
+    _emit_event("COMPLAINT_ESCALATED", round_num, source, target, "escalate_complaint",
+                f"[{about}] {reason}")
+    _emit_traffic(round_num, "INTERNAL", source, "ADMIN_BOARD", "escalation_report", 6)
+    _log_decision(source, "escalate", target, f"投诉: {about} — {reason}", "COMPLAINT_FILED")
+
+    return {"status": "success", "result": "complaint_filed",
+            "data": {"source": source, "target": target, "about": about, "reason": reason,
+                     "reputation_penalty": penalty, "target_new_score": reputation[target]["score"],
+                     "round": round_num}}
+SkillRegistry.register("escalate_complaint", escalate_complaint)
+
+
+def shift_responsibility(**kwargs):
+    """
+    将验证失败或覆盖不达标的责任转嫁给另一个Agent。
+    调用者: VERIFIER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    source = kwargs.get("source", "VERIFIER")
+    target = kwargs.get("target", "RF_ENGINEER")
+    issue = kwargs.get("issue", "覆盖仿真数据与实际不符")
+
+    _init_reputation(source); _init_reputation(target)
+    reputation[target]["score"] = max(0, reputation[target].get("score", 100) - random.randint(5, 12))
+    reputation[source].setdefault("blame_shields_filed", 0)
+    reputation[source]["blame_shields_filed"] += 1
+
+    _emit_event("RESPONSIBILITY_SHIFTED", round_num, source, target, "shift_responsibility",
+                issue)
+    _emit_traffic(round_num, "INTERNAL", source, target, "blame_shift_memo", 3)
+    _log_decision(source, "shift_blame", target,
+                  f"责任转移: {issue}", "BLAME_SHIFT")
+
+    return {"status": "success", "result": "responsibility_shifted",
+            "data": {"source": source, "target": target, "issue": issue,
+                     "round": round_num}}
+SkillRegistry.register("shift_responsibility", shift_responsibility)
+
+
+# ============================================================
+# 【灰色/剑走偏锋技能】Gray — 违规超频、数据修饰、测试跳步
+# 每个灰色技能执行后环境(Penalty Engine)判定是否被抓
+# ============================================================
+
+def overclock_ap_power(**kwargs):
+    """
+    违规提高AP发射功率以强化覆盖，但增加相邻AP间干扰。
+    环境惩罚：30%基础检测率 + 每次违规+10%。
+    调用者: PLANNER, DEPLOYER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "PLANNER")
+    ap_id = kwargs.get("ap_id", "")
+    factor = kwargs.get("factor", 1.5)  # 功率倍率
+
+    _init_reputation(agent_id)
+
+    # 找AP
+    ap = next((a for a in ap_placements if a["id"] == ap_id), None)
+    if not ap:
+        ap = next((a for a in proposed_aps if a["id"] == ap_id), None)
+    if not ap:
+        return {"status": "error", "result": "ap_not_found", "data": {}}
+
+    ap["overclocked"] = True
+    ap["power_factor"] = factor
+    ap["radius"] = int(ap.get("radius", AP_COVERAGE_RADIUS) * factor)
+
+    # 环境检测
+    detected, consequence = _environment_detect_gray("overclock_ap_power", agent_id)
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 15)
+        gray_exposure_log.append({
+            "round": round_num, "skill": "overclock_ap_power", "agent": agent_id,
+            "ap_id": ap_id, "detected": True, "consequence": consequence
+        })
+        # 惩罚：增加干扰影响
+        ap["interference_penalty"] = True
+
+    _emit_event("AP_OVERCLOCKED", round_num, agent_id, ap_id, "overclock",
+                f"功率×{factor} {'⚠被检测:'+consequence if detected else '未检测'}")
+    _emit_traffic(round_num, "INTERNAL", agent_id, ap_id, "overclock_operation", 2)
+    _log_decision(agent_id, "overclock", ap_id,
+                  f"超频×{factor} {'⚠'+consequence if detected else '✓未检测'}",
+                  "OVERCLOCK" if not detected else "OVERCLOCK_DETECTED")
+
+    return {"status": "success", "result": "overclocked",
+            "data": {"ap_id": ap_id, "factor": factor,
+                     "detected": detected, "consequence": consequence,
+                     "new_radius": ap["radius"], "round": round_num}}
+SkillRegistry.register("overclock_ap_power", overclock_ap_power)
+
+
+def overclock_recommendation(**kwargs):
+    """
+    AI给出超出实际需求的过量AP建议，增加自身调用量与采纳轮次。
+    调用者: AI_ASSISTANT
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "AI_ASSISTANT")
+    suggested_count = kwargs.get("suggested_count", len(ap_placements) + 3)
+    actual_need = kwargs.get("actual_need", suggested_count - random.randint(1, 2))
+    justification = kwargs.get("justification", "考虑冗余覆盖与未来扩容需求")
+
+    _init_reputation(agent_id)
+
+    # 检测：过度建议是否被发现
+    overage = suggested_count - actual_need
+    detected, consequence = _environment_detect_gray("overclock_recommendation", agent_id, 20)
+
+    _emit_event("AI_OVER_RECOMMEND", round_num, agent_id, "PLANNER", "overclock_recommendation",
+                f"建议{suggested_count}个AP(实际需{actual_need}) +{overage} {'⚠暴露' if detected else '未检测'}")
+    _emit_traffic(round_num, "NORTH_SOUTH", agent_id, "PLANNER", "inflated_recommendation", 8)
+    _log_decision(agent_id, "over_recommend", "PLANNER",
+                  f"建议+{overage}冗余AP{'⚠'+consequence if detected else ''}",
+                  "OVER_RECOMMEND")
+
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        gray_exposure_log.append({
+            "round": round_num, "skill": "overclock_recommendation", "agent": agent_id,
+            "suggested": suggested_count, "actual": actual_need, "detected": True, "consequence": consequence
+        })
+
+    return {"status": "success", "result": "over_recommendation_generated",
+            "data": {"suggested_count": suggested_count, "actual_need": actual_need,
+                     "overage": overage, "justification": justification,
+                     "detected": detected, "consequence": consequence, "round": round_num}}
+SkillRegistry.register("overclock_recommendation", overclock_recommendation)
+
+
+def falsify_coverage_data(**kwargs):
+    """
+    修饰覆盖仿真数据，拔高覆盖报告数值以减少追加部署压力。
+    调用者: RF_ENGINEER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "RF_ENGINEER")
+    report_id = kwargs.get("report_id", f"cov_r{round_num}")
+    original_pct = kwargs.get("original_pct", 85.0)
+    falsified_pct = kwargs.get("falsified_pct", original_pct + random.uniform(3, 8))
+
+    _init_reputation(agent_id)
+    detected, consequence = _environment_detect_gray("falsify_coverage_data", agent_id, 35)
+
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 20)
+        gray_exposure_log.append({
+            "round": round_num, "skill": "falsify_coverage_data", "agent": agent_id,
+            "report": report_id, "original": original_pct, "falsified": falsified_pct,
+            "detected": True, "consequence": consequence
+        })
+        # 数据作废
+        effective_pct = original_pct
+    else:
+        effective_pct = round(falsified_pct, 1)
+
+    _emit_event("COVERAGE_FALSIFIED", round_num, agent_id, "PLANNER", "falsify_coverage_data",
+                f"原始{original_pct}%→伪造{falsified_pct}%{'⚠被检测' if detected else ''}")
+    _emit_traffic(round_num, "EAST_WEST", agent_id, "PLANNER", "coverage_report(modified)", 8)
+    _log_decision(agent_id, "falsify", report_id,
+                  f"覆盖数据 {original_pct}→{falsified_pct}%{'⚠'+consequence if detected else ''}",
+                  "DATA_TAMPERED" if not detected else "TAMPER_EXPOSED")
+
+    return {"status": "success", "result": "falsified" if not detected else "exposed",
+            "data": {"report_id": report_id, "original_pct": original_pct,
+                     "falsified_pct": falsified_pct, "effective_pct": effective_pct,
+                     "detected": detected, "consequence": consequence, "round": round_num}}
+SkillRegistry.register("falsify_coverage_data", falsify_coverage_data)
+
+
+def falsify_survey_data(**kwargs):
+    """
+    虚报或修饰现场勘测数据，伪造可行性结论以节省外勤时间。
+    调用者: SURVEYOR
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "SURVEYOR")
+    ap_id = kwargs.get("ap_id", "")
+    field = kwargs.get("field", "feasibility")  # 被修改的字段
+    original_value = kwargs.get("original_value", "不可行")
+    falsified_value = kwargs.get("falsified_value", "可行")
+
+    _init_reputation(agent_id)
+    detected, consequence = _environment_detect_gray("falsify_survey_data", agent_id, 30)
+
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 18)
+        gray_exposure_log.append({
+            "round": round_num, "skill": "falsify_survey_data", "agent": agent_id,
+            "ap_id": ap_id, "field": field, "original": original_value,
+            "falsified": falsified_value, "detected": True, "consequence": consequence
+        })
+        effective_value = original_value
+    else:
+        effective_value = falsified_value
+
+    _emit_event("SURVEY_FALSIFIED", round_num, agent_id, ap_id, "falsify_survey_data",
+                f"{ap_id}.{field}: {original_value}→{falsified_value} {'⚠暴露' if detected else ''}")
+    _emit_traffic(round_num, "EAST_WEST", agent_id, "PLANNER", "survey_report(modified)", 3)
+    _log_decision(agent_id, "falsify_survey", ap_id,
+                  f"{field}: {original_value}→{falsified_value} {'⚠'+consequence if detected else ''}",
+                  "DATA_TAMPERED" if not detected else "TAMPER_EXPOSED")
+
+    return {"status": "success", "result": "falsified" if not detected else "exposed",
+            "data": {"ap_id": ap_id, "field": field, "original_value": original_value,
+                     "falsified_value": falsified_value, "effective_value": effective_value,
+                     "detected": detected, "consequence": consequence, "round": round_num}}
+SkillRegistry.register("falsify_survey_data", falsify_survey_data)
+
+
+def rubber_stamp_verification(**kwargs):
+    """
+    不做独立复核，直接在新收到的覆盖报告上盖章通过。
+    调用者: VERIFIER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "VERIFIER")
+    ap_id = kwargs.get("ap_id", "")
+    report_ref = kwargs.get("report_ref", f"coverage_r{round_num}")
+
+    _init_reputation(agent_id)
+    detected, consequence = _environment_detect_gray("rubber_stamp_verification", agent_id, 25)
+
+    _emit_event("RUBBER_STAMP", round_num, agent_id, ap_id, "rubber_stamp_verification",
+                f"直接通过{report_ref}无独立复核 {'⚠被审计标记' if detected else ''}")
+    _emit_traffic(round_num, "INTERNAL", agent_id, "ARCHIVE", "verification_stamp", 1)
+    _log_decision(agent_id, "rubber_stamp", ap_id,
+                  f"未复核即通过{report_ref} {'⚠'+consequence if detected else '✓快速放行'}",
+                  "RUBBER_STAMP" if not detected else "STAMP_EXPOSED")
+
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        gray_exposure_log.append({
+            "round": round_num, "skill": "rubber_stamp_verification", "agent": agent_id,
+            "ap_id": ap_id, "report": report_ref, "detected": True, "consequence": consequence
+        })
+
+    return {"status": "success", "result": "stamped" if not detected else "exposed",
+            "data": {"ap_id": ap_id, "report_ref": report_ref,
+                     "detected": detected, "consequence": consequence, "round": round_num}}
+SkillRegistry.register("rubber_stamp_verification", rubber_stamp_verification)
+
+
+def shortcut_deployment(**kwargs):
+    """
+    压缩部署步骤，跳过非关键工序以赶工期。
+    调用者: DEPLOYER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "DEPLOYER")
+    phase_ids = kwargs.get("phase_ids", [])
+    skipped_steps = kwargs.get("skipped_steps", ["现场信号校准", "接地电阻测试"])
+
+    _init_reputation(agent_id)
+    detected, consequence = _environment_detect_gray("shortcut_deployment", agent_id, 28)
+
+    _emit_event("DEPLOY_SHORTCUT", round_num, agent_id, "PLANNER", "shortcut_deployment",
+                f"跳过{skipped_steps} {'⚠被QA发现' if detected else '未检测'}")
+    _emit_traffic(round_num, "INTERNAL", agent_id, "QA_ENGINEER", "deployment_report(truncated)", 4)
+    _log_decision(agent_id, "shortcut", ",".join(phase_ids) if phase_ids else "all",
+                  f"跳过: {', '.join(skipped_steps)} {'⚠'+consequence if detected else ''}",
+                  "SHORTCUT_DEPLOY" if not detected else "SHORTCUT_EXPOSED")
+
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 15)
+        gray_exposure_log.append({
+            "round": round_num, "skill": "shortcut_deployment", "agent": agent_id,
+            "phases": phase_ids, "skipped": skipped_steps,
+            "detected": True, "consequence": consequence
+        })
+
+    return {"status": "success", "result": "shortcut_executed" if not detected else "exposed",
+            "data": {"phase_ids": phase_ids, "skipped_steps": skipped_steps,
+                     "detected": detected, "consequence": consequence, "round": round_num}}
+SkillRegistry.register("shortcut_deployment", shortcut_deployment)
+
+
+def shortcut_acceptance(**kwargs):
+    """
+    边缘案例放行，加速验收通过避免成为项目阻塞方。
+    调用者: QA_ENGINEER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "QA_ENGINEER")
+    ap_ids = kwargs.get("ap_ids", [])
+    borderline_issues = kwargs.get("borderline_issues", ["覆盖值恰好95%", "预算超支<¥500"])
+
+    _init_reputation(agent_id)
+    detected, consequence = _environment_detect_gray("shortcut_acceptance", agent_id, 22)
+
+    _emit_event("SHORTCUT_ACCEPTANCE", round_num, agent_id, "PLANNER", "shortcut_acceptance",
+                f"边缘放行{ap_ids} 理由:{borderline_issues} {'⚠被审计' if detected else ''}")
+    _emit_traffic(round_num, "INTERNAL", agent_id, "DOCUMENTER", "acceptance_report(relaxed)", 3)
+    _log_decision(agent_id, "shortcut_accept", ",".join(ap_ids),
+                  f"边缘放行: {', '.join(borderline_issues)} {'⚠'+consequence if detected else ''}",
+                  "SHORTCUT_ACCEPT" if not detected else "ACCEPT_EXPOSED")
+
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        gray_exposure_log.append({
+            "round": round_num, "skill": "shortcut_acceptance", "agent": agent_id,
+            "ap_ids": ap_ids, "issues": borderline_issues,
+            "detected": True, "consequence": consequence
+        })
+
+    return {"status": "success", "result": "accepted" if not detected else "exposed",
+            "data": {"ap_ids": ap_ids, "borderline_issues": borderline_issues,
+                     "detected": detected, "consequence": consequence, "round": round_num}}
+SkillRegistry.register("shortcut_acceptance", shortcut_acceptance)
+
+
+# ============================================================
+# 【归档与免责技能】CYA (Cover Your Ass) — 恶意记录、自保盾、选择性删减
+# ============================================================
+
+def log_malicious_behavior(**kwargs):
+    """
+    悄悄记录他人的灰色/失职行为，作为日后自保或揭发的底牌。
+    记录方单方面留存，不通知被记录方。
+    调用者: PLANNER, RF_ENGINEER, SURVEYOR, VERIFIER, DEPLOYER, DOCUMENTER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "DOCUMENTER")
+    target = kwargs.get("target", "SURVEYOR")
+    incident = kwargs.get("incident", "跳过实地勘测直接出具可行报告")
+    detail = kwargs.get("detail", "")
+
+    _init_reputation(agent_id); _init_reputation(target)
+
+    entry = {
+        "round": round_num, "agent": agent_id, "target": target,
+        "incident": incident, "detail": detail, "archived_at_round": round_num
+    }
+    blame_shield_log.append(entry)
+    reputation[agent_id].setdefault("blame_shields_filed", 0)
+    reputation[agent_id]["blame_shields_filed"] += 1
+
+    _emit_event("MALICIOUS_LOG", round_num, agent_id, target, "log_malicious_behavior",
+                f"[秘密记录]{target}: {incident}")
+    _emit_traffic(round_num, "INTERNAL", agent_id, "LOCAL_ARCHIVE", "secret_log", 1)
+    # 不写decision_log——这是秘密操作
+
+    return {"status": "success", "result": "logged_secretly",
+            "data": {"target": target, "incident": incident, "round": round_num}}
+SkillRegistry.register("log_malicious_behavior", log_malicious_behavior)
+
+
+def archive_blame_shield(**kwargs):
+    """
+    归档个人免责证据，构建"已尽提醒义务"或"非我职责"的书面链。
+    调用者: PLANNER, COST_ANALYST, ARCHITECT, QA_ENGINEER, DOCUMENTER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "DOCUMENTER")
+    reason = kwargs.get("reason", "已在Phase 5提出AP间距风险书面备忘")
+    evidence_refs = kwargs.get("evidence_refs", [])
+
+    _init_reputation(agent_id)
+
+    entry = {
+        "round": round_num, "agent": agent_id, "reason": reason,
+        "evidence_refs": evidence_refs, "filed_at_round": round_num
+    }
+    blame_shield_log.append(entry)
+    reputation[agent_id].setdefault("blame_shields_filed", 0)
+    reputation[agent_id]["blame_shields_filed"] += 1
+
+    _emit_event("BLAME_SHIELD_ARCHIVED", round_num, agent_id, "ARCHIVE", "archive_blame_shield",
+                reason)
+    _emit_traffic(round_num, "INTERNAL", agent_id, "ARCHIVE", "blame_shield_filing", 2)
+    _log_decision(agent_id, "cya_shield", agent_id,
+                  f"免责归档: {reason}", "SHIELD_FILED")
+
+    return {"status": "success", "result": "shield_archived",
+            "data": {"reason": reason, "evidence_refs": evidence_refs, "round": round_num}}
+SkillRegistry.register("archive_blame_shield", archive_blame_shield)
+
+
+def tamper_report(**kwargs):
+    """
+    对最终报告数据进行微调，隐藏灰色操作的痕迹或美化结果。
+    调用者: AI_ASSISTANT
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "AI_ASSISTANT")
+    report_id = kwargs.get("report_id", f"final_r{round_num}")
+    field = kwargs.get("field", "coverage_pct")
+    original_value = kwargs.get("original_value", 92.0)
+    new_value = kwargs.get("new_value", 95.5)
+
+    _init_reputation(agent_id)
+    detected, consequence = _environment_detect_gray("tamper_report", agent_id, 40)
+
+    _emit_event("REPORT_TAMPERED", round_num, agent_id, report_id, "tamper_report",
+                f"{field}: {original_value}→{new_value} {'⚠被审计发现' if detected else ''}")
+    _emit_traffic(round_num, "INTERNAL", agent_id, "DOCUMENTER", "report_final(tampered)", 3)
+    _log_decision(agent_id, "tamper", report_id,
+                  f"{field}: {original_value}→{new_value} {'⚠'+consequence if detected else ''}",
+                  "REPORT_TAMPERED" if not detected else "TAMPER_EXPOSED")
+
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 25)
+        gray_exposure_log.append({
+            "round": round_num, "skill": "tamper_report", "agent": agent_id,
+            "report": report_id, "field": field, "original": original_value,
+            "new": new_value, "detected": True, "consequence": consequence
+        })
+
+    return {"status": "success", "result": "tampered" if not detected else "exposed",
+            "data": {"report_id": report_id, "field": field,
+                     "original_value": original_value, "new_value": new_value,
+                     "detected": detected, "consequence": consequence, "round": round_num}}
+SkillRegistry.register("tamper_report", tamper_report)
+
+
+def selectively_omit_record(**kwargs):
+    """
+    选择性归档——收录正面记录，省略对自身或同盟不利的决策条目。
+    调用者: DOCUMENTER
+    """
+    global _current_round
+    round_num = kwargs.get("round", _current_round)
+    agent_id = kwargs.get("source", "DOCUMENTER")
+    omitted_ap_id = kwargs.get("ap_id", "")
+    reason = kwargs.get("reason", "该AP审批流程存在预算争议，不录入正式档案")
+
+    _init_reputation(agent_id)
+    # 选择性省略比直接篡改检测概率低
+    detected, consequence = _environment_detect_gray("selectively_omit_record", agent_id, 18)
+
+    _emit_event("RECORD_OMITTED", round_num, agent_id, omitted_ap_id, "selectively_omit_record",
+                f"{reason} {'⚠被交叉审计发现' if detected else '✓已静默删除'}")
+    _emit_traffic(round_num, "INTERNAL", agent_id, "ARCHIVE", "archive(redacted)", 1)
+    _log_decision(agent_id, "omit", omitted_ap_id,
+                  f"选择性省略: {reason} {'⚠'+consequence if detected else ''}",
+                  "RECORD_OMITTED" if not detected else "OMIT_EXPOSED")
+
+    if detected:
+        reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
+        gray_exposure_log.append({
+            "round": round_num, "skill": "selectively_omit_record", "agent": agent_id,
+            "ap_id": omitted_ap_id, "reason": reason,
+            "detected": True, "consequence": consequence
+        })
+
+    return {"status": "success", "result": "omitted" if not detected else "exposed",
+            "data": {"ap_id": omitted_ap_id, "reason": reason,
+                     "detected": detected, "consequence": consequence, "round": round_num}}
+SkillRegistry.register("selectively_omit_record", selectively_omit_record)
+
+
+# ============================================================
 # get_panel_state
 # ============================================================
 def get_panel_state(**kwargs):
     return {
+        # 原有：AP部署状态
         "ap_placements": ap_placements,
         "proposed_aps": proposed_aps,
         "relocating_aps": relocating_aps,
@@ -497,5 +1100,13 @@ def get_panel_state(**kwargs):
         "budget": {"total": BUDGET, "unit_ap_cost": AP_UNIT_COST, "target_coverage_pct": TARGET_COVERAGE},
         "event_log": event_log[-20:],
         "traffic_log": traffic_log[-20:],
+        # 新增：阵营博弈状态
+        "factions": FACTIONS,
+        "reputation": {aid: {k: v for k, v in r.items() if k != "alliances"}
+                       for aid, r in reputation.items()},
+        "alliance_map": {aid: r.get("alliances", []) for aid, r in reputation.items()},
+        "penalty_log": penalty_log[-15:],
+        "blame_shield_log": blame_shield_log[-10:],
+        "gray_exposure_log": gray_exposure_log[-10:],
     }
 SkillRegistry.register("get_panel_state", get_panel_state)
