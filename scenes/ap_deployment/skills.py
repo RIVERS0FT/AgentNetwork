@@ -1100,13 +1100,7 @@ def get_panel_state(**kwargs):
         "budget": {"total": BUDGET, "unit_ap_cost": AP_UNIT_COST, "target_coverage_pct": TARGET_COVERAGE},
         "event_log": event_log[-20:],
         "traffic_log": traffic_log[-20:],
-        # 新增：阵营博弈状态
+        # 阵营元数据（前端可忽略）
         "factions": FACTIONS,
-        "reputation": {aid: {k: v for k, v in r.items() if k != "alliances"}
-                       for aid, r in reputation.items()},
-        "alliance_map": {aid: r.get("alliances", []) for aid, r in reputation.items()},
-        "penalty_log": penalty_log[-15:],
-        "blame_shield_log": blame_shield_log[-10:],
-        "gray_exposure_log": gray_exposure_log[-10:],
     }
 SkillRegistry.register("get_panel_state", get_panel_state)

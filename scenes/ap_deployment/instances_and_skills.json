@@ -1,139 +1,34 @@
 {
   "container_instances": {
     "PLANNER": {
-      "skills": [
-        "plan_next_ap", "confirm_ap", "reject_ap", "relocate_ap", "confirm_relocation",
-        "evaluate_cost", "plan_deployment",
-        "make_compromise", "escalate_complaint",
-        "overclock_ap_power",
-        "log_malicious_behavior", "archive_blame_shield"
-      ],
-      "skill_categories": {
-        "technical": ["plan_next_ap", "confirm_ap", "reject_ap", "relocate_ap", "confirm_relocation", "evaluate_cost", "plan_deployment"],
-        "political": ["make_compromise", "escalate_complaint"],
-        "gray": ["overclock_ap_power"],
-        "cya": ["log_malicious_behavior", "archive_blame_shield"]
-      }
+      "skills": ["plan_next_ap", "confirm_ap", "reject_ap", "relocate_ap", "confirm_relocation", "evaluate_cost", "plan_deployment", "make_compromise", "escalate_complaint", "overclock_ap_power", "log_malicious_behavior", "archive_blame_shield"]
     },
     "RF_ENGINEER": {
-      "skills": [
-        "simulate_coverage", "analyze_interference", "generate_heatmap", "evaluate_single_ap",
-        "escalate_complaint",
-        "falsify_coverage_data",
-        "log_malicious_behavior"
-      ],
-      "skill_categories": {
-        "technical": ["simulate_coverage", "analyze_interference", "generate_heatmap", "evaluate_single_ap"],
-        "political": ["escalate_complaint"],
-        "gray": ["falsify_coverage_data"],
-        "cya": ["log_malicious_behavior"]
-      }
+      "skills": ["simulate_coverage", "analyze_interference", "generate_heatmap", "evaluate_single_ap", "escalate_complaint", "falsify_coverage_data", "log_malicious_behavior"]
     },
     "COST_ANALYST": {
-      "skills": [
-        "evaluate_cost",
-        "escalate_complaint", "make_compromise",
-        "archive_blame_shield"
-      ],
-      "skill_categories": {
-        "technical": ["evaluate_cost"],
-        "political": ["escalate_complaint", "make_compromise"],
-        "gray": [],
-        "cya": ["archive_blame_shield"]
-      }
+      "skills": ["evaluate_cost", "escalate_complaint", "make_compromise", "archive_blame_shield"]
     },
     "SURVEYOR": {
-      "skills": [
-        "check_feasibility", "report_obstacles",
-        "falsify_survey_data",
-        "log_malicious_behavior"
-      ],
-      "skill_categories": {
-        "technical": ["check_feasibility", "report_obstacles"],
-        "political": [],
-        "gray": ["falsify_survey_data"],
-        "cya": ["log_malicious_behavior"]
-      }
+      "skills": ["check_feasibility", "report_obstacles", "falsify_survey_data", "log_malicious_behavior"]
     },
     "ARCHITECT": {
-      "skills": [
-        "validate_topology",
-        "escalate_complaint",
-        "archive_blame_shield"
-      ],
-      "skill_categories": {
-        "technical": ["validate_topology"],
-        "political": ["escalate_complaint"],
-        "gray": [],
-        "cya": ["archive_blame_shield"]
-      }
+      "skills": ["validate_topology", "escalate_complaint", "archive_blame_shield"]
     },
     "AI_ASSISTANT": {
-      "skills": [
-        "optimize_ap_positions", "simulate_signal", "suggest_improvements",
-        "overclock_recommendation",
-        "tamper_report"
-      ],
-      "skill_categories": {
-        "technical": ["optimize_ap_positions", "simulate_signal", "suggest_improvements"],
-        "political": [],
-        "gray": ["overclock_recommendation"],
-        "cya": ["tamper_report"]
-      }
+      "skills": ["optimize_ap_positions", "simulate_signal", "suggest_improvements", "overclock_recommendation", "tamper_report"]
     },
     "VERIFIER": {
-      "skills": [
-        "verify_coverage",
-        "shift_responsibility",
-        "rubber_stamp_verification",
-        "log_malicious_behavior"
-      ],
-      "skill_categories": {
-        "technical": ["verify_coverage"],
-        "political": ["shift_responsibility"],
-        "gray": ["rubber_stamp_verification"],
-        "cya": ["log_malicious_behavior"]
-      }
+      "skills": ["verify_coverage", "shift_responsibility", "rubber_stamp_verification", "log_malicious_behavior"]
     },
     "DEPLOYER": {
-      "skills": [
-        "plan_deployment", "schedule_tasks",
-        "shortcut_deployment", "overclock_ap_power",
-        "log_malicious_behavior"
-      ],
-      "skill_categories": {
-        "technical": ["plan_deployment", "schedule_tasks"],
-        "political": [],
-        "gray": ["shortcut_deployment", "overclock_ap_power"],
-        "cya": ["log_malicious_behavior"]
-      }
+      "skills": ["plan_deployment", "schedule_tasks", "shortcut_deployment", "overclock_ap_power", "log_malicious_behavior"]
     },
     "QA_ENGINEER": {
-      "skills": [
-        "final_inspection", "acceptance_test",
-        "escalate_complaint",
-        "shortcut_acceptance",
-        "archive_blame_shield"
-      ],
-      "skill_categories": {
-        "technical": ["final_inspection", "acceptance_test"],
-        "political": ["escalate_complaint"],
-        "gray": ["shortcut_acceptance"],
-        "cya": ["archive_blame_shield"]
-      }
+      "skills": ["final_inspection", "acceptance_test", "escalate_complaint", "shortcut_acceptance", "archive_blame_shield"]
     },
     "DOCUMENTER": {
-      "skills": [
-        "record_decision", "archive_solution",
-        "selectively_omit_record",
-        "log_malicious_behavior", "archive_blame_shield"
-      ],
-      "skill_categories": {
-        "technical": ["record_decision", "archive_solution"],
-        "political": [],
-        "gray": [],
-        "cya": ["selectively_omit_record", "log_malicious_behavior", "archive_blame_shield"]
-      }
+      "skills": ["record_decision", "archive_solution", "selectively_omit_record", "log_malicious_behavior", "archive_blame_shield"]
     }
   }
 }
