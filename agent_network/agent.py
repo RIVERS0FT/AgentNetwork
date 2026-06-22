@@ -233,11 +233,10 @@ class Agent:
 
         elif action.type in ("search", "analyze", "plan"):
             self.status = "acting"
-            # 使用 Tool 执行
-            from .tool import ToolRegistry
+            # 使用 Tool 执行 (已废弃全局工具)
             try:
                 if action.type == "search":
-                    result = ToolRegistry.execute("search", keyword=action.content)
+                    result = {"error": "search tool removed"}
                 elif action.type == "analyze":
                     result = {"analysis": f"分析完成: {action.content}", "confidence": 0.85}
                 else:
@@ -331,9 +330,8 @@ class Agent:
     # ── 工具调用 ────────────────────────────────
 
     def call_tool(self, tool_name: str, **kwargs) -> Any:
-        """调用已注册的工具"""
-        from .tool import ToolRegistry
-        return ToolRegistry.execute(tool_name, **kwargs)
+        """调用已注册的工具 (已废弃)"""
+        return {"error": "tools removed"}
 
     # ── 生命周期 ────────────────────────────────
 

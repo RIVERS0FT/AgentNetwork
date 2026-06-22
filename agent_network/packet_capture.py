@@ -170,7 +170,6 @@ def _flush_aggregated(agent_id: str, server_url: str, connections: dict,
                 "port": data["external_port"],
             },
             "action": {"name": f"SEND" if direction == "out" else "RECV", "status": f"{data['count']} packets"},
-            "message": f"{dir_label} {agent_id} → {data['host']}:{data['external_port']} {data['count']}pkts {data['total_bytes']}B",
             "payload": {
                 "line_summary": f"{dir_label}: {data['count']} packets, {data['total_bytes']} bytes",
                 "capture_source": "tcpdump",

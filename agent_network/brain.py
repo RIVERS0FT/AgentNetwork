@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-from .llm_parser import get_api_config
+from .scene_def import get_api_config
 
 
 FACT_BOARD_SECTIONS = [
