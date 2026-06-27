@@ -1,9 +1,11 @@
+import json
 import os
 from typing import Optional
 
 import requests
 
-from .base import AgentContext, AgentRunResult
+from .base import BackendAdapter, AgentContext, AgentRunResult
+from agent_network.skill_md_loader import load_scene_skill_registry
 
 
 def _first_env(*names: str) -> str:
@@ -138,9 +140,8 @@ def _completed_event(agent_context: AgentContext, output_text: str, backend_name
 def run_direct_llm(agent_context: AgentContext, backend_name: str, system_prompt: str, user_payload: str) -> AgentRunResult:
     """Run a real LLM call without requiring a framework-specific agent SDK.
 
-    This is a production fallback for deployments that have model credentials but do
-    not have OpenCLAW / Claude Agent SDK installed. It does not expose MCP tools;
-    when those SDKs are available, the adapters use their native MCP integrations.
+    This backend does not expose MCP tools. Use AGENT_BACKEND=direct_llm only
+    when you intentionally want a plain model call instead of OpenCLAW / Claude.
     """
     try:
         provider = _provider()
@@ -168,4 +169,92 @@ def run_direct_llm(agent_context: AgentContext, backend_name: str, system_prompt
             status="error",
             final_message="",
             error=f"{backend_name} direct LLM error: {exc}",
+        )
+
+
+def _unique(items: list[str]) -> list[str]:
+    return list(dict.fromkeys([item for item in items if item]))
+
+
+def _skill_names(agent_context: AgentContext) -> list[str]:
+    names = list(getattr(agent_context, "allowed_skills", []) or [])
+    if not names:
+        for item in agent_context.skills or []:
+            if isinstance(item, dict):
+                names.append(item.get("name") or item.get("skill_name") or "")
+            elif isinstance(item, str):
+                names.append(item)
+    return _unique(names)
+
+
+def _skill_context(agent_context: AgentContext) -> list[dict]:
+    scene_key = agent_context.scene_key or os.environ.get("AGENT_SCENE_KEY", "default")
+    scenes_root = os.environ.get("AGENT_SCENES_ROOT", "/app/scenes")
+    registry = load_scene_skill_registry(
+        scene_key=scene_key,
+        scenes_root=scenes_root,
+        allowed_skills=_skill_names(agent_context),
+    )
+    specs = registry.context_specs()
+    if specs:
+        return specs
+    return [item for item in (agent_context.skills or []) if isinstance(item, dict)]
+
+
+def _system_prompt(agent_context: AgentContext) -> str:
+    return (
+        f"You are {agent_context.agent_name} ({agent_context.agent_id}).\n"
+        f"Role: {agent_context.role}\n"
+        f"Core Goal: {agent_context.core_goal}\n"
+        f"Trace ID: {agent_context.trace_id}\n"
+        "This is the explicit direct_llm backend. No OpenCLAW Gateway, SDK, "
+        "agent runtime, or MCP tool integration is available in this mode."
+    )
+
+
+def _build_task_payload(agent_context: AgentContext) -> str:
+    payload = {
+        "task": agent_context.task,
+        "trace_id": agent_context.trace_id,
+        "scene_key": agent_context.scene_key,
+        "agent": {
+            "agent_id": agent_context.agent_id,
+            "name": agent_context.agent_name,
+            "role": agent_context.role,
+            "core_goal": agent_context.core_goal,
+        },
+        "messages": agent_context.messages,
+        "allowed_skills": _skill_names(agent_context),
+        "skills": _skill_context(agent_context),
+        "allowed_tools": agent_context.allowed_tools,
+        "permissions": agent_context.permissions,
+        "state_snapshot": agent_context.state_snapshot,
+        "tick": agent_context.tick,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+class DirectLLMAdapter(BackendAdapter):
+    def run_agent_task(self, agent_context: AgentContext) -> AgentRunResult:
+        if os.environ.get("MOCK_LLM") == "1":
+            output_text = "[MOCK_LLM] Dummy response from direct_llm"
+            return AgentRunResult(
+                trace_id=agent_context.trace_id,
+                agent_id=agent_context.agent_id,
+                status="completed",
+                final_message=output_text,
+                application_events=[_completed_event(agent_context, output_text, "direct_llm")],
+                tool_events=[],
+                state_changes=[],
+                outbound_messages=[],
+                traffic_events=[],
+                audit_events=[],
+                error=None,
+            )
+
+        return run_direct_llm(
+            agent_context,
+            backend_name="direct_llm",
+            system_prompt=_system_prompt(agent_context),
+            user_payload=_build_task_payload(agent_context),
         )
