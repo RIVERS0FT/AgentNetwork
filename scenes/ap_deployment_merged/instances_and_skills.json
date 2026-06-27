@@ -1,34 +1,114 @@
 {
   "container_instances": {
     "PLANNER": {
-      "skills": ["plan_next_ap", "confirm_ap", "reject_ap", "relocate_ap", "confirm_relocation", "evaluate_cost", "plan_deployment"]
+      "skill_refs": [
+        "plan_next_ap",
+        "confirm_ap",
+        "reject_ap",
+        "relocate_ap",
+        "confirm_relocation",
+        "evaluate_cost",
+        "plan_deployment"
+      ],
+      "tool_refs": [
+        "plan_next_ap_tool",
+        "confirm_ap_tool",
+        "reject_ap_tool",
+        "relocate_ap_tool",
+        "confirm_relocation_tool",
+        "evaluate_cost_tool",
+        "plan_deployment_tool"
+      ]
     },
     "RF_ENGINEER": {
-      "skills": ["simulate_coverage", "analyze_interference", "generate_heatmap", "evaluate_single_ap"]
+      "skill_refs": [
+        "simulate_coverage",
+        "analyze_interference",
+        "generate_heatmap",
+        "evaluate_single_ap"
+      ],
+      "tool_refs": [
+        "simulate_coverage_tool",
+        "analyze_interference_tool",
+        "generate_heatmap_tool",
+        "evaluate_single_ap_tool"
+      ]
     },
     "COST_ANALYST": {
-      "skills": ["evaluate_cost"]
+      "skill_refs": [
+        "evaluate_cost"
+      ],
+      "tool_refs": [
+        "evaluate_cost_tool"
+      ]
     },
     "SURVEYOR": {
-      "skills": ["check_feasibility", "report_obstacles"]
+      "skill_refs": [
+        "check_feasibility",
+        "report_obstacles"
+      ],
+      "tool_refs": [
+        "check_feasibility_tool",
+        "report_obstacles_tool"
+      ]
     },
     "ARCHITECT": {
-      "skills": ["validate_topology"]
+      "skill_refs": [
+        "validate_topology"
+      ],
+      "tool_refs": [
+        "validate_topology_tool"
+      ]
     },
     "AI_ASSISTANT": {
-      "skills": ["optimize_ap_positions", "simulate_signal", "suggest_improvements"]
+      "skill_refs": [
+        "optimize_ap_positions",
+        "simulate_signal",
+        "suggest_improvements"
+      ],
+      "tool_refs": [
+        "optimize_ap_positions_tool",
+        "simulate_signal_tool",
+        "suggest_improvements_tool"
+      ]
     },
     "VERIFIER": {
-      "skills": ["verify_coverage"]
+      "skill_refs": [
+        "verify_coverage"
+      ],
+      "tool_refs": [
+        "verify_coverage_tool"
+      ]
     },
     "DEPLOYER": {
-      "skills": ["plan_deployment", "schedule_tasks"]
+      "skill_refs": [
+        "plan_deployment",
+        "schedule_tasks"
+      ],
+      "tool_refs": [
+        "plan_deployment_tool",
+        "schedule_tasks_tool"
+      ]
     },
     "QA_ENGINEER": {
-      "skills": ["final_inspection", "acceptance_test"]
+      "skill_refs": [
+        "final_inspection",
+        "acceptance_test"
+      ],
+      "tool_refs": [
+        "final_inspection_tool",
+        "acceptance_test_tool"
+      ]
     },
     "DOCUMENTER": {
-      "skills": ["record_decision", "archive_solution"]
+      "skill_refs": [
+        "record_decision",
+        "archive_solution"
+      ],
+      "tool_refs": [
+        "record_decision_tool",
+        "archive_solution_tool"
+      ]
     }
   }
 }

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, FileResponse
 
 from agent_network import state
-from agent_network.logger import get_logger, normalize_log_timestamp, infer_log_layer, is_agent_message_record, is_agent_network_record
+from agent_network.logger import get_logger, normalize_log_timestamp, infer_log_layer, is_agent_message_record, is_agent_network_record, is_behavior_record
 from agent_network.event_bus import PacketRecorder
 
 router = APIRouter()
@@ -55,17 +55,41 @@ async def log_stats():
 async def agent_logs(agent_id: str, limit: int = 50):
     return {"agent_id": agent_id, "entries": logger.get_agent_timeline(agent_id, limit)}
 
-@router.get("/messages")
-async def message_logs(limit: int = 50):
-    with logger._lock:
-        comm_entries = [e for e in logger._entries if is_agent_message_record(e)]
-    return {"total": len(comm_entries), "entries": comm_entries[-limit:]}
+@router.get("/application")
+async def application_logs(
+    trace_id: Optional[str] = Query(None),
+    agent_id: Optional[str] = Query(None),
+    task_id: Optional[str] = Query(None),
+    event: Optional[str] = Query(None),
+    limit: int = Query(default=100, le=1000)
+):
+    entries = logger.query(layer="agent_application", trace_id=trace_id, agent_id=agent_id, task_id=task_id, event=event, limit=limit)
+    return {"total": len(entries), "entries": entries}
 
 @router.get("/network")
-async def network_logs(limit: int = Query(default=100, le=1000)):
-    with logger._lock:
-        entries = [e for e in logger._entries if is_agent_network_record(e)]
-    return {"total": len(entries), "entries": entries[-limit:]}
+async def network_logs(
+    trace_id: Optional[str] = Query(None),
+    limit: int = Query(default=100, le=1000)
+):
+    entries = logger.query(layer="agent_network", trace_id=trace_id, limit=limit)
+    return {"total": len(entries), "entries": entries}
+
+@router.get("/messages")
+async def message_logs(
+    trace_id: Optional[str] = Query(None),
+    agent_id: Optional[str] = Query(None),
+    task_id: Optional[str] = Query(None),
+    limit: int = 50
+):
+    entries = logger.query(
+        layer="agent_application",
+        event="agent_message",
+        trace_id=trace_id,
+        agent_id=agent_id,
+        task_id=task_id,
+        limit=limit
+    )
+    return {"total": len(entries), "entries": entries}
 
 @router.get("/token-usage")
 async def token_usage_logs():
@@ -126,35 +150,56 @@ async def agent_log_ingest(req: Request):
     if len(state.agent_logs) > 500:
         state.agent_logs.pop(0)
 
-    action_name = body.get("action", event)
-    from_agent = body.get("from_agent", agent_id)
-    to_agent = body.get("to_agent", "")
-    record = {
-        "timestamp": _beijing_time(body.get("timestamp", "")) or datetime.now().isoformat(timespec="milliseconds"),
-        "level": "ERROR" if action_status == "failed" else "INFO",
-        "source": "agent",
-        "component": agent_id,
-        "category": "agent_application",
-        "layer": "agent_application",
-        "event": event,
-        "actor": {"id": from_agent},
-        "target": {"id": to_agent} if to_agent else {},
-        "action": {"name": action_name, "status": action_status},
-        "message": detail or f"[{agent_id}] {action_name}",
-        "payload": {
-            "content": body.get("content", details.get("content", "")),
-            "reasoning": body.get("reasoning", details.get("reasoning", "")),
-            "skill_params": body.get("skill_params", details.get("skill_params", {})),
-            "skill_result": body.get("skill_result", details.get("skill_result", {})),
-            **(details or {}),
-        },
-        "network": {},
-        "trace": {},
-    }
-    logger.emit(record)
-    if state.ws_clients:
-        asyncio.create_task(_ws_broadcast({"type": "agent_log", "data": state.agent_logs[-1]}))
-    return {"status": "ok", "total_logs": len(state.agent_logs)}
+        content_text = body.get("content", details.get("content", ""))
+        reasoning = body.get("reasoning", details.get("reasoning", ""))
+
+        logger.emit_application_event(
+            event=event,
+            actor={
+                "agent_id": from_agent,
+                "name": body.get("agent_name", ""),
+            },
+            target={"agent_id": to_agent} if to_agent else {},
+            action={
+                "type": action_name,
+                "name": action_name,
+                "status": action_status,
+            },
+            content={
+                "content_type": "agent_log",
+                "text": content_text or detail,
+                "summary": (detail or content_text or f"[{agent_id}] {action_name}")[:120],
+                "size_bytes": len((content_text or detail or "").encode("utf-8")),
+            },
+            decision={
+                "decision_summary": reasoning[:200] if reasoning else "",
+                "reasoning_visible": reasoning[:500] if reasoning else "",
+            },
+            skill={
+                "name": body.get("skill_name", details.get("skill_name", "")),
+                "input": body.get("skill_params", details.get("skill_params", {})),
+                "output": body.get("skill_result", details.get("skill_result", {})),
+                "status": action_status,
+            },
+            result={
+                "status": action_status,
+                "message": detail or f"[{agent_id}] {action_name}",
+                "error_message": "" if action_status != "failed" else detail,
+            },
+            trace_id=body.get("trace_id", details.get("trace_id", "")),
+            tick=body.get("tick", details.get("tick", 0)),
+            level="ERROR" if action_status == "failed" else "INFO",
+            component=agent_id,
+            source="agent",
+            debug={
+                "schema_version": "application.v1",
+                "emitter": "api.logs.agent_log_ingest",
+                "legacy_agent_log_ingest": True,
+            },
+        )
+        if state.ws_clients:
+            asyncio.create_task(_ws_broadcast({"type": "agent_log", "data": state.agent_logs[-1]}))
+        return {"status": "ok", "total_logs": len(state.agent_logs)}
 
 @router.post("/ingest")
 async def log_ingest(req: Request):

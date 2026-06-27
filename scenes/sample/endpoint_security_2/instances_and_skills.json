@@ -1,58 +1,97 @@
 {
   "container_instances": {
     "SEC_OP_CENTER": {
-      "skills": [
+      "skill_refs": [
         "incident_response",
         "budget_management",
         "threat_intel"
+      ],
+      "tool_refs": [
+        "incident_response_tool",
+        "budget_management_tool",
+        "threat_intel_tool"
       ]
     },
     "SERES_MFG": {
-      "skills": [
+      "skill_refs": [
         "production_optimization",
         "vendor_evaluation"
+      ],
+      "tool_refs": [
+        "production_optimization_tool",
+        "vendor_evaluation_tool"
       ]
     },
     "CSG_ICS": {
-      "skills": [
+      "skill_refs": [
         "vulnerability_assessment",
         "stability_analysis",
         "policy_negotiation"
+      ],
+      "tool_refs": [
+        "vulnerability_assessment_tool",
+        "stability_analysis_tool",
+        "policy_negotiation_tool"
       ]
     },
     "ICBC_DATA": {
-      "skills": [
+      "skill_refs": [
         "encryption_audit",
         "compliance_check",
         "budget_planning"
+      ],
+      "tool_refs": [
+        "encryption_audit_tool",
+        "compliance_check_tool",
+        "budget_planning_tool"
       ]
     },
     "XDU_LAB": {
-      "skills": [
+      "skill_refs": [
         "ml_model_training",
         "traffic_analysis",
         "prototype_testing"
+      ],
+      "tool_refs": [
+        "ml_model_training_tool",
+        "traffic_analysis_tool",
+        "prototype_testing_tool"
       ]
     },
     "FW_VENDOR": {
-      "skills": [
+      "skill_refs": [
         "product_development",
         "market_analysis",
         "competitive_intel"
+      ],
+      "tool_refs": [
+        "product_development_tool",
+        "market_analysis_tool",
+        "competitive_intel_tool"
       ]
     },
     "ETA_VENDOR": {
-      "skills": [
+      "skill_refs": [
         "sales_negotiation",
         "deployment_support",
         "revenue_forecast"
+      ],
+      "tool_refs": [
+        "sales_negotiation_tool",
+        "deployment_support_tool",
+        "revenue_forecast_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "standard_setting",
         "penalty_assessment",
         "coverage_monitoring"
+      ],
+      "tool_refs": [
+        "standard_setting_tool",
+        "penalty_assessment_tool",
+        "coverage_monitoring_tool"
       ]
     }
   }

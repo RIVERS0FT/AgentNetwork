@@ -1,63 +1,103 @@
 {
   "container_instances": {
     "TEL_A_CEO": {
-      "skills": [
+      "skill_refs": [
         "make_strategic_decision",
         "approve_budget"
+      ],
+      "tool_refs": [
+        "make_strategic_decision_tool",
+        "approve_budget_tool"
       ]
     },
     "TEL_A_CTO": {
-      "skills": [
+      "skill_refs": [
         "plan_network_deployment",
         "calculate_cost"
+      ],
+      "tool_refs": [
+        "plan_network_deployment_tool",
+        "calculate_cost_tool"
       ]
     },
     "TEL_A_CMO": {
-      "skills": [
+      "skill_refs": [
         "run_marketing_campaign",
         "analyze_customer_satisfaction"
+      ],
+      "tool_refs": [
+        "run_marketing_campaign_tool",
+        "analyze_customer_satisfaction_tool"
       ]
     },
     "TEL_B_CEO": {
-      "skills": [
+      "skill_refs": [
         "negotiate_partnership",
         "set_competitive_price"
+      ],
+      "tool_refs": [
+        "negotiate_partnership_tool",
+        "set_competitive_price_tool"
       ]
     },
     "TEL_B_CTO": {
-      "skills": [
+      "skill_refs": [
         "develop_new_service",
         "optimize_network_cost"
+      ],
+      "tool_refs": [
+        "develop_new_service_tool",
+        "optimize_network_cost_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "allocate_spectrum",
         "enforce_compliance"
+      ],
+      "tool_refs": [
+        "allocate_spectrum_tool",
+        "enforce_compliance_tool"
       ]
     },
     "SUPPLIER_1": {
-      "skills": [
+      "skill_refs": [
         "bid_for_contract",
         "deliver_equipment"
+      ],
+      "tool_refs": [
+        "bid_for_contract_tool",
+        "deliver_equipment_tool"
       ]
     },
     "SUPPLIER_2": {
-      "skills": [
+      "skill_refs": [
         "bid_for_contract",
         "deliver_materials"
+      ],
+      "tool_refs": [
+        "bid_for_contract_tool",
+        "deliver_materials_tool"
       ]
     },
     "CONSUMER_GROUP": {
-      "skills": [
+      "skill_refs": [
         "survey_customers",
         "file_complaint"
+      ],
+      "tool_refs": [
+        "survey_customers_tool",
+        "file_complaint_tool"
       ]
     },
     "NEW_ENTRANT": {
-      "skills": [
+      "skill_refs": [
         "lease_network",
         "launch_service"
+      ],
+      "tool_refs": [
+        "lease_network_tool",
+        "launch_service_tool"
       ]
     }
   }

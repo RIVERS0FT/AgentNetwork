@@ -1,54 +1,85 @@
 {
   "container_instances": {
     "CMDR_01": {
-      "skills": [
+      "skill_refs": [
         "initialize_minesweeper_map",
         "query_game_status"
+      ],
+      "tool_refs": [
+        "initialize_minesweeper_map_tool",
+        "query_game_status_tool"
       ]
     },
     "SOLDIER_01": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     },
     "SOLDIER_02": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     },
     "SOLDIER_03": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     },
     "SOLDIER_04": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     },
     "SOLDIER_05": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     },
     "SOLDIER_06": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     },
     "SOLDIER_07": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     },
     "SOLDIER_08": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     },
     "SOLDIER_09": {
-      "skills": [
+      "skill_refs": [
         "move_and_reconnaissance"
+      ],
+      "tool_refs": [
+        "move_and_reconnaissance_tool"
       ]
     }
   }

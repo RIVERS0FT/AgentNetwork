@@ -1,74 +1,125 @@
 {
   "container_instances": {
     "BANK_DC": {
-      "skills": [
+      "skill_refs": [
         "negotiate_contract",
         "evaluate_vendor",
         "monitor_sla"
+      ],
+      "tool_refs": [
+        "negotiate_contract_tool",
+        "evaluate_vendor_tool",
+        "monitor_sla_tool"
       ]
     },
     "GOV_INFRA": {
-      "skills": [
+      "skill_refs": [
         "negotiate_contract",
         "audit_compliance",
         "approve_budget"
+      ],
+      "tool_refs": [
+        "negotiate_contract_tool",
+        "audit_compliance_tool",
+        "approve_budget_tool"
       ]
     },
     "UNIV_NET": {
-      "skills": [
+      "skill_refs": [
         "troubleshoot_network",
         "request_proposal",
         "train_staff"
+      ],
+      "tool_refs": [
+        "troubleshoot_network_tool",
+        "request_proposal_tool",
+        "train_staff_tool"
       ]
     },
     "AI_PROVIDER": {
-      "skills": [
+      "skill_refs": [
         "demo_platform",
         "customize_interface",
         "propose_integration",
         "calculate_roi"
+      ],
+      "tool_refs": [
+        "demo_platform_tool",
+        "customize_interface_tool",
+        "propose_integration_tool",
+        "calculate_roi_tool"
       ]
     },
     "AGENT_A": {
-      "skills": [
+      "skill_refs": [
         "protect_exclusive_access",
         "negotiate_terms",
         "provide_support"
+      ],
+      "tool_refs": [
+        "protect_exclusive_access_tool",
+        "negotiate_terms_tool",
+        "provide_support_tool"
       ]
     },
     "AGENT_B": {
-      "skills": [
+      "skill_refs": [
         "protect_exclusive_access",
         "negotiate_terms",
         "provide_support"
+      ],
+      "tool_refs": [
+        "protect_exclusive_access_tool",
+        "negotiate_terms_tool",
+        "provide_support_tool"
       ]
     },
     "AGENT_C": {
-      "skills": [
+      "skill_refs": [
         "collaborate_integration",
         "share_data",
         "expand_service"
+      ],
+      "tool_refs": [
+        "collaborate_integration_tool",
+        "share_data_tool",
+        "expand_service_tool"
       ]
     },
     "IT_OUTSOURCER": {
-      "skills": [
+      "skill_refs": [
         "perform_maintenance",
         "report_incident",
         "upskill_team"
+      ],
+      "tool_refs": [
+        "perform_maintenance_tool",
+        "report_incident_tool",
+        "upskill_team_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "draft_standard",
         "enforce_compliance",
         "mediate_dispute"
+      ],
+      "tool_refs": [
+        "draft_standard_tool",
+        "enforce_compliance_tool",
+        "mediate_dispute_tool"
       ]
     },
     "VENDOR_OEM": {
-      "skills": [
+      "skill_refs": [
         "lobby_against_standard",
         "offer_incentive",
         "delay_cooperation"
+      ],
+      "tool_refs": [
+        "lobby_against_standard_tool",
+        "offer_incentive_tool",
+        "delay_cooperation_tool"
       ]
     }
   }

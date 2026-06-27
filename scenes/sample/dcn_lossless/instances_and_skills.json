@@ -1,73 +1,123 @@
 {
   "container_instances": {
     "BOCOM_DC": {
-      "skills": [
+      "skill_refs": [
         "monitor_network",
         "report_anomaly",
         "request_support"
+      ],
+      "tool_refs": [
+        "monitor_network_tool",
+        "report_anomaly_tool",
+        "request_support_tool"
       ]
     },
     "ICBC_FINTECH": {
-      "skills": [
+      "skill_refs": [
         "evaluate_budget",
         "negotiate_contract",
         "approve_plan"
+      ],
+      "tool_refs": [
+        "evaluate_budget_tool",
+        "negotiate_contract_tool",
+        "approve_plan_tool"
       ]
     },
     "CHIP_VENDOR": {
-      "skills": [
+      "skill_refs": [
         "propose_chip",
         "offer_discount",
         "benchmark_performance"
+      ],
+      "tool_refs": [
+        "propose_chip_tool",
+        "offer_discount_tool",
+        "benchmark_performance_tool"
       ]
     },
     "INTEGRATOR": {
-      "skills": [
+      "skill_refs": [
         "design_solution",
         "quote_price",
         "schedule_deployment"
+      ],
+      "tool_refs": [
+        "design_solution_tool",
+        "quote_price_tool",
+        "schedule_deployment_tool"
       ]
     },
     "TEST_LAB": {
-      "skills": [
+      "skill_refs": [
         "run_test",
         "generate_report",
         "verify_compliance"
+      ],
+      "tool_refs": [
+        "run_test_tool",
+        "generate_report_tool",
+        "verify_compliance_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "issue_standard",
         "audit_compliance",
         "penalize_noncompliance"
+      ],
+      "tool_refs": [
+        "issue_standard_tool",
+        "audit_compliance_tool",
+        "penalize_noncompliance_tool"
       ]
     },
     "BOCOM_DEV": {
-      "skills": [
+      "skill_refs": [
         "test_application",
         "report_downtime",
         "request_stability"
+      ],
+      "tool_refs": [
+        "test_application_tool",
+        "report_downtime_tool",
+        "request_stability_tool"
       ]
     },
     "ICBC_NET": {
-      "skills": [
+      "skill_refs": [
         "deploy_update",
         "monitor_traffic",
         "rollback_change"
+      ],
+      "tool_refs": [
+        "deploy_update_tool",
+        "monitor_traffic_tool",
+        "rollback_change_tool"
       ]
     },
     "CHIP_RIVAL": {
-      "skills": [
+      "skill_refs": [
         "propose_alternative",
         "undercut_price",
         "lobby_decision"
+      ],
+      "tool_refs": [
+        "propose_alternative_tool",
+        "undercut_price_tool",
+        "lobby_decision_tool"
       ]
     },
     "CONSULTANT": {
-      "skills": [
+      "skill_refs": [
         "analyze_market",
         "write_report",
         "advise_strategy"
+      ],
+      "tool_refs": [
+        "analyze_market_tool",
+        "write_report_tool",
+        "advise_strategy_tool"
       ]
     }
   }

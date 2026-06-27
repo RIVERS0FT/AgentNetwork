@@ -1,19 +1,23 @@
-from fastapi import APIRouter, HTTPException, Request
-from typing import Dict, Any, List
+import os
 import json
+from datetime import datetime
+from typing import Dict, Any, List
+from fastapi import APIRouter, HTTPException, Request
+
 try:
     import psutil
 except ImportError:
     psutil = None
 
 from agent_network import state
-from agent_network.agent import AgentRegistry
-from datetime import datetime
+from agent_network.agent_model import AgentRegistry
 from agent_network.event_bus import PacketRecorder
 from agent_network.logger import get_logger
+from agent_network.comm import RemoteBus
 
 router = APIRouter()
 logger = get_logger()
+comm = RemoteBus(message_bus_url=state.MESSAGE_BUS_URL)
 
 # ═══════════════════════════════════════════════
 # 统计 & 设置
@@ -45,10 +49,10 @@ async def system_stats():
             "simulations_run": state.service_state["simulations_run"],
         },
         "agents": AgentRegistry.get_stats(),
-        "tools": {"registered": 0, "stats": {"total_calls": 0}},
-        "skills": {
-            "registered": len(state.active_skills_module.SkillRegistry.list_skills()) 
-            if state.active_skills_module and hasattr(state.active_skills_module, "SkillRegistry") else 0
+        "tools": {
+            "registered": len(state.active_tools_module.ToolRegistry.list_tools())
+            if state.active_tools_module and hasattr(state.active_tools_module, "ToolRegistry") else 0,
+            "stats": {"total_calls": 0}
         },
         "packets": PacketRecorder.get_stats(),
         "logs": logger.get_index_stats(),
@@ -60,6 +64,7 @@ async def system_stats():
     }
     return stats
 
+
 @router.get("/settings")
 async def get_settings():
     """获取当前配置 (优先从 config.json 读取)"""
@@ -68,6 +73,7 @@ async def get_settings():
             return json.load(f)
     except FileNotFoundError:
         return {}
+
 
 @router.post("/settings")
 async def update_settings(req: Request):
@@ -82,8 +88,7 @@ async def update_settings(req: Request):
     config.update(data)
     with open("config.json", "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
-    
-    # Reload engine if active
+
     if state.service_state.get("active_engine"):
         eng = state.service_state["active_engine"]
         if hasattr(eng, "reload_config"):
@@ -91,46 +96,51 @@ async def update_settings(req: Request):
 
     return {"status": "success"}
 
+
 # ═══════════════════════════════════════════════
-# 工具与技能 (兜底)
+# 工具与技能调试接口
 # ═══════════════════════════════════════════════
 
 @router.get("/tools")
 async def list_tools():
-    """列出所有已注册工具"""
+    """列出当前场景 ToolRegistry 中的原子工具。"""
+    if state.active_tools_module and hasattr(state.active_tools_module, "ToolRegistry"):
+        return {"tools": state.active_tools_module.ToolRegistry.list_tools()}
     return {"tools": []}
+
 
 @router.post("/tools/execute")
 async def execute_tool(req: Request):
-    """执行工具"""
-    raise HTTPException(status_code=404, detail="Tools have been removed from the platform.")
+    """Debug-only direct Tool execution.
+
+    Normal Agent execution must go through backend-native MCP tool calling. This
+    endpoint is disabled by default to avoid a second production tool path.
+    """
+    if os.environ.get("ENABLE_DEBUG_TOOL_EXECUTE") != "1":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Direct server-side tool execution is disabled. "
+                "Tools should be called through backend-native MCP tool calling."
+            )
+        )
+
+    data = await req.json()
+    tool_name = data.get("tool_name")
+    params = data.get("params", {})
+    if state.active_tools_module and hasattr(state.active_tools_module, "ToolRegistry"):
+        try:
+            result = state.active_tools_module.ToolRegistry.execute(tool_name, **params)
+            return {"tool": tool_name, "result": result}
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found. Active scene has no tools.")
+
 
 @router.get("/tools/stats")
 async def tool_stats():
     """工具调用统计"""
     return {"total_calls": 0}
-
-@router.get("/skills")
-async def list_skills():
-    """列出所有已注册技能"""
-    if state.active_skills_module and hasattr(state.active_skills_module, "SkillRegistry"):
-        return {"skills": state.active_skills_module.SkillRegistry.list_skills()}
-    return {"skills": []}
-
-@router.post("/skills/execute")
-async def execute_skill(req: Request):
-    """执行技能 — 优先用场景 skills，找不到则回退抛出 404"""
-    data = await req.json()
-    skill_name = data.get("skill_name")
-    params = data.get("params", {})
-    if state.active_skills_module and hasattr(state.active_skills_module, "SkillRegistry"):
-        try:
-            result = state.active_skills_module.SkillRegistry.execute(skill_name, **params)
-            return {"skill": skill_name, "result": result}
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-            
-    # 兜底方案：如果当前场景没有技能模块或未找到技能
-    raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found. Active scene has no skills.")

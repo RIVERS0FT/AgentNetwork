@@ -1,80 +1,60 @@
 # 启动: docker compose up -d --build
 
-x-brain: &brain
-  build: { context: ., dockerfile: docker/Dockerfile }
-  cap_add: [NET_RAW, NET_ADMIN]
-  environment:
-    TZ: Asia/Shanghai
-    AGENT_BACKEND: brain
-    MESSAGE_BUS_URL: http://bus:9000
-    SERVER_URL: http://srv:8000
-    LOG_DOCKER_HTTP: "0"
-    LOG_TRAFFIC: "0"
-    LOG_LLM_API: "1"
-    LLM_API_KEY: ${ANTHROPIC_API_KEY}
-    LLM_MODEL: deepseek-chat
-    LLM_API_BASE: https://api.deepseek.com/v1
-    LLM_PROVIDER: openai
-    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
-    AGENT_MESSAGE_HISTORY_TURNS: ${AGENT_MESSAGE_HISTORY_TURNS:-8}
-    AGENT_RECENT_HISTORY_TURNS: ${AGENT_RECENT_HISTORY_TURNS:-2}
-    AGENT_FACT_BOARD_MAX_ITEMS: ${AGENT_FACT_BOARD_MAX_ITEMS:-40}
-    AGENT_FACT_BOARD_MAX_CHARS: ${AGENT_FACT_BOARD_MAX_CHARS:-6000}
-    AGENT_FACT_ITEM_MAX_CHARS: ${AGENT_FACT_ITEM_MAX_CHARS:-300}
-  volumes: ["./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network"]
-  restart: unless-stopped
-  networks: [an]
+x-claude-env: &claude-env
+  TZ: Asia/Shanghai
+  MOCK_LLM: "1"
+  AGENT_BACKEND: claude-code
+  MESSAGE_BUS_URL: http://bus:9000
+  SERVER_URL: http://srv:8000
+  LOG_DOCKER_HTTP: "0"
+  LOG_TRAFFIC: "0"
+  LOG_LLM_API: "1"
+  LLM_API_KEY: ${ANTHROPIC_API_KEY}
+  LLM_MODEL: deepseek-chat
+  LLM_API_BASE: https://api.deepseek.com/v1
+  LLM_PROVIDER: openai
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+  AGENT_MESSAGE_HISTORY_TURNS: ${AGENT_MESSAGE_HISTORY_TURNS:-8}
+  AGENT_RECENT_HISTORY_TURNS: ${AGENT_RECENT_HISTORY_TURNS:-2}
+  AGENT_FACT_BOARD_MAX_ITEMS: ${AGENT_FACT_BOARD_MAX_ITEMS:-40}
+  AGENT_FACT_BOARD_MAX_CHARS: ${AGENT_FACT_BOARD_MAX_CHARS:-6000}
+  AGENT_FACT_ITEM_MAX_CHARS: ${AGENT_FACT_ITEM_MAX_CHARS:-300}
+
+x-openclaw-env: &openclaw-env
+  TZ: Asia/Shanghai
+  MOCK_LLM: "1"
+  AGENT_BACKEND: openclaw
+  MESSAGE_BUS_URL: http://bus:9000
+  SERVER_URL: http://srv:8000
+  LOG_DOCKER_HTTP: "0"
+  LOG_TRAFFIC: "0"
+  LOG_LLM_API: "1"
+  LLM_API_KEY: ${ANTHROPIC_API_KEY}
+  LLM_MODEL: deepseek-chat
+  LLM_API_BASE: https://api.deepseek.com/v1
+  LLM_PROVIDER: openai
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+  AGENT_MESSAGE_HISTORY_TURNS: ${AGENT_MESSAGE_HISTORY_TURNS:-8}
+  AGENT_RECENT_HISTORY_TURNS: ${AGENT_RECENT_HISTORY_TURNS:-2}
+  AGENT_FACT_BOARD_MAX_ITEMS: ${AGENT_FACT_BOARD_MAX_ITEMS:-40}
+  AGENT_FACT_BOARD_MAX_CHARS: ${AGENT_FACT_BOARD_MAX_CHARS:-6000}
+  AGENT_FACT_ITEM_MAX_CHARS: ${AGENT_FACT_ITEM_MAX_CHARS:-300}
 
 x-claude: &claude
   build: { context: ., dockerfile: docker/Dockerfile.claude }
   cap_add: [NET_RAW, NET_ADMIN]
-  environment:
-    TZ: Asia/Shanghai
-    AGENT_BACKEND: claude-code
-    MESSAGE_BUS_URL: http://bus:9000
-    SERVER_URL: http://srv:8000
-    LOG_DOCKER_HTTP: "0"
-    LOG_TRAFFIC: "0"
-    LOG_LLM_API: "1"
-    LLM_API_KEY: ${ANTHROPIC_API_KEY}
-    LLM_MODEL: deepseek-chat
-    LLM_API_BASE: https://api.deepseek.com/v1
-    LLM_PROVIDER: openai
-    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
-    AGENT_MESSAGE_HISTORY_TURNS: ${AGENT_MESSAGE_HISTORY_TURNS:-8}
-    AGENT_RECENT_HISTORY_TURNS: ${AGENT_RECENT_HISTORY_TURNS:-2}
-    AGENT_FACT_BOARD_MAX_ITEMS: ${AGENT_FACT_BOARD_MAX_ITEMS:-40}
-    AGENT_FACT_BOARD_MAX_CHARS: ${AGENT_FACT_BOARD_MAX_CHARS:-6000}
-    AGENT_FACT_ITEM_MAX_CHARS: ${AGENT_FACT_ITEM_MAX_CHARS:-300}
-  volumes: ["./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network"]
+  environment: *claude-env
+  volumes: ["./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network", "./scenes:/app/scenes:ro"]
   restart: unless-stopped
   networks: [an]
 
 x-openclaw: &openclaw
   build: { context: ., dockerfile: docker/Dockerfile.openclaw }
   cap_add: [NET_RAW, NET_ADMIN]
-  environment:
-    TZ: Asia/Shanghai
-    AGENT_BACKEND: openclaw
-    MESSAGE_BUS_URL: http://bus:9000
-    SERVER_URL: http://srv:8000
-    LOG_DOCKER_HTTP: "0"
-    LOG_TRAFFIC: "0"
-    LOG_LLM_API: "1"
-    LLM_API_KEY: ${ANTHROPIC_API_KEY}
-    LLM_MODEL: deepseek-chat
-    LLM_API_BASE: https://api.deepseek.com/v1
-    LLM_PROVIDER: openai
-    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
-    AGENT_MESSAGE_HISTORY_TURNS: ${AGENT_MESSAGE_HISTORY_TURNS:-8}
-    AGENT_RECENT_HISTORY_TURNS: ${AGENT_RECENT_HISTORY_TURNS:-2}
-    AGENT_FACT_BOARD_MAX_ITEMS: ${AGENT_FACT_BOARD_MAX_ITEMS:-40}
-    AGENT_FACT_BOARD_MAX_CHARS: ${AGENT_FACT_BOARD_MAX_CHARS:-6000}
-    AGENT_FACT_ITEM_MAX_CHARS: ${AGENT_FACT_ITEM_MAX_CHARS:-300}
-  volumes: ["./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network"]
+  environment: *openclaw-env
+  volumes: ["./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network", "./scenes:/app/scenes:ro"]
   restart: unless-stopped
   networks: [an]
 
@@ -98,6 +78,7 @@ services:
     volumes: ["/var/run/docker.sock:/var/run/docker.sock", "./data/logs:/app/data/logs", "./web/public:/app/web/public", "./scenes:/app/scenes", "./services/server.py:/app/services/server.py", "./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network"]
     environment:
       TZ: Asia/Shanghai
+      MOCK_LLM: "1"
       SERVER_PORT: "8000"
       MESSAGE_BUS_URL: http://bus:9000
       LOG_DOCKER_HTTP: "0"
@@ -116,6 +97,26 @@ services:
       AGENT_FACT_ITEM_MAX_CHARS: ${AGENT_FACT_ITEM_MAX_CHARS:-300}
     restart: unless-stopped
     networks: [an]
+
+  ag-o1:
+    <<: *openclaw
+    image: agentnetwork-ag-o1
+    container_name: ag-o1
+    environment:
+      <<: *openclaw-env
+      AGENT_ID: ag-o1
+      AGENT_NAME: ag-o1
+      AGENT_ROLE: openclaw
+
+  ag-c1:
+    <<: *claude
+    image: agentnetwork-ag-c1
+    container_name: ag-c1
+    environment:
+      <<: *claude-env
+      AGENT_ID: ag-c1
+      AGENT_NAME: ag-c1
+      AGENT_ROLE: claude-code
 
 networks:
   an: { driver: bridge, name: an }

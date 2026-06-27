@@ -1,59 +1,99 @@
 {
   "container_instances": {
     "NAN_WANG_SAFETY": {
-      "skills": [
+      "skill_refs": [
         "negotiate_contract",
         "evaluate_proposal",
         "manage_budget"
+      ],
+      "tool_refs": [
+        "negotiate_contract_tool",
+        "evaluate_proposal_tool",
+        "manage_budget_tool"
       ]
     },
     "SZ_AIRPORT_SECURITY": {
-      "skills": [
+      "skill_refs": [
         "negotiate_contract",
         "evaluate_proposal",
         "manage_budget"
+      ],
+      "tool_refs": [
+        "negotiate_contract_tool",
+        "evaluate_proposal_tool",
+        "manage_budget_tool"
       ]
     },
     "TSINGHUA_LAB": {
-      "skills": [
+      "skill_refs": [
         "develop_algorithm",
         "license_patent",
         "collaborate_research"
+      ],
+      "tool_refs": [
+        "develop_algorithm_tool",
+        "license_patent_tool",
+        "collaborate_research_tool"
       ]
     },
     "CSI_VENDOR": {
-      "skills": [
+      "skill_refs": [
         "produce_device",
         "price_negotiation",
         "supply_chain_manage"
+      ],
+      "tool_refs": [
+        "produce_device_tool",
+        "price_negotiation_tool",
+        "supply_chain_manage_tool"
       ]
     },
     "RADAR_SUPPLIER": {
-      "skills": [
+      "skill_refs": [
         "produce_device",
         "price_negotiation",
         "supply_chain_manage"
+      ],
+      "tool_refs": [
+        "produce_device_tool",
+        "price_negotiation_tool",
+        "supply_chain_manage_tool"
       ]
     },
     "AI_ALGO_SERVICE": {
-      "skills": [
+      "skill_refs": [
         "develop_algorithm",
         "license_patent",
         "collaborate_research"
+      ],
+      "tool_refs": [
+        "develop_algorithm_tool",
+        "license_patent_tool",
+        "collaborate_research_tool"
       ]
     },
     "SYS_INTEGRATOR": {
-      "skills": [
+      "skill_refs": [
         "integrate_system",
         "manage_project",
         "negotiate_contract"
+      ],
+      "tool_refs": [
+        "integrate_system_tool",
+        "manage_project_tool",
+        "negotiate_contract_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "audit_compliance",
         "set_standard",
         "approve_solution"
+      ],
+      "tool_refs": [
+        "audit_compliance_tool",
+        "set_standard_tool",
+        "approve_solution_tool"
       ]
     }
   }

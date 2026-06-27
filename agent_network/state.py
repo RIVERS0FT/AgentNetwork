@@ -31,7 +31,7 @@ current_scene_name = ""
 current_max_rounds = 20
 termination_config: Dict[str, int] = {"max_rounds": 10, "stalemate_rounds": 3}
 
-active_skills_module = None
+active_tools_module = None
 
 # ── Token Usage State & Logic ──
 def _new_token_usage_state(session_id: str = "") -> Dict[str, Any]:

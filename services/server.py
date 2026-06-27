@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 
 from agent_network import state
 from agent_network.logger import get_logger
-from agent_network.agent import AgentRegistry
+from agent_network.agent_model import AgentRegistry
 from agent_network.event_bus import PacketRecorder
 
 # 导入路由模块

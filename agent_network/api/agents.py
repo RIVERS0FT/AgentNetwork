@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any, List
-from agent_network.agent import AgentRegistry, Agent
+from agent_network.agent_model import AgentRegistry, Agent
 
 router = APIRouter()
 

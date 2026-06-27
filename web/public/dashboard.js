@@ -1307,8 +1307,8 @@ render();
 
 // ============== Canvas Mouse Events ==============
 const statusLabel = { idle:'空闲', thinking:'思考中', acting:'执行中', error:'异常' };
-const roleLabel = { scout:'侦察兵', commander:'指挥官', analyst:'分析师', support:'支援', brain:'Brain', 'claude-code':'Claude Code', openclaw:'OpenClaw', observer:'观察员' };
-const backendLabel = { brain:'Brain', 'claude-code':'Claude Code', openclaw:'OpenClaw' };
+const roleLabel = { scout:'侦察兵', commander:'指挥官', analyst:'分析师', support:'支援', 'claude-code':'Claude Code', openclaw:'OpenClaw', observer:'观察员' };
+const backendLabel = { 'claude-code':'Claude Code', openclaw:'OpenClaw' };
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({

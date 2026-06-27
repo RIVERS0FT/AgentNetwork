@@ -1,66 +1,111 @@
 {
   "container_instances": {
     "NANET_COM": {
-      "skills": [
+      "skill_refs": [
         "key_request",
         "cost_analysis",
         "reliability_check"
+      ],
+      "tool_refs": [
+        "key_request_tool",
+        "cost_analysis_tool",
+        "reliability_check_tool"
       ]
     },
     "SGCC_ITC": {
-      "skills": [
+      "skill_refs": [
         "network_plan",
         "cost_optimization",
         "coverage_analysis"
+      ],
+      "tool_refs": [
+        "network_plan_tool",
+        "cost_optimization_tool",
+        "coverage_analysis_tool"
       ]
     },
     "CRC_ITC": {
-      "skills": [
+      "skill_refs": [
         "latency_monitor",
         "fault_detection",
         "negotiate_lease"
+      ],
+      "tool_refs": [
+        "latency_monitor_tool",
+        "fault_detection_tool",
+        "negotiate_lease_tool"
       ]
     },
     "XIONGAN_DCA": {
-      "skills": [
+      "skill_refs": [
         "node_deploy",
         "budget_control",
         "success_rate_eval"
+      ],
+      "tool_refs": [
+        "node_deploy_tool",
+        "budget_control_tool",
+        "success_rate_eval_tool"
       ]
     },
     "QKD_VENDOR": {
-      "skills": [
+      "skill_refs": [
         "quote_price",
         "market_share_calc",
         "after_sale_cost"
+      ],
+      "tool_refs": [
+        "quote_price_tool",
+        "market_share_calc_tool",
+        "after_sale_cost_tool"
       ]
     },
     "QKD_ACADEMY": {
-      "skills": [
+      "skill_refs": [
         "protocol_optimize",
         "security_assessment",
         "efficiency_boost"
+      ],
+      "tool_refs": [
+        "protocol_optimize_tool",
+        "security_assessment_tool",
+        "efficiency_boost_tool"
       ]
     },
     "TPN_SERVICE": {
-      "skills": [
+      "skill_refs": [
         "lease_line",
         "utilization_report",
         "customer_survey"
+      ],
+      "tool_refs": [
+        "lease_line_tool",
+        "utilization_report_tool",
+        "customer_survey_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "compliance_audit",
         "standard_enforce",
         "penalty_assess"
+      ],
+      "tool_refs": [
+        "compliance_audit_tool",
+        "standard_enforce_tool",
+        "penalty_assess_tool"
       ]
     },
     "ATTACKER": {
-      "skills": [
+      "skill_refs": [
         "eavesdrop",
         "interfere",
         "theft_attempt"
+      ],
+      "tool_refs": [
+        "eavesdrop_tool",
+        "interfere_tool",
+        "theft_attempt_tool"
       ]
     }
   }

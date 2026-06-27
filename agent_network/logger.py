@@ -46,11 +46,8 @@
 
 路由规则:
   - global.jsonl: 全部日志
-  - application.jsonl: layer == agent_application
-  - network.jsonl: layer == agent_network
-  - communication.jsonl: event == agent_message 的兼容视图
-  - behavior.jsonl: decide/act/agent_action/agent_decide 的兼容视图
-"""
+  - application.jsonl: event == agent_application 的隔离视图 (包含所有 Agent 行为/消息)
+  - network.jsonl: 网络层原始抓包记录 (供回放与分析)"""
 
 import json
 import os
@@ -73,19 +70,30 @@ AGENT_APPLICATION_LAYER = "agent_application"
 AGENT_NETWORK_LAYER = "agent_network"
 
 APPLICATION_EVENTS = {
+    "agent_run_started",
+    "agent_run_completed",
     "agent_message",
     "decide",
     "act",
     "agent_action",
     "agent_decide",
+    "skill_use",
+    "tool_call",
+    "tool_result",
+    "state_change",
+    "policy_check",
+    "application_error",
     "llm_api_call",
     "llm_cli_call",
 }
+
 NETWORK_EVENTS = {
     "docker_http_inbound",
     "docker_http_outbound",
     "llm_api_packet",
+    "tcpdump_packet",
 }
+
 APPLICATION_CATEGORIES = {AGENT_APPLICATION_LAYER, "agent_behavior", "llm_api", "communication"}
 NETWORK_CATEGORIES = {AGENT_NETWORK_LAYER, "network_capture"}
 
@@ -186,6 +194,138 @@ def _base_record(level: str, source: str, component: str, category: str,
         "trace": {},
     }
 
+import uuid
+
+def _ensure_dict(value: Any) -> Dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _actor_id_of(record: Dict) -> str:
+    actor = record.get("actor") or {}
+    return actor.get("agent_id") or actor.get("id") or ""
+
+
+def _target_id_of(record: Dict) -> str:
+    target = record.get("target") or {}
+    return target.get("agent_id") or target.get("id") or ""
+
+
+def normalize_application_record(record: Dict) -> Dict:
+    """
+    Normalize an application-layer record.
+
+    application.jsonl 只记录 Agent 应用层语义：
+    - Agent 身份
+    - 任务上下文
+    - 业务动作
+    - 消息内容
+    - 决策摘要
+    - Skill / Tool
+    - 状态变更
+    - 权限结果
+    - 执行结果
+    - 应用层耗时
+
+    不记录底层网络字段：
+    - IP
+    - 端口
+    - TCP flags
+    - packet length
+    - HTTP path/method/status
+    """
+
+    record["layer"] = AGENT_APPLICATION_LAYER
+    record["category"] = AGENT_APPLICATION_LAYER
+
+    if not record.get("event_id"):
+        record["event_id"] = f"app_{uuid.uuid4().hex[:12]}"
+
+    trace = _ensure_dict(record.get("trace"))
+    trace_id = record.get("trace_id") or trace.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
+    record["trace_id"] = trace_id
+    trace["trace_id"] = trace_id
+    record["trace"] = trace
+
+    record.setdefault("parent_event_id", "")
+    record.setdefault("tick", 0)
+
+    actor = _ensure_dict(record.get("actor"))
+    if "id" in actor and "agent_id" not in actor:
+        actor["agent_id"] = actor["id"]
+    record["actor"] = actor
+
+    target = _ensure_dict(record.get("target"))
+    if "id" in target and "agent_id" not in target:
+        target["agent_id"] = target["id"]
+    record["target"] = target
+
+    record["task"] = _ensure_dict(record.get("task"))
+    record["conversation"] = _ensure_dict(record.get("conversation"))
+    record["action"] = _ensure_dict(record.get("action"))
+    record["content"] = _ensure_dict(record.get("content"))
+    record["decision"] = _ensure_dict(record.get("decision"))
+    record["skill"] = _ensure_dict(record.get("skill"))
+    record["tool"] = _ensure_dict(record.get("tool"))
+    record["state_change"] = _ensure_dict(record.get("state_change"))
+    record["policy"] = _ensure_dict(record.get("policy"))
+    record["result"] = _ensure_dict(record.get("result"))
+    record["metrics"] = _ensure_dict(record.get("metrics"))
+
+    links = _ensure_dict(record.get("links"))
+    links.setdefault("network_event_ids", [])
+    links.setdefault("audit_event_ids", [])
+    links.setdefault("tool_event_ids", [])
+    links.setdefault("state_event_ids", [])
+    links.setdefault("related_trace_ids", [])
+    record["links"] = links
+
+    debug = _ensure_dict(record.get("debug"))
+    debug.setdefault("schema_version", "application.v1")
+    debug.setdefault("emitter", "SimulationLogger")
+    record["debug"] = debug
+
+    # 兼容旧字段：payload.content -> content.text
+    payload = _ensure_dict(record.get("payload"))
+    if payload:
+        if not record["content"].get("text") and payload.get("content"):
+            record["content"]["text"] = payload.get("content")
+        if not record["content"].get("reasoning") and payload.get("reasoning"):
+            record["content"]["reasoning"] = payload.get("reasoning")
+        if payload.get("skill_params") or payload.get("skill_result"):
+            record["skill"].setdefault("input", payload.get("skill_params", {}))
+            record["skill"].setdefault("output", payload.get("skill_result", {}))
+        debug["legacy_payload_migrated"] = True
+        record.pop("payload", None)
+
+    # 应用层禁止直接带 network 对象
+    if record.get("network"):
+        debug["legacy_network_fields_dropped"] = True
+        record.pop("network", None)
+
+    forbidden_network_keys = {
+        "src_ip", "dst_ip", "src_port", "dst_port",
+        "protocol", "tcp_flags", "packet_len", "header_len", "payload_len",
+        "http_method", "http_path", "http_status_code", "tcpdump", "rtt_ms"
+    }
+
+    for key in list(record.keys()):
+        if key in forbidden_network_keys:
+            debug["legacy_network_fields_dropped"] = True
+            record.pop(key, None)
+
+    # message 字段作为人类可读摘要保留
+    if not record.get("message"):
+        actor_id = _actor_id_of(record)
+        target_id = _target_id_of(record)
+        action_name = (record.get("action") or {}).get("name", record.get("event", ""))
+        if actor_id and target_id:
+            record["message"] = f"{actor_id} -> {target_id}: {action_name}"
+        elif actor_id:
+            record["message"] = f"{actor_id}: {action_name}"
+        else:
+            record["message"] = record.get("event", "")
+
+    return record
 
 class SimulationLogger:
     """全局单例日志 — 线程安全环形缓冲 + JSONL 持久化"""
@@ -220,10 +360,8 @@ class SimulationLogger:
         self._log_dir = log_dir or os.environ.get("LOG_DIR", "./data/logs")
         self._file_path = ""            # global.jsonl
         self._session_dir = ""
-        self._session_comm_path = ""    # communication.jsonl
         self._session_application_path = ""  # application.jsonl
         self._session_network_path = ""  # network.jsonl
-        self._session_behavior_path = ""  # behavior.jsonl
         self._session_active = False
         self._file_lock = threading.Lock()
         self._file_handles: Dict[str, IO] = {}  # 常驻文件句柄池
@@ -274,10 +412,8 @@ class SimulationLogger:
 
     def _set_session_paths(self):
         self._file_path = os.path.join(self._session_dir, "global.jsonl")
-        self._session_comm_path = os.path.join(self._session_dir, "communication.jsonl")
         self._session_application_path = os.path.join(self._session_dir, "application.jsonl")
         self._session_network_path = os.path.join(self._session_dir, "network.jsonl")
-        self._session_behavior_path = os.path.join(self._session_dir, "behavior.jsonl")
 
     def _get_file_handle(self, filepath: str) -> IO:
         """获取或创建常驻文件句柄"""
@@ -318,25 +454,25 @@ class SimulationLogger:
             self._append_file(self._session_application_path, record)
         if is_agent_network_record(record) and self._session_network_path:
             self._append_file(self._session_network_path, record)
-        # communication.jsonl: legacy view, only business Agent messages.
-        if is_agent_message_record(record) and self._session_comm_path:
-            self._append_file(self._session_comm_path, record)
-        # behavior.jsonl: legacy view, only decision/action behavior.
-        if is_behavior_record(record) and self._session_behavior_path:
-            self._append_file(self._session_behavior_path, record)
 
     def _normalize_record(self, record: Dict) -> Dict:
         layer = infer_log_layer(record)
+
+        if layer == AGENT_APPLICATION_LAYER:
+            return normalize_application_record(record)
+
         if layer:
             record["layer"] = layer
         else:
             record.setdefault("layer", "")
+
         record.setdefault("actor", {})
         record.setdefault("target", {})
         record.setdefault("action", {})
         record.setdefault("payload", {})
         record.setdefault("network", {})
         record.setdefault("trace", {})
+
         return record
 
     # ═══════════════════════════════════════════
@@ -347,12 +483,15 @@ class SimulationLogger:
         """写入一条统一 schema 日志到内存缓冲区 + 持久化文件"""
         record["seq"] = self._next_seq()
         record["session_id"] = self._session_id
+
         if not record.get("timestamp"):
             record["timestamp"] = current_log_timestamp()
-        self._normalize_record(record)
+
+        record = self._normalize_record(record)
 
         self._append_memory(record)
         self._write_file(record)
+        return record
 
     def ingest(self, record: Dict):
         """接收外部日志（前端、外部服务），直接写入文件不做转换"""
@@ -371,11 +510,15 @@ class SimulationLogger:
         with self._lock:
             self._entries.append(record)
             self._stats["total"] += 1
+
             lvl = record.get("level", "INFO")
             evt = record.get("event", "")
-            aid = (record.get("actor") or {}).get("id", "")
+            actor = record.get("actor") or {}
+            aid = actor.get("agent_id") or actor.get("id") or ""
+
             self._stats["by_level"][lvl] = self._stats["by_level"].get(lvl, 0) + 1
             self._stats["by_event"][evt] = self._stats["by_event"].get(evt, 0) + 1
+
             if aid:
                 self._stats["by_agent"][aid] = self._stats["by_agent"].get(aid, 0) + 1
 
@@ -393,64 +536,160 @@ class SimulationLogger:
             rec["payload"] = {**(details or {}), **kw}
         self.emit(rec)
 
+    def emit_application_event(
+        self,
+        event: str,
+        actor: dict,
+        target: dict | None = None,
+        task: dict | None = None,
+        conversation: dict | None = None,
+        action: dict | None = None,
+        content: dict | None = None,
+        decision: dict | None = None,
+        skill: dict | None = None,
+        tool: dict | None = None,
+        state_change: dict | None = None,
+        policy: dict | None = None,
+        result: dict | None = None,
+        metrics: dict | None = None,
+        links: dict | None = None,
+        trace_id: str = "",
+        parent_event_id: str = "",
+        tick: int | None = None,
+        level: str = "INFO",
+        component: str = "",
+        source: str = "agent",
+        debug: dict | None = None,
+    ) -> dict:
+        """Constructs and emits a strict application-layer event."""
+        record = {
+            "timestamp": current_log_timestamp(),
+            "level": level,
+            "source": source,
+            "component": component or actor.get("agent_id", "unknown"),
+            "event": event,
+            "actor": actor,
+            "target": target or {},
+            "task": task or {},
+            "conversation": conversation or {},
+            "action": action or {},
+            "content": content or {},
+            "decision": decision or {},
+            "skill": skill or {},
+            "tool": tool or {},
+            "state_change": state_change or {},
+            "policy": policy or {},
+            "result": result or {},
+            "metrics": metrics or {},
+            "links": links or {},
+            "trace_id": trace_id,
+            "parent_event_id": parent_event_id,
+            "tick": tick if tick is not None else 0,
+            "debug": debug or {},
+            "seq": 0,
+            "session_id": self._session_id,
+        }
+        
+        record = normalize_application_record(record)
+        self.emit(record)
+        return record
+
     def agent_action(self, agent_id: str, action: str, result: Dict = None, **kw):
         """Agent 动作执行"""
-        rec = _base_record("INFO", "agent", agent_id, AGENT_APPLICATION_LAYER,
-                           "agent_action", f"[{agent_id}] {action}")
-        rec["layer"] = AGENT_APPLICATION_LAYER
-        rec["actor"] = {"id": agent_id}
-        rec["action"] = {"name": action, "status": "success"}
-        rec["payload"] = kw
-        if result:
-            rec["payload"]["result"] = result
-        self.emit(rec)
+        self.emit_application_event(
+            event="act",
+            actor={"agent_id": agent_id},
+            action={"name": action, "status": "success"},
+            content={"kw": kw},
+            result=result or {}
+        )
 
     def agent_decide(self, agent_id: str, prompt_snippet: str, decision: Dict = None):
         """Agent 决策"""
-        rec = _base_record("INFO", "agent", agent_id, AGENT_APPLICATION_LAYER,
-                           "agent_decide", f"[{agent_id}] 决策: {prompt_snippet}")
-        rec["layer"] = AGENT_APPLICATION_LAYER
-        rec["actor"] = {"id": agent_id}
-        rec["action"] = {"name": "decide", "status": "decided"}
-        rec["payload"] = {
-            "prompt_snippet": prompt_snippet,
-            "decision": decision or {},
-        }
-        self.emit(rec)
+        self.emit_application_event(
+            event="decide",
+            actor={"agent_id": agent_id},
+            action={"name": "decide", "status": "decided"},
+            decision={
+                "decision_summary": str(decision) if decision else "",
+                "inputs_used": ["prompt_snippet"],
+                "raw_model_output_ref": prompt_snippet
+            }
+        )
 
     def agent_message(self, from_id: str, to: str, content: str, reasoning: str = "",
-                      latency_ms: float = 0, status: str = "success",
-                      src_ip: str = "", src_port: int = 0,
-                      dst_ip: str = "", dst_port: int = 0,
-                      protocol: str = "TCP/HTTP",
-                      packet_len: int = 0, header_len: int = 0, payload_len: int = 0,
-                      tcp_flags: str = "",
-                      channel_id: str = "",
-                      message_type: str = "relay",
-                      talk: str = ""):
-        """Agent 间通信报文 — 正文进 payload，网络层进 network"""
-        rec = _base_record("INFO", "bus", "bus", AGENT_APPLICATION_LAYER,
-                           "agent_message", f"{from_id} → {to}")
-        rec["layer"] = AGENT_APPLICATION_LAYER
-        rec["actor"] = {"id": from_id}
-        rec["target"] = {"id": to}
-        rec["action"] = {"name": message_type, "status": status}
-        rec["payload"] = {
-            "content": content,
-            "reasoning": reasoning,
-        }
-        rec["network"] = {
-            "src_ip": src_ip, "src_port": src_port,
-            "dst_ip": dst_ip, "dst_port": dst_port,
-            "protocol": protocol,
-            "latency_ms": round(latency_ms, 1),
-            "packet_len": packet_len, "header_len": header_len, "payload_len": payload_len,
-            "tcp_flags": tcp_flags,
-            "channel_id": channel_id,
-            "message_type": message_type,
-        }
-        rec["trace"]["talk"] = talk
-        self.emit(rec)
+                  latency_ms: float = 0, status: str = "success",
+                  src_ip: str = "", src_port: int = 0,
+                  dst_ip: str = "", dst_port: int = 0,
+                  protocol: str = "TCP/HTTP",
+                  packet_len: int = 0, header_len: int = 0, payload_len: int = 0,
+                  tcp_flags: str = "",
+                  channel_id: str = "",
+                  message_type: str = "relay",
+                  talk: str = ""):
+        """
+        Agent 应用层业务消息。
+
+        注意：
+        - 不写 IP / 端口 / TCP flags / packet_len
+        - latency_ms 作为应用层动作耗时写入 action.duration_ms
+        - 真实网络细节由 network.jsonl 记录
+        """
+
+        normalized_status = "success"
+        if status and ("failed" in status.lower() or "error" in status.lower()):
+            normalized_status = "failed"
+
+        self.emit_application_event(
+            event="agent_message",
+            actor={"agent_id": from_id},
+            target={"agent_id": to},
+            conversation={
+                "conversation_id": talk or "",
+                "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+                "message_type": message_type,
+                "channel_id": channel_id,
+                "broadcast": message_type == "broadcast",
+            },
+            action={
+                "type": "send_message",
+                "name": message_type,
+                "status": normalized_status,
+                "duration_ms": round(latency_ms, 1),
+            },
+            content={
+                "content_type": "message",
+                "text": content,
+                "summary": content[:120],
+                "size_bytes": payload_len or len((content or "").encode("utf-8")),
+                "redacted": False,
+            },
+            decision={
+                "decision_summary": reasoning[:200] if reasoning else "",
+                "reasoning_visible": reasoning[:500] if reasoning else "",
+            },
+            policy={
+                "checked": True,
+                "result": "allowed",
+                "rule": "communication_matrix",
+                "reason": "",
+            },
+            result={
+                "status": normalized_status,
+                "message": status,
+                "error_code": "",
+                "error_message": "" if normalized_status == "success" else status,
+                "retryable": False,
+            },
+            trace_id=talk or "",
+            debug={
+                "schema_version": "application.v1",
+                "emitter": "SimulationLogger.agent_message",
+                "legacy_network_fields_dropped": True,
+                "duration_source": "message_bus_relay_timer",
+                "duration_scope": "bus_receive_to_target_message_response",
+            },
+        )
 
     def container_event(self, agent_id: str, event: str, message: str = "", **kw):
         """容器生命周期事件"""
@@ -497,27 +736,56 @@ class SimulationLogger:
             return list(self._entries)[-limit:]
 
     def query(self, agent_id: str = None, event: str = None, level: str = None,
-              keyword: str = None, layer: str = None, category: str = None,
-              limit: int = 50) -> List[Dict]:
+        keyword: str = None, layer: str = None, category: str = None,
+        trace_id: str = None, task_id: str = None,
+        limit: int = 50) -> List[Dict]:
         with self._lock:
             results = list(self._entries)
+
         if agent_id:
-            results = [e for e in results
-                       if (e.get("actor") or {}).get("id") == agent_id]
+            results = [
+                e for e in results
+                if ((e.get("actor") or {}).get("agent_id") == agent_id
+                    or (e.get("actor") or {}).get("id") == agent_id
+                    or (e.get("target") or {}).get("agent_id") == agent_id
+                    or (e.get("target") or {}).get("id") == agent_id)
+            ]
+
         if event:
             results = [e for e in results if e.get("event") == event]
+
         if layer:
             results = [e for e in results if infer_log_layer(e) == layer]
+
         if category:
             results = [e for e in results if e.get("category") == category]
+
+        if trace_id:
+            results = [
+                e for e in results
+                if e.get("trace_id") == trace_id
+                or (e.get("trace") or {}).get("trace_id") == trace_id
+            ]
+
+        if task_id:
+            results = [
+                e for e in results
+                if (e.get("task") or {}).get("task_id") == task_id
+            ]
+
         if level:
             results = [e for e in results if e.get("level") == level.upper()]
+
         if keyword:
             k = keyword.lower()
-            results = [e for e in results
-                       if k in (e.get("message") or "").lower()
-                       or k in json.dumps(e.get("payload", {})).lower()
-                       or k in json.dumps(e.get("network", {})).lower()]
+            results = [
+                e for e in results
+                if k in (e.get("message") or "").lower()
+                or k in json.dumps(e.get("content", {}), ensure_ascii=False).lower()
+                or k in json.dumps(e.get("payload", {}), ensure_ascii=False).lower()
+                or k in json.dumps(e.get("result", {}), ensure_ascii=False).lower()
+            ]
+
         return results[-limit:]
 
     def get_index_stats(self) -> Dict:

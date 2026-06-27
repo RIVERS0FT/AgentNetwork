@@ -9,7 +9,7 @@ def _get_runtime_with_status_listener():
     runtime = get_runtime()
     if not hasattr(runtime, '_status_listener_set'):
         def on_status(agent_id, status):
-            from agent_network.agent import AgentRegistry
+            from agent_network.agent_model import AgentRegistry
             a = AgentRegistry.get(agent_id)
             if a:
                 a.status = status

@@ -1,63 +1,103 @@
 {
   "container_instances": {
     "CEO": {
-      "skills": [
+      "skill_refs": [
         "allocate_budget",
         "approve_strategy"
+      ],
+      "tool_refs": [
+        "allocate_budget_tool",
+        "approve_strategy_tool"
       ]
     },
     "CTO": {
-      "skills": [
+      "skill_refs": [
         "assign_technical_task",
         "evaluate_tech_debt"
+      ],
+      "tool_refs": [
+        "assign_technical_task_tool",
+        "evaluate_tech_debt_tool"
       ]
     },
     "CFO": {
-      "skills": [
+      "skill_refs": [
         "calculate_budget",
         "audit_expense"
+      ],
+      "tool_refs": [
+        "calculate_budget_tool",
+        "audit_expense_tool"
       ]
     },
     "PM": {
-      "skills": [
+      "skill_refs": [
         "plan_sprint",
         "track_progress"
+      ],
+      "tool_refs": [
+        "plan_sprint_tool",
+        "track_progress_tool"
       ]
     },
     "DEV_LEAD": {
-      "skills": [
+      "skill_refs": [
         "code_review",
         "estimate_effort"
+      ],
+      "tool_refs": [
+        "code_review_tool",
+        "estimate_effort_tool"
       ]
     },
     "SALES_LEAD": {
-      "skills": [
+      "skill_refs": [
         "negotiate_contract",
         "generate_lead"
+      ],
+      "tool_refs": [
+        "negotiate_contract_tool",
+        "generate_lead_tool"
       ]
     },
     "SUPPLIER_A": {
-      "skills": [
+      "skill_refs": [
         "offer_pricing",
         "adjust_terms"
+      ],
+      "tool_refs": [
+        "offer_pricing_tool",
+        "adjust_terms_tool"
       ]
     },
     "SUPPLIER_B": {
-      "skills": [
+      "skill_refs": [
         "propose_service",
         "renegotiate"
+      ],
+      "tool_refs": [
+        "propose_service_tool",
+        "renegotiate_tool"
       ]
     },
     "COMPETITOR": {
-      "skills": [
+      "skill_refs": [
         "poach_customer",
         "price_war"
+      ],
+      "tool_refs": [
+        "poach_customer_tool",
+        "price_war_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "inspect_compliance",
         "impose_fine"
+      ],
+      "tool_refs": [
+        "inspect_compliance_tool",
+        "impose_fine_tool"
       ]
     }
   }

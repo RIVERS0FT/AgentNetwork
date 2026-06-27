@@ -6,12 +6,12 @@ import random
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from agent_network import state
-from agent_network.agent import AgentRegistry, Agent
+from agent_network.agent_model import AgentRegistry, Agent
 from agent_network.logger import get_logger
 from agent_network.event_bus import PacketRecorder
 from agent_network.scene_def import get_api_config, SceneDefinition, AgentDef
@@ -21,40 +21,37 @@ router = APIRouter()
 logger = get_logger()
 
 _SCENES_DIR = Path("scenes")
-
-# 保存最近的仿真结果
 _simulation_results: List[Dict[str, Any]] = []
-
-# LLM 配置缓存（运行时可通过 API 修改）
 _llm_config: Dict[str, str] = {}
 
+
 class SimulationRunRequest(BaseModel):
-    """仿真运行请求"""
     scene: str = ""
 
+
 def _get_effective_llm_config() -> Dict[str, str]:
-    """获取有效的 LLM 配置：API 设置 > 环境变量"""
     config = get_api_config()
     config.update(_llm_config)
     return config
 
+
 def _get_runtime_with_status_listener():
     runtime = get_runtime()
-    if not hasattr(runtime, '_status_listener_set'):
+    if not hasattr(runtime, "_status_listener_set"):
         def on_status(agent_id, status):
-            a = AgentRegistry.get(agent_id)
-            if a:
-                a.status = status
+            agent = AgentRegistry.get(agent_id)
+            if agent:
+                agent.status = status
         runtime.on_status_change = on_status
         runtime._status_listener_set = True
     return runtime
 
+
 def _control_agent_capture(created_cas: List[tuple], enabled: bool, requests_module) -> Dict[str, Any]:
-    """启动/停止本轮已分配 Agent 容器内的 tcpdump 抓包。"""
     success = 0
     failed = 0
     for ca, _ in created_cas:
-        if ca.status == "error":
+        if ca.status == "error" or not ca.url:
             continue
         try:
             endpoint = "/capture/start" if enabled else "/capture/stop"
@@ -67,90 +64,55 @@ def _control_agent_capture(created_cas: List[tuple], enabled: bool, requests_mod
             failed += 1
     return {"success": success, "failed": failed}
 
-def _force_layout(agents: List[Any], links: List[Dict],
-                  width: float = 400, height: float = 400,
-                  margin: float = 60, iterations: int = 80) -> Dict[str, tuple]:
-    import math
-    import random as _rnd
-    n = len(agents)
-    if n == 0:
+
+def _force_layout(agents: List[Any], links: List[Dict], width: float = 400, height: float = 400, margin: float = 60) -> Dict[str, tuple]:
+    if not agents:
         return {}
+    return {
+        agent.agent_id: (
+            random.uniform(margin, width - margin),
+            random.uniform(margin, height - margin),
+        )
+        for agent in agents
+    }
 
-    pos = {}
-    for a in agents:
-        pos[a.agent_id] = [
-            _rnd.uniform(margin, width - margin),
-            _rnd.uniform(margin, height - margin),
-        ]
 
-    edges = set()
-    for link in links:
-        f = link.get("from", "").lower()
-        t = link.get("to", "").lower()
-        val = link.get("value", 0)
-        edges.add((f, t, val))
+def _publish_comm_policy(requests_module, matrix: Dict[str, set]) -> Dict[str, Any]:
+    """Push communication policy to bus, where it is enforced at /relay."""
+    snapshot = {key: sorted(values) for key, values in matrix.items()}
+    try:
+        resp = requests_module.post(
+            f"{state.MESSAGE_BUS_URL}/policy/comm_matrix",
+            json={"enabled": True, "matrix": snapshot},
+            timeout=3,
+        )
+        if resp.status_code != 200:
+            logger.system(
+                "comm_policy_update_failed",
+                "通信权限矩阵下发到 bus 失败",
+                details={"status_code": resp.status_code, "matrix": snapshot},
+            )
+            return {"ok": False, "status_code": resp.status_code, "matrix": snapshot}
+        logger.system(
+            "comm_policy_updated",
+            "通信权限矩阵已下发到 bus",
+            details={"enabled": True, "matrix": snapshot},
+        )
+        return {"ok": True, "matrix": snapshot}
+    except Exception as e:
+        logger.system(
+            "comm_policy_update_failed",
+            "通信权限矩阵下发到 bus 失败",
+            details={"error": str(e), "matrix": snapshot},
+        )
+        return {"ok": False, "error": str(e), "matrix": snapshot}
 
-    area = width * height
-    k = math.sqrt(area / n) if n > 0 else 1
-
-    for it in range(iterations):
-        temp = 1.0 - it / iterations
-        temp = max(0.02, temp * temp)
-
-        disp = {aid: [0.0, 0.0] for aid in pos}
-        ids = list(pos.keys())
-        for i in range(n):
-            for j in range(i + 1, n):
-                aid_i, aid_j = ids[i], ids[j]
-                dx = pos[aid_i][0] - pos[aid_j][0]
-                dy = pos[aid_i][1] - pos[aid_j][1]
-                dist = math.sqrt(dx * dx + dy * dy) or 0.01
-                force = k * k / dist
-                fx = (dx / dist) * force
-                fy = (dy / dist) * force
-                disp[aid_i][0] += fx
-                disp[aid_i][1] += fy
-                disp[aid_j][0] -= fx
-                disp[aid_j][1] -= fy
-
-        for f, t, val in edges:
-            if f not in pos or t not in pos:
-                continue
-            dx = pos[t][0] - pos[f][0]
-            dy = pos[t][1] - pos[f][1]
-            dist = math.sqrt(dx * dx + dy * dy) or 0.01
-            spring_force = (dist - k * 0.5) / k
-            if val < 0:
-                spring_force = -spring_force * 0.5
-            else:
-                spring_force = spring_force * (abs(val) / 100 + 0.3)
-            fx = (dx / dist) * spring_force * k * 0.3
-            fy = (dy / dist) * spring_force * k * 0.3
-            disp[f][0] += fx
-            disp[f][1] -= fy
-            disp[t][0] -= fx
-            disp[t][1] += fy
-
-        for aid in ids:
-            d = math.sqrt(disp[aid][0]**2 + disp[aid][1]**2) or 0.01
-            capped = min(d, temp * k)
-            pos[aid][0] += (disp[aid][0] / d) * capped
-            pos[aid][1] += (disp[aid][1] / d) * capped
-            pos[aid][0] = max(margin, min(width - margin, pos[aid][0]))
-            pos[aid][1] = max(margin, min(height - margin, pos[aid][1]))
-
-    for aid in pos:
-        pos[aid][0] += _rnd.uniform(-12, 12)
-        pos[aid][1] += _rnd.uniform(-12, 12)
-        pos[aid][0] = max(margin, min(width - margin, pos[aid][0]))
-        pos[aid][1] = max(margin, min(height - margin, pos[aid][1]))
-
-    return pos
 
 _pending_scene_def: Optional[SceneDefinition] = None
 _pending_layout: Dict[str, tuple] = {}
 _pending_config: Dict[str, str] = {}
 _comm_matrix: Dict[str, set] = {}
+
 
 def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
     global _pending_scene_def, _pending_layout
@@ -162,7 +124,6 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
 
     from agent_network.comm import RemoteBus
     remote_bus = RemoteBus(message_bus_url=state.MESSAGE_BUS_URL)
-
     layout_pos = _force_layout(scene_def.agents, scene_def.workflow)
 
     for ad in scene_def.agents:
@@ -192,9 +153,10 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
         "scene_name": scene_def.scene_name,
     }
 
+
 def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]:
     global _comm_matrix
-    
+
     if scene_def is None:
         scene_def = _pending_scene_def
     if not scene_def:
@@ -209,14 +171,17 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     assign_errors = []
     for ad in scene_def.agents:
         ca = runtime.assign_agent(
-            agent_id=ad.agent_id, role=ad.role, name=ad.name,
+            agent_id=ad.agent_id,
+            role=ad.role,
+            name=ad.name,
             extra_meta=ad.extra_meta if ad.extra_meta else None,
         )
         created_cas.append((ca, ad.tasks))
         if ca.status == "error":
             assign_errors.append({
-                "agent_id": ca.agent_id, "name": ca.name,
-                "error": getattr(ca, '_assign_error', 'unknown'),
+                "agent_id": ca.agent_id,
+                "name": ca.name,
+                "error": getattr(ca, "_assign_error", "unknown"),
             })
         else:
             agent = AgentRegistry.get(ca.agent_id)
@@ -224,16 +189,19 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
                 agent.container_url = ca.url
 
     assigned_count = sum(1 for ca, _ in created_cas if ca.status != "error")
-    logger.system("container_pool",
+    logger.system(
+        "container_pool",
         f"容器分配完成: {assigned_count}/{len(scene_def.agents)} Agent 分配成功",
-        details={"total_agents": len(scene_def.agents), "assigned": assigned_count,
-                  "errors": assign_errors})
+        details={"total_agents": len(scene_def.agents), "assigned": assigned_count, "errors": assign_errors},
+    )
 
     if assign_errors:
         created_cas = [(ca, tasks) for ca, tasks in created_cas if ca.status != "error"]
-        logger.system("container_pool",
+        logger.system(
+            "container_pool",
             f"警告: {len(assign_errors)} 个 Agent 分配失败，将被跳过",
-            details={"skipped": [e["agent_id"] for e in assign_errors]})
+            details={"skipped": [e["agent_id"] for e in assign_errors]},
+        )
 
     for ca, _ in created_cas:
         try:
@@ -244,16 +212,19 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     time.sleep(1)
     for ca, _ in created_cas:
         try:
-            _req.post(f"{state.MESSAGE_BUS_URL}/register",
-                      params={"agent_id": ca.agent_id, "url": ca.url, "name": ca.name}, timeout=3)
+            _req.post(
+                f"{state.MESSAGE_BUS_URL}/register",
+                params={"agent_id": ca.agent_id, "url": ca.url, "name": ca.name},
+                timeout=3,
+            )
             runtime._set_status(ca, "idle", {"phase": "bus_register"})
         except Exception:
             runtime._set_status(ca, "error", {"phase": "bus_register", "error": "message_bus_register_failed"})
 
-    event_triggers = getattr(scene_def, 'event_triggers', []) or []
-
     _comm_matrix.clear()
     for edge in (scene_def.workflow or []):
+        if edge.get("can_direct_chat", True) is False:
+            continue
         src = edge.get("from", "").lower()
         dst = edge.get("to", "").lower()
         if src and dst:
@@ -263,20 +234,18 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     state.agent_logs.clear()
     logger.start_session(scene_def.scene_name)
     state.reset_token_usage_state(getattr(logger, "_session_id", ""))
-    
+    policy_update = _publish_comm_policy(_req, _comm_matrix)
+
     try:
-        _req.post(f"{state.MESSAGE_BUS_URL}/session/start",
-                  params={"session_dir": logger._session_dir}, timeout=3)
+        _req.post(f"{state.MESSAGE_BUS_URL}/session/start", params={"session_dir": logger._session_dir}, timeout=3)
     except Exception:
         pass
 
     state.simulation_active = True
     capture_start = _control_agent_capture(created_cas, True, _req)
-    logger.system("capture_control", "network_capture started",
-                  details={"enabled": True, **capture_start})
+    logger.system("capture_control", "network_capture started", details={"enabled": True, **capture_start})
 
     talk_id = f"talk-{uuid.uuid4().hex[:12]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
     channel_map: Dict[str, str] = {}
     for edge in (scene_def.workflow or []):
         src = edge.get("from", "")
@@ -286,42 +255,26 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
             channel_map[f"{src}->{dst}"] = ch
             channel_map[f"{src.lower()}->{dst.lower()}"] = ch
 
-    MAX_ROUNDS = state.termination_config.get("max_rounds", 20)
+    max_rounds = state.termination_config.get("max_rounds", 20)
     stalemate_threshold = state.termination_config.get("stalemate_rounds", 3)
     results_log = []
     silent_rounds = 0
     stop_reason = "hard_limit"
-
     state.simulation_stop_requested = False
+
     try:
-        for round_num in range(MAX_ROUNDS):
+        for round_num in range(max_rounds):
             if state.simulation_stop_requested:
                 stop_reason = "user_stopped"
                 logger.system("simulation_stopped", "用户手动停止仿真", details={"round": round_num + 1})
                 break
-            
+
             state.current_turn = round_num + 1
-
-            for trigger in event_triggers:
-                if trigger.get("turn") == state.current_turn:
-                    event_payload = {
-                        "event_name": trigger.get("event_name", "未知事件"),
-                        "impact": trigger.get("impact", ""),
-                        "turn": state.current_turn,
-                    }
-                    logger.event_trigger(state.current_turn, event_payload['event_name'], event_payload['impact'])
-                    for ca, _ in created_cas:
-                        try:
-                            _req.post(f"{ca.url}/event", json=event_payload, timeout=5)
-                        except Exception:
-                            pass
-
             context = {
                 "round": state.current_turn,
-                "total_rounds": MAX_ROUNDS,
+                "total_rounds": max_rounds,
                 "scene": scene_def.scene_name,
-                "agents": [{"id": ca.agent_id, "role": ca.role, "name": ca.name}
-                           for ca, _ in created_cas],
+                "agents": [{"id": ca.agent_id, "role": ca.role, "name": ca.name} for ca, _ in created_cas],
                 "tasks": {ca.agent_id: tasks for ca, tasks in created_cas},
                 "comm_matrix": {k: list(v) for k, v in _comm_matrix.items()},
                 "channel_map": channel_map,
@@ -330,23 +283,18 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
             round_result = runtime.run_round(context)
             results_log.append(round_result)
 
-            if state.active_skills_module and hasattr(state.active_skills_module, '_engine'):
-                eng = state.active_skills_module._engine
-                registry = getattr(eng, 'round_action_registry', {})
-                if registry:
-                    latest_round = max(registry.keys())
-                    for soldier_id, (gx, gy) in registry[latest_round].items():
-                        agent = AgentRegistry.get(soldier_id)
-                        if agent:
-                            agent.x = float(gx)
-                            agent.y = float(gy)
+            results_list = round_result.get("results", [])
+            meaningful_events = 0
+            for res in results_list:
+                meaningful_events += len(res.get("outbound_messages", []))
+                meaningful_events += len(res.get("tool_events", []))
+                meaningful_events += len(res.get("application_events", []))
+                if res.get("status") == "skipped":
+                    continue
+                if res.get("final_message"):
+                    meaningful_events += 1
 
-            decisions = round_result.get("decisions", [])
-            messages_sent = sum(
-                1 for d in decisions
-                if d.get("type") in ("send_message", "broadcast", "execute_skill")
-            )
-            if messages_sent == 0:
+            if meaningful_events == 0:
                 silent_rounds += 1
             else:
                 silent_rounds = 0
@@ -361,8 +309,7 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     finally:
         state.simulation_active = False
         capture_stop = _control_agent_capture(created_cas, False, _req)
-        logger.system("capture_control", "network_capture stopped",
-                      details={"enabled": False, **capture_stop})
+        logger.system("capture_control", "network_capture stopped", details={"enabled": False, **capture_stop})
         final_status = "error" if stop_reason == "user_stopped" else "idle"
         for ca, _ in created_cas:
             if ca.status != "error":
@@ -373,12 +320,11 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     actual_rounds = len(results_log)
     runtime_agent_count = len(runtime.agents)
 
-    logger.system("simulation_complete",
-        f"仿真完成: {scene_def.scene_name} | {actual_rounds}轮 | "
-        f"{runtime_agent_count}/{len(scene_def.agents)} Agent | {stop_reason}",
-        details={"scene": scene_def.scene_name, "rounds": actual_rounds,
-                  "agent_count": runtime_agent_count, "agent_defined": len(scene_def.agents),
-                  "stop_reason": stop_reason})
+    logger.system(
+        "simulation_complete",
+        f"仿真完成: {scene_def.scene_name} | {actual_rounds}轮 | {runtime_agent_count}/{len(scene_def.agents)} Agent | {stop_reason}",
+        details={"scene": scene_def.scene_name, "rounds": actual_rounds, "agent_count": runtime_agent_count, "agent_defined": len(scene_def.agents), "stop_reason": stop_reason},
+    )
 
     return {
         "simulation_name": scene_def.scene_name,
@@ -386,69 +332,74 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
         "agents": registry_agents,
         "agent_stats": AgentRegistry.get_stats(),
         "packet_stats": PacketRecorder.get_stats(),
-        "max_rounds": MAX_ROUNDS,
+        "max_rounds": max_rounds,
         "rounds": actual_rounds,
         "stop_reason": stop_reason,
         "results_log": results_log,
         "relationships": scene_def.workflow,
+        "comm_policy": policy_update,
         "container_mode": "pool",
     }
+
+
+def _normalize_backend(scene_name: str, role_id: str, backend: str) -> str:
+    backend = (backend or "openclaw").strip()
+    if backend == "claudecode":
+        return "claude-code"
+    if backend == "brain":
+        raise ValueError(
+            f"Scene '{scene_name}' role '{role_id}' uses removed backend 'brain'. "
+            "Use 'openclaw' or 'claude-code'."
+        )
+    if backend not in {"openclaw", "claude-code"}:
+        raise ValueError(
+            f"Scene '{scene_name}' role '{role_id}' uses unsupported backend '{backend}'. "
+            "Use 'openclaw' or 'claude-code'."
+        )
+    return backend
+
 
 def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
     folder = _SCENES_DIR / scene_name
 
-    meta = json.loads((folder / "meta_and_roles.json").read_text(encoding='utf-8'))
-    instances = json.loads((folder / "instances_and_skills.json").read_text(encoding='utf-8'))
-    topology = json.loads((folder / "network_topology.json").read_text(encoding='utf-8'))
+    meta = json.loads((folder / "meta_and_roles.json").read_text(encoding="utf-8"))
+    instances = json.loads((folder / "instances_and_skills.json").read_text(encoding="utf-8"))
+    topology = json.loads((folder / "network_topology.json").read_text(encoding="utf-8"))
 
     smeta = meta.get("scenario_metadata", {})
     title = smeta.get("title", scene_name)
     bg = smeta.get("global_rules", "")
-    
+
     if smeta.get("max_rounds"):
         state.termination_config["max_rounds"] = int(smeta["max_rounds"])
     if smeta.get("stalemate_rounds"):
         state.termination_config["stalemate_rounds"] = int(smeta["stalemate_rounds"])
-        
+
     state.current_scene_name = scene_name
     state.current_max_rounds = state.termination_config.get("max_rounds", 20)
-    
+    state.active_tools_module = None
+
     roles = meta.get("roles", {})
     containers = instances.get("container_instances", {})
 
-    skills_info = []
-    skills_py = folder / "skills.py"
-    if skills_py.exists():
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(f"skills_{scene_name}", skills_py)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            state.active_skills_module = mod
-            for name, func in mod.SkillRegistry._skills.items():
-                schema = getattr(mod.SkillRegistry, '_params', {}).get(name, {})
-                skills_info.append({
-                    "name": name,
-                    "desc": (func.__doc__ or "").strip(),
-                    "params": schema.get("required", []),
-                    "optional_params": schema.get("optional", []),
-                })
-        except Exception:
-            state.active_skills_module = None
-
+    # Runtime boundary: srv must not import tools.py and must not read Skill.md
+    # contents. It only reads scene manifests and passes allowlists. The Agent
+    # container loads Skill.md as SOP/context and tools.py as MCP atomic tools.
     agents: List[AgentDef] = []
     for role_id, role in roles.items():
         instance = containers.get(role_id, {})
-        raw_skills = instance.get("skills") or instance.get("skill_bindings") or []
+        raw_skills = instance.get("skill_refs") or instance.get("skills") or []
         if raw_skills and isinstance(raw_skills[0], dict):
-            skills = [s["skill_name"] for s in raw_skills]
+            skills = [s.get("skill_name") or s.get("name") for s in raw_skills]
         else:
             skills = raw_skills
-        backend = role.get("model_backbone", "brain")
-        if backend == "claudecode":
-            backend = "claude-code"
+        skills = [s for s in skills if s]
 
+        allowed_tools = instance.get("tool_refs") or []
+        backend = _normalize_backend(scene_name, role_id, role.get("model_backbone", "openclaw"))
         paradigm = role.get("primary_interaction_paradigm", "")
+        core_goal = role.get("core_goal", "")
+
         paradigm_hints = {
             "EXTERNAL_NEGOTIATION": "你处于对外谈判模式，需要在合作与竞争之间寻找平衡。",
             "COMPETITIVE_AGGRESSIVE": "你采取进攻性市场竞争策略，优先扩大份额而非短期利润。",
@@ -462,20 +413,23 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
             name=role.get("name", role_id),
             skills=skills[:4],
             tags=[paradigm] if paradigm else [],
-            tasks=skills[:6] if skills else [role.get("core_goal", "")],
+            tasks=[core_goal] if core_goal else [],
             extra_meta={
                 "identity": role.get("identity", ""),
-                "core_goal": role.get("core_goal", ""),
-                "hidden_secret": role.get("hidden_secret", ""),
+                "core_goal": core_goal,
                 "initial_assets": role.get("initial_assets", {}),
-                "action_space": ["send_message"] + skills,
+                "action_space": ["send_message", "broadcast"] + allowed_tools,
                 "background_rules": bg,
                 "backend": backend,
                 "interaction_paradigm": paradigm,
                 "paradigm_hint": paradigm_hints.get(paradigm, ""),
                 "pip_packages": instance.get("pip_packages", []),
                 "runtime_engine": instance.get("runtime_engine", ""),
-                "skills_list": [s for s in skills_info if s["name"] in skills],
+                "scene_key": scene_name,
+                "scene_title": title,
+                "allowed_skills": skills,
+                "allowed_tools": allowed_tools,
+                "skill_execution_mode": "backend_native_mcp",
             },
         )
         agents.append(agent)
@@ -504,32 +458,15 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
     )
 
 
-@router.post("/simulations/run")
-async def run_simulation(req: SimulationRunRequest):
-    """运行仿真场景 — setup + launch 一体化"""
-    if not req.scene or not (_SCENES_DIR / req.scene).is_dir():
-        raise HTTPException(status_code=400, detail=f"Scene '{req.scene}' not found")
-    scene_def = _build_scene_from_folder(req.scene)
-
-    result = _setup_scene(scene_def)
-    state.current_relationships = result["relationships"]
-
-    config = _get_effective_llm_config()
-    loop = asyncio.get_event_loop()
-    launch = await loop.run_in_executor(None, _launch_containers, config)
-    result.update(launch)
-
-    state.service_state["simulations_run"] += 1
-    return result
-
-
 @router.post("/simulations/setup")
 async def setup_simulation(req: SimulationRunRequest):
-    """Step 1: 绘制场景 — 创建 Agent、返回布局和关系（不启动容器）"""
     global _pending_config
     if not req.scene or not (_SCENES_DIR / req.scene).is_dir():
         raise HTTPException(status_code=400, detail=f"Scene '{req.scene}' not found")
-    scene_def = _build_scene_from_folder(req.scene)
+    try:
+        scene_def = _build_scene_from_folder(req.scene)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     _pending_config = _get_effective_llm_config()
     result = _setup_scene(scene_def)
@@ -539,7 +476,6 @@ async def setup_simulation(req: SimulationRunRequest):
 
 @router.post("/simulations/launch")
 async def launch_simulation():
-    """Step 2: 拉起 Docker — 为已 setup 的 Agent 启动容器并运行仿真"""
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, _launch_containers, _pending_config, _pending_scene_def)
     return result
@@ -547,24 +483,12 @@ async def launch_simulation():
 
 @router.post("/simulations/stop")
 async def stop_simulation():
-    """停止正在运行的仿真"""
     state.simulation_stop_requested = True
     return {"status": "stop_requested"}
 
 
-@router.get("/simulations/results")
-async def simulation_results():
-    """获取最新仿真结果（简单缓存）"""
-    return {"results": _simulation_results}
-
-
-# ═══════════════════════════════════════════════
-# 场景文件 API (挂载到 /scenes 或通过 router 调整路径前缀)
-# ═══════════════════════════════════════════════
-
 @router.get("/scenes")
 async def list_scenes():
-    """列出所有可用场景（文件夹格式）"""
     if not _SCENES_DIR.exists():
         return {"scenes": []}
     scenes = []
@@ -576,27 +500,19 @@ async def list_scenes():
 
 @router.get("/scenes/state")
 async def scene_state_unified():
-    """统一的场景面板数据端点"""
     agents = [a.get_status() for a in AgentRegistry.list_all()]
-    custom = None
-    if state.active_skills_module and hasattr(state.active_skills_module, 'get_panel_state'):
-        try:
-            custom = state.active_skills_module.get_panel_state()
-        except Exception:
-            custom = None
     return {
         "scene": state.current_scene_name,
         "running": state.simulation_active,
         "round": state.current_turn,
         "max_rounds": state.current_max_rounds,
         "agents": agents,
-        "custom": custom,
+        "custom": None,
     }
 
 
 @router.get("/scenes/{scene_name}")
 async def read_scene(scene_name: str):
-    """读取场景内容（文件夹格式）"""
     folder = _SCENES_DIR / scene_name
     if not folder.is_dir():
         raise HTTPException(status_code=404, detail=f"Scene '{scene_name}' not found")
@@ -604,7 +520,7 @@ async def read_scene(scene_name: str):
     for key in ["meta_and_roles", "instances_and_skills", "network_topology"]:
         fpath = folder / f"{key}.json"
         if fpath.exists():
-            files[key] = json.loads(fpath.read_text(encoding='utf-8'))
+            files[key] = json.loads(fpath.read_text(encoding="utf-8"))
     if "meta_and_roles" not in files:
         raise HTTPException(status_code=404, detail=f"Folder scene '{scene_name}' missing meta_and_roles.json")
     title = files["meta_and_roles"].get("scenario_metadata", {}).get("title", scene_name)
@@ -613,51 +529,17 @@ async def read_scene(scene_name: str):
 
 @router.get("/scenes/{scene_name}/panel", response_class=HTMLResponse)
 async def scene_panel(scene_name: str):
-    """返回场景自带的可视化面板 HTML"""
     folder = _SCENES_DIR / scene_name
     panel_path = folder / "panel.html"
     if panel_path.exists():
-        return HTMLResponse(content=panel_path.read_text(encoding='utf-8'))
+        return HTMLResponse(content=panel_path.read_text(encoding="utf-8"))
     raise HTTPException(status_code=404, detail="Panel not found")
 
 
 @router.get("/scenes/{scene_name}/{filename:path}")
 async def scene_asset(scene_name: str, filename: str):
-    """提供场景文件夹中的静态资源（图片、CSS等）"""
     folder = _SCENES_DIR / scene_name
     file_path = folder / filename
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail=f"Asset '{filename}' not found")
     return FileResponse(str(file_path))
-
-
-@router.get("/minesweeper/board")
-async def minesweeper_board():
-    """返回扫雷场景的棋盘状态（从 _engine 读取）"""
-    if not state.active_skills_module or not hasattr(state.active_skills_module, '_engine'):
-        return {"board": None, "error": "扫雷引擎未加载"}
-    eng = state.active_skills_module._engine
-    SIZE = getattr(eng, 'SIZE', 9)
-    revealed = eng.revealed
-    mines = eng.mines
-    board_data = []
-    for y in range(SIZE):
-        row = []
-        for x in range(SIZE):
-            if (x, y) in revealed:
-                cell = {"state": "revealed", "is_mine": (x, y) in mines, "adj": 0}
-                if not cell["is_mine"]:
-                    adj = sum(1 for dx in (-1,0,1) for dy in (-1,0,1) if (x+dx, y+dy) in mines)
-                    cell["adj"] = adj
-            else:
-                cell = {"state": "hidden"}
-            row.append(cell)
-        board_data.append(row)
-    
-    registry = getattr(eng, 'round_action_registry', {})
-    agents_pos = {}
-    if registry:
-        latest = max(registry.keys())
-        agents_pos = registry[latest]
-        
-    return {"board": board_data, "size": SIZE, "agents": agents_pos}

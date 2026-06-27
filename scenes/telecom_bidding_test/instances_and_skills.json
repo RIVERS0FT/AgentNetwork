@@ -1,67 +1,111 @@
 {
   "container_instances": {
     "GOV_AGENCY": {
-      "skills": [
+      "skill_refs": [
         "evaluate_proposals",
         "sign_contract",
         "terminate_contract_with_flash"
+      ],
+      "tool_refs": [
+        "evaluate_proposals_tool",
+        "sign_contract_tool",
+        "terminate_contract_with_flash_tool"
       ]
     },
     "FIN_BANK": {
-      "skills": [
+      "skill_refs": [
         "evaluate_proposals",
         "sign_contract",
         "terminate_contract_with_flash"
+      ],
+      "tool_refs": [
+        "evaluate_proposals_tool",
+        "sign_contract_tool",
+        "terminate_contract_with_flash_tool"
       ]
     },
     "EDU_UNIV": {
-      "skills": [
+      "skill_refs": [
         "evaluate_proposals",
         "sign_contract"
+      ],
+      "tool_refs": [
+        "evaluate_proposals_tool",
+        "sign_contract_tool"
       ]
     },
     "MED_HOSP": {
-      "skills": [
+      "skill_refs": [
         "evaluate_proposals",
         "sign_contract"
+      ],
+      "tool_refs": [
+        "evaluate_proposals_tool",
+        "sign_contract_tool"
       ]
     },
     "IND_FACTORY": {
-      "skills": [
+      "skill_refs": [
         "evaluate_proposals",
         "sign_contract",
         "terminate_contract_with_flash"
+      ],
+      "tool_refs": [
+        "evaluate_proposals_tool",
+        "sign_contract_tool",
+        "terminate_contract_with_flash_tool"
       ]
     },
     "OP_MOBILE": {
-      "skills": [
+      "skill_refs": [
         "submit_bidding_proposal",
         "process_breach_notification"
+      ],
+      "tool_refs": [
+        "submit_bidding_proposal_tool",
+        "process_breach_notification_tool"
       ]
     },
     "OP_UNICOM": {
-      "skills": [
+      "skill_refs": [
         "submit_bidding_proposal",
         "process_breach_notification"
+      ],
+      "tool_refs": [
+        "submit_bidding_proposal_tool",
+        "process_breach_notification_tool"
       ]
     },
     "OP_TELECOM": {
-      "skills": [
+      "skill_refs": [
         "submit_bidding_proposal",
         "process_breach_notification"
+      ],
+      "tool_refs": [
+        "submit_bidding_proposal_tool",
+        "process_breach_notification_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "investigate_complaint",
         "impose_sanction",
         "audit_market_share"
+      ],
+      "tool_refs": [
+        "investigate_complaint_tool",
+        "impose_sanction_tool",
+        "audit_market_share_tool"
       ]
     },
     "CONSULTANT": {
-      "skills": [
+      "skill_refs": [
         "provide_evaluation_report",
         "broker_deal"
+      ],
+      "tool_refs": [
+        "provide_evaluation_report_tool",
+        "broker_deal_tool"
       ]
     }
   }

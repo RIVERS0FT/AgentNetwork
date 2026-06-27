@@ -1,66 +1,107 @@
 {
   "container_instances": {
     "DEV_FE": {
-      "skills": [
+      "skill_refs": [
         "submit_code"
+      ],
+      "tool_refs": [
+        "submit_code_tool"
       ]
     },
     "DEV_BE": {
-      "skills": [
+      "skill_refs": [
         "submit_code"
+      ],
+      "tool_refs": [
+        "submit_code_tool"
       ]
     },
     "DEV_FW": {
-      "skills": [
+      "skill_refs": [
         "submit_code"
+      ],
+      "tool_refs": [
+        "submit_code_tool"
       ]
     },
     "DEV_AI": {
-      "skills": [
+      "skill_refs": [
         "submit_model",
         "request_external_api"
+      ],
+      "tool_refs": [
+        "submit_model_tool",
+        "request_external_api_tool"
       ]
     },
     "DEV_IC": {
-      "skills": [
+      "skill_refs": [
         "submit_design",
         "request_external_api"
+      ],
+      "tool_refs": [
+        "submit_design_tool",
+        "request_external_api_tool"
       ]
     },
     "ARCHITECT": {
-      "skills": [
+      "skill_refs": [
         "review_document",
         "notify_team"
+      ],
+      "tool_refs": [
+        "review_document_tool",
+        "notify_team_tool"
       ]
     },
     "PM": {
-      "skills": [
+      "skill_refs": [
         "write_document"
+      ],
+      "tool_refs": [
+        "write_document_tool"
       ]
     },
     "DOC_WRITER": {
-      "skills": [
+      "skill_refs": [
         "write_document"
+      ],
+      "tool_refs": [
+        "write_document_tool"
       ]
     },
     "QA": {
-      "skills": [
+      "skill_refs": [
         "run_test",
         "notify_team"
+      ],
+      "tool_refs": [
+        "run_test_tool",
+        "notify_team_tool"
       ]
     },
     "REPO_ADMIN": {
-      "skills": [
+      "skill_refs": [
         "review_code",
         "handle_push",
         "trigger_ci_cd",
         "notify_team"
+      ],
+      "tool_refs": [
+        "review_code_tool",
+        "handle_push_tool",
+        "trigger_ci_cd_tool",
+        "notify_team_tool"
       ]
     },
     "DEV_OPS": {
-      "skills": [
+      "skill_refs": [
         "trigger_ci_cd",
         "handle_push"
+      ],
+      "tool_refs": [
+        "trigger_ci_cd_tool",
+        "handle_push_tool"
       ]
     }
   }

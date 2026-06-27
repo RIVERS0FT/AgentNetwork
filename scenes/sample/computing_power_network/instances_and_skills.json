@@ -1,70 +1,117 @@
 {
   "container_instances": {
     "CMCC_COMPUTE": {
-      "skills": [
+      "skill_refs": [
         "negotiate_standard",
         "price_setting",
         "pool_resources"
+      ],
+      "tool_refs": [
+        "negotiate_standard_tool",
+        "price_setting_tool",
+        "pool_resources_tool"
       ]
     },
     "CT_CLOUD": {
-      "skills": [
+      "skill_refs": [
         "negotiate_standard",
         "alliance_strategy",
         "cost_optimize"
+      ],
+      "tool_refs": [
+        "negotiate_standard_tool",
+        "alliance_strategy_tool",
+        "cost_optimize_tool"
       ]
     },
     "CU_SMART": {
-      "skills": [
+      "skill_refs": [
         "collaborate_training",
         "data_compliance",
         "resource_sharing"
+      ],
+      "tool_refs": [
+        "collaborate_training_tool",
+        "data_compliance_tool",
+        "resource_sharing_tool"
       ]
     },
     "GX_BIGDATA": {
-      "skills": [
+      "skill_refs": [
         "audit_compliance",
         "policy_guide",
         "approve_pool"
+      ],
+      "tool_refs": [
+        "audit_compliance_tool",
+        "policy_guide_tool",
+        "approve_pool_tool"
       ]
     },
     "PENGLAB": {
-      "skills": [
+      "skill_refs": [
         "request_compute",
         "negotiate_price",
         "evaluate_performance"
+      ],
+      "tool_refs": [
+        "request_compute_tool",
+        "negotiate_price_tool",
+        "evaluate_performance_tool"
       ]
     },
     "SCHEDULER": {
-      "skills": [
+      "skill_refs": [
         "match_resources",
         "settle_transaction",
         "monitor_network"
+      ],
+      "tool_refs": [
+        "match_resources_tool",
+        "settle_transaction_tool",
+        "monitor_network_tool"
       ]
     },
     "GPU_VENDOR": {
-      "skills": [
+      "skill_refs": [
         "supply_gpu",
         "promote_standard",
         "bid_contract"
+      ],
+      "tool_refs": [
+        "supply_gpu_tool",
+        "promote_standard_tool",
+        "bid_contract_tool"
       ]
     },
     "CMCC_ENG": {
-      "skills": [
+      "skill_refs": [
         "develop_pool_tech",
         "test_integration"
+      ],
+      "tool_refs": [
+        "develop_pool_tech_tool",
+        "test_integration_tool"
       ]
     },
     "CT_ENG": {
-      "skills": [
+      "skill_refs": [
         "develop_api",
         "test_integration"
+      ],
+      "tool_refs": [
+        "develop_api_tool",
+        "test_integration_tool"
       ]
     },
     "CU_ENG": {
-      "skills": [
+      "skill_refs": [
         "develop_api",
         "data_encrypt"
+      ],
+      "tool_refs": [
+        "develop_api_tool",
+        "data_encrypt_tool"
       ]
     }
   }

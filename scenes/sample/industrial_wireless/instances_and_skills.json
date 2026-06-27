@@ -1,70 +1,117 @@
 {
   "container_instances": {
     "BYD_IT": {
-      "skills": [
+      "skill_refs": [
         "negotiate_bandwidth",
         "monitor_efficiency",
         "escalate_issue"
+      ],
+      "tool_refs": [
+        "negotiate_bandwidth_tool",
+        "monitor_efficiency_tool",
+        "escalate_issue_tool"
       ]
     },
     "SERES_IT": {
-      "skills": [
+      "skill_refs": [
         "negotiate_bandwidth",
         "enforce_sla",
         "cost_analysis"
+      ],
+      "tool_refs": [
+        "negotiate_bandwidth_tool",
+        "enforce_sla_tool",
+        "cost_analysis_tool"
       ]
     },
     "SOUTH_PLANT": {
-      "skills": [
+      "skill_refs": [
         "cost_optimization",
         "downtime_analysis"
+      ],
+      "tool_refs": [
+        "cost_optimization_tool",
+        "downtime_analysis_tool"
       ]
     },
     "5G_VENDOR": {
-      "skills": [
+      "skill_refs": [
         "propose_5g_solution",
         "calculate_roi",
         "contract_negotiation"
+      ],
+      "tool_refs": [
+        "propose_5g_solution_tool",
+        "calculate_roi_tool",
+        "contract_negotiation_tool"
       ]
     },
     "WIFI_VENDOR": {
-      "skills": [
+      "skill_refs": [
         "propose_wifi_solution",
         "market_analysis",
         "competitive_pricing"
+      ],
+      "tool_refs": [
+        "propose_wifi_solution_tool",
+        "market_analysis_tool",
+        "competitive_pricing_tool"
       ]
     },
     "OTA_PLATFORM": {
-      "skills": [
+      "skill_refs": [
         "schedule_ota",
         "impact_assessment",
         "success_rate_analysis"
+      ],
+      "tool_refs": [
+        "schedule_ota_tool",
+        "impact_assessment_tool",
+        "success_rate_analysis_tool"
       ]
     },
     "REGULATOR": {
-      "skills": [
+      "skill_refs": [
         "audit_spectrum",
         "enforce_compliance",
         "allocate_spectrum"
+      ],
+      "tool_refs": [
+        "audit_spectrum_tool",
+        "enforce_compliance_tool",
+        "allocate_spectrum_tool"
       ]
     },
     "AGV_FLEET": {
-      "skills": [
+      "skill_refs": [
         "report_latency",
         "request_priority"
+      ],
+      "tool_refs": [
+        "report_latency_tool",
+        "request_priority_tool"
       ]
     },
     "PROD_LINE": {
-      "skills": [
+      "skill_refs": [
         "report_jitter",
         "demand_bandwidth"
+      ],
+      "tool_refs": [
+        "report_jitter_tool",
+        "demand_bandwidth_tool"
       ]
     },
     "TENANT_MGR": {
-      "skills": [
+      "skill_refs": [
         "isolate_tenant",
         "monitor_interference",
         "resolve_complaint"
+      ],
+      "tool_refs": [
+        "isolate_tenant_tool",
+        "monitor_interference_tool",
+        "resolve_complaint_tool"
       ]
     }
   }

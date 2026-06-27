@@ -1,75 +1,127 @@
 {
   "container_instances": {
     "THU_ITC": {
-      "skills": [
+      "skill_refs": [
         "evaluate_vendor_proposals",
         "allocate_budget",
         "coordinate_deployment",
         "report_progress"
+      ],
+      "tool_refs": [
+        "evaluate_vendor_proposals_tool",
+        "allocate_budget_tool",
+        "coordinate_deployment_tool",
+        "report_progress_tool"
       ]
     },
     "ZZU_ITD": {
-      "skills": [
+      "skill_refs": [
         "evaluate_vendor_proposals",
         "allocate_budget",
         "coordinate_deployment",
         "report_progress"
+      ],
+      "tool_refs": [
+        "evaluate_vendor_proposals_tool",
+        "allocate_budget_tool",
+        "coordinate_deployment_tool",
+        "report_progress_tool"
       ]
     },
     "RFID_CORP": {
-      "skills": [
+      "skill_refs": [
         "propose_rfid_solution",
         "negotiate_price",
         "provide_tech_support"
+      ],
+      "tool_refs": [
+        "propose_rfid_solution_tool",
+        "negotiate_price_tool",
+        "provide_tech_support_tool"
       ]
     },
     "WIFI_CORP": {
-      "skills": [
+      "skill_refs": [
         "propose_wifi_solution",
         "negotiate_price",
         "provide_tech_support"
+      ],
+      "tool_refs": [
+        "propose_wifi_solution_tool",
+        "negotiate_price_tool",
+        "provide_tech_support_tool"
       ]
     },
     "ASSET_SYS": {
-      "skills": [
+      "skill_refs": [
         "propose_integration_plan",
         "negotiate_price",
         "customize_software"
+      ],
+      "tool_refs": [
+        "propose_integration_plan_tool",
+        "negotiate_price_tool",
+        "customize_software_tool"
       ]
     },
     "NET_OPS": {
-      "skills": [
+      "skill_refs": [
         "assess_network_impact",
         "deploy_infrastructure",
         "monitor_performance"
+      ],
+      "tool_refs": [
+        "assess_network_impact_tool",
+        "deploy_infrastructure_tool",
+        "monitor_performance_tool"
       ]
     },
     "HOSP_OPS": {
-      "skills": [
+      "skill_refs": [
         "assess_network_impact",
         "deploy_infrastructure",
         "monitor_performance"
+      ],
+      "tool_refs": [
+        "assess_network_impact_tool",
+        "deploy_infrastructure_tool",
+        "monitor_performance_tool"
       ]
     },
     "THU_FIN": {
-      "skills": [
+      "skill_refs": [
         "approve_payment",
         "audit_expenditure",
         "negotiate_payment_terms"
+      ],
+      "tool_refs": [
+        "approve_payment_tool",
+        "audit_expenditure_tool",
+        "negotiate_payment_terms_tool"
       ]
     },
     "ZZU_FIN": {
-      "skills": [
+      "skill_refs": [
         "approve_payment",
         "audit_expenditure",
         "negotiate_payment_terms"
+      ],
+      "tool_refs": [
+        "approve_payment_tool",
+        "audit_expenditure_tool",
+        "negotiate_payment_terms_tool"
       ]
     },
     "GOV_REG": {
-      "skills": [
+      "skill_refs": [
         "review_compliance",
         "issue_certification",
         "audit_data_security"
+      ],
+      "tool_refs": [
+        "review_compliance_tool",
+        "issue_certification_tool",
+        "audit_data_security_tool"
       ]
     }
   }

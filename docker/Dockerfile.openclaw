@@ -3,7 +3,9 @@ FROM python:3.12-slim
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+# 安装 OpenClaw 官方 CLI 工具 (请根据实际情况确认包名是否为 openclaw 或是其他内网私服包)
+# 移除 openclaw 依赖以支持 0 token 测试
 RUN apt-get update && apt-get install -y --no-install-recommends tcpdump && rm -rf /var/lib/apt/lists/*
 
 COPY agent_network/ /app/agent_network/
