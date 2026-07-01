@@ -62,7 +62,7 @@ class ContainerRuntime:
         self._status_listener: Optional[Callable[[ContainerAgent, str, Optional[Dict[str, Any]]], None]] = None
         self._init_docker()
 
-    def set_status_listener(self, callback: Optional[Callable[[ContainerAgent, str, Optional[Dict[str, Any]]], None]):
+    def set_status_listener(self, callback: Optional[Callable[[ContainerAgent, str, Optional[Dict[str, Any]]], None]]):
         self._status_listener = callback
 
     def _set_status(self, ca: ContainerAgent, status: str, detail: Dict[str, Any] = None):
