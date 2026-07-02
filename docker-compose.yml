@@ -3,7 +3,8 @@
 
 x-common-llm-env: &common-llm-env
   MOCK_LLM: ${MOCK_LLM:-0}
-  LOG_LLM_API: ${LOG_LLM_API:-1}
+  LOG_FULL_PCAP: ${LOG_FULL_PCAP:-1}
+  PCAP_DIR: /app/data/pcap
   LLM_API_KEY: ${LLM_API_KEY:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -26,8 +27,8 @@ x-claude-env: &claude-env
   <<: *common-llm-env
   TZ: Asia/Shanghai
   AGENT_BACKEND: claude-code
-  MESSAGE_BUS_URL: http://bus:9000
   SERVER_URL: http://srv:8000
+  AGENT_COMM_MODE: direct
   LOG_DOCKER_HTTP: "0"
   LOG_TRAFFIC: "0"
 
@@ -35,15 +36,11 @@ x-openclaw-env: &openclaw-env
   <<: *common-llm-env
   TZ: Asia/Shanghai
   AGENT_BACKEND: openclaw
-  # OpenCLAW Agent containers are strict by default: missing SDK/gateway is a
-  # deployment error, not a signal to silently run direct LLM fallback.
   AGENT_STRICT_BACKEND_SDK: ${AGENT_STRICT_BACKEND_SDK:-1}
-  MESSAGE_BUS_URL: http://bus:9000
   SERVER_URL: http://srv:8000
+  AGENT_COMM_MODE: direct
   LOG_DOCKER_HTTP: "0"
   LOG_TRAFFIC: "0"
-  # OpenCLAW self-contained mode: gateway and openclaw-sdk live in the same
-  # Agent container. The SDK connects to the local gateway by default.
   OPENCLAW_START_GATEWAY: ${OPENCLAW_START_GATEWAY:-1}
   OPENCLAW_GATEWAY_HOST: ${OPENCLAW_GATEWAY_HOST:-127.0.0.1}
   OPENCLAW_GATEWAY_PORT: ${OPENCLAW_GATEWAY_PORT:-18789}
@@ -59,7 +56,11 @@ x-claude: &claude
   build: { context: ., dockerfile: docker/Dockerfile.claude }
   cap_add: [NET_RAW, NET_ADMIN]
   environment: *claude-env
-  volumes: ["./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network", "./scenes:/app/scenes:ro"]
+  volumes:
+    - ./services/agent_server.py:/app/services/agent_server.py
+    - ./agent_network:/app/agent_network
+    - ./scenes:/app/scenes:ro
+    - ./data/pcap:/app/data/pcap
   restart: unless-stopped
   networks: [an]
 
@@ -71,41 +72,38 @@ x-openclaw: &openclaw
       OPENCLAW_GATEWAY_NPM_PACKAGE: ${OPENCLAW_GATEWAY_NPM_PACKAGE:-openclaw@latest}
   cap_add: [NET_RAW, NET_ADMIN]
   environment: *openclaw-env
-  volumes: ["./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network", "./scenes:/app/scenes:ro"]
+  volumes:
+    - ./services/agent_server.py:/app/services/agent_server.py
+    - ./agent_network:/app/agent_network
+    - ./scenes:/app/scenes:ro
+    - ./data/pcap:/app/data/pcap
   restart: unless-stopped
   networks: [an]
 
 services:
-  bus:
-    build: { context: ., dockerfile: docker/Dockerfile.message-bus }
-    container_name: bus
-    user: "1000:1000"
-    ports: ["9000:9000"]
-    volumes: ["./data/logs:/app/data/logs"]
-    environment:
-      TZ: Asia/Shanghai
-      MESSAGE_BUS_PORT: "9000"
-      SERVER_URL: http://srv:8000
-      LOG_DOCKER_HTTP: "0"
-      LOG_TRAFFIC: "0"
-      LOG_LLM_API: ${LOG_LLM_API:-1}
-    restart: unless-stopped
-    networks: [an]
-
   srv:
     build: { context: ., dockerfile: docker/Dockerfile.server }
     container_name: srv
     user: "1000:110"
     ports: ["8000:8000"]
     command: ["python", "services/server.py", "--host", "0.0.0.0"]
-    volumes: ["/var/run/docker.sock:/var/run/docker.sock", "./data/logs:/app/data/logs", "./web/public:/app/web/public", "./scenes:/app/scenes", "./services/server.py:/app/services/server.py", "./services/agent_server.py:/app/services/agent_server.py", "./agent_network:/app/agent_network"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/logs:/app/data/logs
+      - ./data/pcap:/app/data/pcap
+      - ./web/public:/app/web/public
+      - ./scenes:/app/scenes
+      - ./services/server.py:/app/services/server.py
+      - ./services/agent_server.py:/app/services/agent_server.py
+      - ./agent_network:/app/agent_network
     environment:
       <<: *common-llm-env
       TZ: Asia/Shanghai
       SERVER_PORT: "8000"
-      MESSAGE_BUS_URL: http://bus:9000
+      AGENT_COMM_MODE: direct
       LOG_DOCKER_HTTP: "0"
       LOG_TRAFFIC: "0"
+      AGENT_PCAP_HOST_PATH: /app/data/pcap
     restart: unless-stopped
     networks: [an]
 
