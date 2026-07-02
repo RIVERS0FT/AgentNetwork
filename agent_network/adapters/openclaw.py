@@ -18,11 +18,6 @@ def _unique(items: list[str]) -> list[str]:
 
 
 def _skill_names(agent_context: AgentContext) -> list[str]:
-    """Return the control-plane Skill allowlist.
-
-    srv only passes Skill names. Skill.md is loaded inside the Agent container and
-    injected as SOP/context here; it is not parsed or executed by srv.
-    """
     names = list(getattr(agent_context, "allowed_skills", []) or [])
     if not names:
         for item in agent_context.skills or []:
@@ -36,22 +31,14 @@ def _skill_names(agent_context: AgentContext) -> list[str]:
 def _skill_context(agent_context: AgentContext) -> list[dict]:
     scene_key = agent_context.scene_key or os.environ.get("AGENT_SCENE_KEY", "default")
     scenes_root = os.environ.get("AGENT_SCENES_ROOT", "/app/scenes")
-    registry = load_scene_skill_registry(
-        scene_key=scene_key,
-        scenes_root=scenes_root,
-        allowed_skills=_skill_names(agent_context),
-    )
+    registry = load_scene_skill_registry(scene_key=scene_key, scenes_root=scenes_root, allowed_skills=_skill_names(agent_context))
     specs = registry.context_specs()
     if specs:
         return specs
-
-    # Compatibility fallback for old callers. New srv code should not send SOP
-    # bodies; container-local Skill.md remains the preferred source of truth.
     return [item for item in (agent_context.skills or []) if isinstance(item, dict)]
 
 
 def _build_task_payload(agent_context: AgentContext) -> str:
-    """Build a structured payload and let the backend decide how to use it."""
     payload = {
         "task": agent_context.task,
         "trace_id": agent_context.trace_id,
@@ -69,6 +56,9 @@ def _build_task_payload(agent_context: AgentContext) -> str:
         "permissions": agent_context.permissions,
         "state_snapshot": agent_context.state_snapshot,
         "tick": agent_context.tick,
+        "agent_directory": agent_context.agent_directory,
+        "comm_matrix": agent_context.comm_matrix,
+        "network_mode": "direct",
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -79,8 +69,7 @@ def _system_prompt(agent_context: AgentContext) -> str:
         f"Role: {agent_context.role}\n"
         f"Core Goal: {agent_context.core_goal}\n"
         f"Trace ID: {agent_context.trace_id}\n"
-        "Skill.md content is SOP/context loaded inside this Agent container. "
-        "Do not assume Skill names are executable tools; call only exposed backend tools."
+        "AgentNetwork uses direct Agent-to-Agent HTTP messaging. Skill.md content is SOP/context."
     )
 
 
@@ -88,51 +77,21 @@ def _completed_event(agent_context: AgentContext, output_text: str, backend_name
     return {
         "event": "agent_run_completed",
         "trace_id": agent_context.trace_id,
-        "actor": {
-            "agent_id": agent_context.agent_id,
-            "name": agent_context.agent_name,
-            "role": agent_context.role,
-            "backend": backend_name,
-        },
-        "task": {
-            "goal": agent_context.task,
-            "status": "completed",
-        },
-        "action": {
-            "type": "agent_run",
-            "name": f"{backend_name}_run",
-            "status": "success",
-        },
-        "content": {
-            "content_type": "final_message",
-            "text": output_text,
-            "summary": output_text[:200],
-            "size_bytes": len(output_text.encode("utf-8")),
-        },
-        "result": {
-            "status": "success",
-            "message": "agent run completed",
-        },
-        "metrics": {
-            "backend": backend_name,
-        },
+        "actor": {"agent_id": agent_context.agent_id, "name": agent_context.agent_name, "role": agent_context.role, "backend": backend_name},
+        "task": {"goal": agent_context.task, "status": "completed"},
+        "action": {"type": "agent_run", "name": f"{backend_name}_run", "status": "success"},
+        "content": {"content_type": "final_message", "text": output_text, "summary": output_text[:200], "size_bytes": len(output_text.encode("utf-8"))},
+        "result": {"status": "success", "message": "agent run completed"},
+        "metrics": {"backend": backend_name},
     }
 
 
 def _openclaw_agent_id(agent_context: AgentContext) -> str:
-    return (
-        os.environ.get("OPENCLAW_AGENT_ID")
-        or os.environ.get("OPENCLAW_DEFAULT_AGENT_ID")
-        or agent_context.agent_id
-    )
+    return os.environ.get("OPENCLAW_AGENT_ID") or os.environ.get("OPENCLAW_DEFAULT_AGENT_ID") or agent_context.agent_id
 
 
 def _openclaw_session_name(agent_context: AgentContext) -> str:
-    return (
-        os.environ.get("OPENCLAW_SESSION_NAME")
-        or agent_context.trace_id
-        or "main"
-    )
+    return os.environ.get("OPENCLAW_SESSION_NAME") or agent_context.trace_id or "main"
 
 
 def _extract_openclaw_text(result) -> str:
@@ -149,47 +108,21 @@ class OpenCLAWAdapter(BackendAdapter):
     def run_agent_task(self, agent_context: AgentContext) -> AgentRunResult:
         if os.environ.get("MOCK_LLM") == "1":
             output_text = "[MOCK_LLM] Dummy response from OpenCLAW"
-            return AgentRunResult(
-                trace_id=agent_context.trace_id,
-                agent_id=agent_context.agent_id,
-                status="completed",
-                final_message=output_text,
-                application_events=[_completed_event(agent_context, output_text, "openclaw")],
-                tool_events=[],
-                state_changes=[],
-                outbound_messages=[],
-                traffic_events=[],
-                audit_events=[],
-                error=None,
-            )
+            return AgentRunResult(trace_id=agent_context.trace_id, agent_id=agent_context.agent_id, status="completed", final_message=output_text, application_events=[_completed_event(agent_context, output_text, "openclaw")])
 
         system_prompt = _system_prompt(agent_context)
         current_task = _build_task_payload(agent_context)
         prompt = f"{system_prompt}\n\nAgentNetwork task payload:\n{current_task}"
 
         if not OpenClawClient:
-            return AgentRunResult(
-                trace_id=agent_context.trace_id,
-                agent_id=agent_context.agent_id,
-                status="error",
-                final_message="",
-                error=(
-                    "openclaw-sdk is not installed or not importable. "
-                    "AGENT_BACKEND=openclaw never falls back to direct LLM. "
-                    "Install vendor/python/openclaw_sdk-*.whl and rebuild the OpenCLAW image, "
-                    "or set AGENT_BACKEND=direct_llm intentionally."
-                ),
-            )
+            return AgentRunResult(trace_id=agent_context.trace_id, agent_id=agent_context.agent_id, status="error", final_message="", error="openclaw-sdk is not installed or not importable.")
 
         try:
             async def _run():
                 gateway_url = os.environ.get("OPENCLAW_GATEWAY_WS_URL", "")
                 logger.info("Connecting to OpenCLAW gateway: %s", gateway_url or "SDK default")
                 async with OpenClawClient.connect() as client:
-                    agent = client.get_agent(
-                        _openclaw_agent_id(agent_context),
-                        session_name=_openclaw_session_name(agent_context),
-                    )
+                    agent = client.get_agent(_openclaw_agent_id(agent_context), session_name=_openclaw_session_name(agent_context))
                     return await agent.execute(prompt)
 
             loop = asyncio.new_event_loop()
@@ -200,24 +133,6 @@ class OpenCLAWAdapter(BackendAdapter):
                 loop.close()
 
             output_text = _extract_openclaw_text(response)
-            return AgentRunResult(
-                trace_id=agent_context.trace_id,
-                agent_id=agent_context.agent_id,
-                status="completed",
-                final_message=output_text,
-                application_events=[_completed_event(agent_context, output_text, "openclaw-sdk")],
-                tool_events=[],
-                state_changes=[],
-                outbound_messages=[],
-                traffic_events=[],
-                audit_events=[],
-                error=None,
-            )
+            return AgentRunResult(trace_id=agent_context.trace_id, agent_id=agent_context.agent_id, status="completed", final_message=output_text, application_events=[_completed_event(agent_context, output_text, "openclaw-sdk")])
         except Exception as e:
-            return AgentRunResult(
-                trace_id=agent_context.trace_id,
-                agent_id=agent_context.agent_id,
-                status="error",
-                final_message="",
-                error=f"OpenCLAW SDK Error: {str(e)}",
-            )
+            return AgentRunResult(trace_id=agent_context.trace_id, agent_id=agent_context.agent_id, status="error", final_message="", error=f"OpenCLAW SDK Error: {str(e)}")
