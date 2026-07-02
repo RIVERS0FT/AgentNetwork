@@ -1,94 +1,91 @@
-"""
-统一通信层 — 抽象 Agent 间通信，内存/容器模式共用同一接口。
-
-LocalBus:  内存模式，直接通过 EventBus 通信（零网络开销）
-RemoteBus: 容器模式，通过消息总线 /relay 中转
-"""
-
-import os
-import json
-import time
 import requests
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from abc import ABC, abstractmethod
 
 
 class CommLayer(ABC):
-    """Agent 通信层抽象基类"""
-
     inbox: List[Dict[str, Any]]
 
     @abstractmethod
     def send(self, from_id: str, from_name: str, target: str, content: str,
              channel_id: str = "", talk: str = "") -> bool:
-        """发送消息给目标 Agent"""
         ...
 
     @abstractmethod
     def broadcast(self, from_id: str, from_name: str, content: str, allowed: set = None,
                   channel_id: str = "", talk: str = "") -> bool:
-        """广播消息给所有 Agent（可选通信权限过滤）"""
         ...
 
     @abstractmethod
     def register_agent(self, agent_id: str, name: str, url: str = "") -> None:
-        """向通信层注册 Agent"""
         ...
 
 
-class RemoteBus(CommLayer):
-    """容器模式 — 通过消息总线 /relay 中转，自动记录出站流量"""
-
-    def __init__(self, message_bus_url: str = "http://localhost:9000",
-                 server_url: str = "http://localhost:8000"):
-        self._bus_url = message_bus_url.rstrip("/")
-        self._server_url = server_url.rstrip("/")
+class DirectBus(CommLayer):
+    def __init__(self, agent_directory: Dict[str, str] = None, comm_matrix: Dict[str, Any] = None, **_):
+        self.agent_directory = {str(k).lower(): v for k, v in (agent_directory or {}).items() if v}
+        self.comm_matrix = {
+            str(k).lower(): {str(item).lower() for item in (v or [])}
+            for k, v in (comm_matrix or {}).items()
+        }
         self.inbox: List[Dict[str, Any]] = []
-        # Docker 内部 HTTP 日志；LOG_TRAFFIC 仅作为旧配置兼容。
-        self._traffic = os.environ.get("LOG_DOCKER_HTTP", os.environ.get("LOG_TRAFFIC", "0")) == "1"
-        self._traffic_component = os.environ.get("AGENT_ID", "agent")
 
-    def _post(self, path: str, json_data: dict = None, params: dict = None,
-              timeout: float = 10) -> tuple:
-        """内部 POST，流量启用时自动记录"""
-        url = f"{self._bus_url}{path}"
-        if self._traffic and self._server_url:
-            from agent_network.traffic_log import traffic_post_json
-            data = json_data if json_data else {}
-            traffic_post_json(url, data, component=self._traffic_component,
-                              server_url=self._server_url, timeout=timeout)
-        try:
-            resp = requests.post(url, json=json_data, params=params, timeout=timeout)
-            return resp.ok, (resp.json() if resp.ok else None)
-        except Exception:
-            return False, None
+    def update_directory(self, agent_directory: Dict[str, str] = None, comm_matrix: Dict[str, Any] = None):
+        if agent_directory is not None:
+            self.agent_directory = {str(k).lower(): v for k, v in agent_directory.items() if v}
+        if comm_matrix is not None:
+            self.comm_matrix = {
+                str(k).lower(): {str(item).lower() for item in (v or [])}
+                for k, v in comm_matrix.items()
+            }
+
+    def _allowed(self, from_id: str, target: str) -> bool:
+        if not self.comm_matrix:
+            return True
+        return str(target).lower() in self.comm_matrix.get(str(from_id).lower(), set())
 
     def register_agent(self, agent_id: str, name: str, url: str = "") -> None:
-        """向消息总线注册"""
-        try:
-            self._post("/register", params={"agent_id": agent_id, "url": url, "name": name}, timeout=3)
-        except Exception:
-            pass
+        if agent_id and url:
+            self.agent_directory[str(agent_id).lower()] = url.rstrip("/")
 
     def send(self, from_id: str, from_name: str, target: str, content: str,
              channel_id: str = "", talk: str = "") -> bool:
-        """通过消息总线转发给目标 Agent"""
-        ok, _ = self._post("/relay", json_data={
-            "from_id": from_id, "from_name": from_name,
-            "to": target, "content": content,
-            "channel_id": channel_id, "talk": talk,
-        }, timeout=10)
-        return ok
+        source_id = str(from_id).lower()
+        target_id = str(target).lower()
+        if not self._allowed(source_id, target_id):
+            return False
+        target_url = self.agent_directory.get(target_id)
+        if not target_url:
+            return False
+        try:
+            resp = requests.post(
+                f"{target_url.rstrip('/')}/message",
+                json={
+                    "from_id": source_id,
+                    "from_name": from_name,
+                    "content": content,
+                    "type": "direct",
+                    "channel_id": channel_id,
+                    "talk": talk,
+                },
+                timeout=10,
+            )
+            return resp.ok
+        except Exception:
+            return False
 
     def broadcast(self, from_id: str, from_name: str, content: str, allowed: set = None,
                   channel_id: str = "", talk: str = "") -> bool:
-        """通过消息总线广播（消息总线根据注册表转发）"""
-        payload = {
-            "from_id": from_id, "from_name": from_name,
-            "to": "broadcast", "content": content,
-            "channel_id": channel_id, "talk": talk,
-        }
-        if allowed:
-            payload["allowed"] = list(allowed)
-        ok, _ = self._post("/relay", json_data=payload, timeout=15)
-        return ok
+        source_id = str(from_id).lower()
+        explicit_allowed = {str(item).lower() for item in (allowed or set())}
+        ok_all = True
+        for target_id in sorted(self.agent_directory.keys()):
+            if target_id == source_id:
+                continue
+            if explicit_allowed and target_id not in explicit_allowed:
+                continue
+            ok_all = self.send(source_id, from_name, target_id, content, channel_id, talk) and ok_all
+        return ok_all
+
+
+RemoteBus = DirectBus
