@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Agent 容器运行时 — 统一 HTTP 服务 (OpenCLAW / Claude Code / Direct LLM)
-
-AgentNetwork 只负责容器化运行入口、消息收件箱和控制面上下文注入。
-单 Agent 内部 ReAct、记忆和 Tool 选择交给 Claude Code / OpenCLAW。
-Direct LLM 是显式降级后端，不能伪装成 OpenCLAW。
-"""
+"""Agent container runtime HTTP service."""
 
 import os
 import sys
@@ -22,8 +16,8 @@ import uvicorn
 import requests
 
 from agent_network.logger import get_logger
-from agent_network.comm import RemoteBus
-from agent_network.packet_capture import start_capture, stop_capture
+from agent_network.comm import DirectBus
+from agent_network.full_packet_capture import start_full_capture, stop_full_capture
 from agent_network.adapters.base import AgentContext
 from agent_network.adapters.claude_code import ClaudeCodeAdapter
 from agent_network.adapters.direct_llm import DirectLLMAdapter
@@ -33,7 +27,6 @@ AGENT_ID = os.environ.get("AGENT_ID", "agent-001")
 AGENT_ROLE = os.environ.get("AGENT_ROLE", "generic")
 AGENT_NAME = os.environ.get("AGENT_NAME", AGENT_ID)
 AGENT_PORT = int(os.environ.get("PORT", "8000"))
-MESSAGE_BUS = os.environ.get("MESSAGE_BUS_URL", "http://localhost:9000")
 SERVER_URL = os.environ.get("SERVER_URL", "http://localhost:8000")
 
 AGENT_CORE_GOAL = os.environ.get("AGENT_CORE_GOAL", "")
@@ -51,26 +44,15 @@ if BACKEND in {"direct-llm", "directllm"}:
 
 SUPPORTED_BACKENDS = {"openclaw", "claude-code", "direct_llm"}
 if BACKEND not in SUPPORTED_BACKENDS:
-    raise RuntimeError(
-        f"Unsupported AGENT_BACKEND={BACKEND!r}. "
-        "Use 'openclaw', 'claude-code', or explicit 'direct_llm'."
-    )
+    raise RuntimeError(f"Unsupported AGENT_BACKEND={BACKEND!r}.")
 
 API_KEY = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("LLM_API_KEY", "")
 MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 
-comm = RemoteBus(message_bus_url=MESSAGE_BUS, server_url=SERVER_URL)
+comm = DirectBus()
 logger = get_logger()
-backend_label = {
-    "openclaw": "OpenCLAW",
-    "claude-code": "Claude Code",
-    "direct_llm": "Direct LLM",
-}.get(BACKEND, BACKEND)
+backend_label = {"openclaw": "OpenCLAW", "claude-code": "Claude Code", "direct_llm": "Direct LLM"}.get(BACKEND, BACKEND)
 app = FastAPI(title=f"Agent {AGENT_NAME} ({backend_label})")
-
-from agent_network.traffic_log import TrafficMiddleware, traffic_enabled
-if traffic_enabled():
-    app.add_middleware(TrafficMiddleware, component=AGENT_ID, server_url=f"{SERVER_URL}")
 
 turn = 0
 inbox: list = []
@@ -135,6 +117,8 @@ class MessageIn(BaseModel):
     from_name: str = ""
     content: str
     type: str = "message"
+    channel_id: str = ""
+    talk: str = ""
 
 
 class RunRequest(BaseModel):
@@ -154,6 +138,8 @@ class RunRequest(BaseModel):
     timeout_seconds: int = 60
     max_turns: int = 10
     scene_key: str = "default"
+    agent_directory: Dict[str, str] = {}
+    comm_matrix: Dict[str, List[str]] = {}
 
 
 def _make_adapter():
@@ -166,15 +152,11 @@ def _make_adapter():
 
 @app.post("/run")
 async def run_agent(req: RunRequest):
-    """Run one backend-native Agent task.
-
-    The full ReAct loop is delegated to Claude Code / OpenCLAW. This endpoint
-    only converts AgentNetwork context into the BackendAdapter contract.
-    """
     allowed_skills = req.allowed_skills or _skill_names_from_legacy(req.skills)
+    comm.update_directory(req.agent_directory, req.comm_matrix)
     context = AgentContext(
         trace_id=req.trace_id,
-        agent_id=req.agent_id or AGENT_ID,
+        agent_id=(req.agent_id or AGENT_ID).lower(),
         agent_name=req.agent_name or AGENT_NAME,
         role=req.role or AGENT_ROLE,
         core_goal=req.core_goal or AGENT_CORE_GOAL,
@@ -189,6 +171,8 @@ async def run_agent(req: RunRequest):
         max_turns=req.max_turns,
         scene_key=req.scene_key or os.environ.get("AGENT_SCENE_KEY", "default"),
         allowed_skills=allowed_skills,
+        agent_directory=req.agent_directory,
+        comm_matrix=req.comm_matrix,
     )
 
     adapter = _make_adapter()
@@ -276,20 +260,23 @@ async def capture_start(request: Request):
         body = await request.json()
     except Exception:
         body = {}
-    capture_agent_id = body.get("agent_id") or AGENT_ID
-    capture_agent_name = body.get("agent_name") or AGENT_NAME
-    return start_capture(agent_id=capture_agent_id, agent_name=capture_agent_name, server_url=SERVER_URL)
+    return start_full_capture(
+        agent_id=body.get("agent_id") or AGENT_ID,
+        session_id=body.get("session_id", ""),
+        pcap_dir=body.get("pcap_dir") or os.environ.get("PCAP_DIR", "/app/data/pcap"),
+        interface=body.get("interface", "any"),
+    )
 
 
 @app.post("/capture/stop")
 async def capture_stop():
-    return stop_capture()
+    return stop_full_capture()
 
 
 @app.post("/reset")
 async def reset_state():
     global turn, _event_queue
-    stop_capture()
+    stop_full_capture()
     turn = 0
     _event_queue = []
     inbox.clear()
@@ -297,16 +284,9 @@ async def reset_state():
 
 
 if __name__ == "__main__":
-    try:
-        comm.register_agent(AGENT_ID, AGENT_NAME, f"http://localhost:{AGENT_PORT}")
-        print(f"[Agent {backend_label}] Registered: {AGENT_ID} @ port {AGENT_PORT}")
-    except Exception as e:
-        print(f"[Agent {backend_label}] Register failed: {e}")
-
     print(f"[Agent {backend_label}] {AGENT_NAME} ({AGENT_ROLE}) starting on port {AGENT_PORT}")
     print(f"[Agent {backend_label}] Backend: {BACKEND} | Model: {MODEL} | Goal: {AGENT_CORE_GOAL or 'N/A'}")
-
     try:
         uvicorn.run(app, host="0.0.0.0", port=AGENT_PORT, log_level="info")
     finally:
-        stop_capture()
+        stop_full_capture()
