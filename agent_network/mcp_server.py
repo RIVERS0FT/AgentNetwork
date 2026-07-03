@@ -122,7 +122,7 @@ def _register_atomic_tools():
             content=content,
             status=status,
         )
-        return json.dumps({"status": status, "target": target, "mode": "direct"}, ensure_ascii=False)
+        return json.dumps({"status": status, "target": target, "mode": "a2a-direct"}, ensure_ascii=False)
 
     @mcp.tool()
     def broadcast(content: str = Field(description="Message content to broadcast")) -> str:
@@ -136,7 +136,7 @@ def _register_atomic_tools():
             content=content,
             status=status,
         )
-        return json.dumps({"status": status, "target": "broadcast", "mode": "direct"}, ensure_ascii=False)
+        return json.dumps({"status": status, "target": "broadcast", "mode": "a2a-direct"}, ensure_ascii=False)
 
 
 def _load_tool_registry():

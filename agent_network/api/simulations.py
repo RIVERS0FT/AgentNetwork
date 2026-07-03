@@ -146,6 +146,7 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     time.sleep(1)
 
     agent_directory = {ca.agent_id.lower(): ca.url for ca, _ in created_cas if ca.url}
+    runtime_agent_ids = {ca.agent_id.lower(): (ca.container_name or ca.agent_id).lower() for ca, _ in created_cas}
     _comm_matrix.clear()
     for edge in (scene_def.workflow or []):
         if edge.get("can_direct_chat", True) is False:
@@ -154,8 +155,14 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
         dst = edge.get("to", "").lower()
         if src and dst:
             _comm_matrix.setdefault(src, set()).add(dst)
+            runtime_dst = runtime_agent_ids.get(dst)
+            if runtime_dst:
+                _comm_matrix.setdefault(src, set()).add(runtime_dst)
             if edge.get("bidirectional", False):
                 _comm_matrix.setdefault(dst, set()).add(src)
+                runtime_src = runtime_agent_ids.get(src)
+                if runtime_src:
+                    _comm_matrix.setdefault(dst, set()).add(runtime_src)
 
     logger.start_session(scene_def.scene_name)
     session_id = getattr(logger, "_session_id", "")
@@ -210,7 +217,7 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
             if ca.status != "error":
                 runtime._set_status(ca, "idle", {"phase": "simulation:finish", "stop_reason": stop_reason})
 
-    return {"simulation_name": scene_def.scene_name, "agents": [a.get_status() for a in AgentRegistry.list_all()], "agent_stats": AgentRegistry.get_stats(), "packet_stats": packet_stats(session_id=session_id), "rounds": len(results_log), "max_rounds": max_rounds, "stop_reason": stop_reason, "results_log": results_log, "relationships": scene_def.workflow, "comm_policy": {"mode": "direct", "matrix": {k: list(v) for k, v in _comm_matrix.items()}}, "agent_directory": agent_directory, "network_mode": "direct", "assign_errors": assign_errors}
+    return {"simulation_name": scene_def.scene_name, "agents": [a.get_status() for a in AgentRegistry.list_all()], "agent_stats": AgentRegistry.get_stats(), "packet_stats": packet_stats(session_id=session_id), "rounds": len(results_log), "max_rounds": max_rounds, "stop_reason": stop_reason, "results_log": results_log, "relationships": scene_def.workflow, "comm_policy": {"mode": "direct", "protocol": "a2a", "matrix": {k: list(v) for k, v in _comm_matrix.items()}}, "agent_directory": agent_directory, "runtime_agent_ids": runtime_agent_ids, "network_mode": "direct", "assign_errors": assign_errors}
 
 
 def _normalize_backend(scene_name: str, role_id: str, backend: str) -> str:
@@ -258,52 +265,3 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
                 weight = 70 if edge.get("paradigm") == "COLLABORATION" else -50
             relationships.append({"from": edge["source"].lower(), "to": edge["target"].lower(), "relation_type": edge.get("paradigm", ""), "value": weight, "can_direct_chat": edge.get("direct_chat", True), "bidirectional": edge.get("bidirectional", False), "channel_id": edge.get("channel_id", ""), "network": edge.get("network", {})})
     return SceneDefinition(scene_name=title, description=bg, agents=agents, workflow=relationships, event_triggers=[])
-
-
-@router.post("/simulations/setup")
-async def setup_simulation(req: SimulationRunRequest):
-    global _pending_config
-    if not req.scene or not (_SCENES_DIR / req.scene).is_dir():
-        raise HTTPException(status_code=400, detail=f"Scene '{req.scene}' not found")
-    scene_def = _build_scene_from_folder(req.scene)
-    _pending_config = _get_effective_llm_config()
-    result = _setup_scene(scene_def)
-    state.current_relationships = result["relationships"]
-    return result
-
-
-@router.post("/simulations/launch")
-async def launch_simulation():
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _launch_containers, _pending_config, _pending_scene_def)
-
-
-@router.post("/simulations/stop")
-async def stop_simulation():
-    state.simulation_stop_requested = True
-    return {"status": "stop_requested"}
-
-
-@router.get("/scenes")
-async def list_scenes():
-    if not _SCENES_DIR.exists():
-        return {"scenes": []}
-    return {"scenes": [{"name": f.name, "format": "folder"} for f in sorted(_SCENES_DIR.iterdir(), key=lambda n: n.name.lower()) if f.is_dir() and (f / "meta_and_roles.json").exists()]}
-
-
-@router.get("/scenes/state")
-async def scene_state_unified():
-    return {"scene": state.current_scene_name, "running": state.simulation_active, "round": state.current_turn, "max_rounds": state.current_max_rounds, "agents": [a.get_status() for a in AgentRegistry.list_all()], "custom": None}
-
-
-@router.get("/scenes/{scene_name}")
-async def read_scene(scene_name: str):
-    folder = _SCENES_DIR / scene_name
-    if not folder.is_dir():
-        raise HTTPException(status_code=404, detail=f"Scene '{scene_name}' not found")
-    files = {}
-    for key in ["meta_and_roles", "instances_and_skills", "network_topology"]:
-        path = folder / f"{key}.json"
-        if path.exists():
-            files[key] = json.loads(path.read_text(encoding="utf-8"))
-    return {"name": scene_name, "files": files}
