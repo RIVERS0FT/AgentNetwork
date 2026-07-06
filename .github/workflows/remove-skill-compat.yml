@@ -14,7 +14,119 @@ jobs:
       - name: Apply migration
         id: migrate
         continue-on-error: true
-        run: python scripts/remove_skill_compat.py > migration.log 2>&1
+        run: |
+          set +e
+          python scripts/remove_skill_compat.py > migration.log 2>&1
+          set -e
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+
+          path = root / 'tests/test_mcp_server_boundary.py'
+          text = path.read_text(encoding='utf-8')
+          text, count = re.subn(
+              r'\n\ndef test_setup_runtime_keeps_skill_metadata_as_context_only\(tmp_path\):.*\Z',
+              '''
+
+          def test_mcp_server_does_not_cache_or_parse_skill_content(tmp_path):
+              import agent_network.mcp_server as mcp_server
+
+              mcp_server.setup_runtime(
+                  scene_key="demo",
+                  agent_id="agent_a",
+                  agent_name="Agent A",
+                  allowed_tools=[],
+                  scenes_root=str(tmp_path),
+              )
+
+              assert not hasattr(mcp_server, "_SKILLS_CACHE")
+              assert not hasattr(mcp_server, "_ALLOWED_SKILLS")
+          ''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise RuntimeError('missing MCP cache test')
+          path.write_text(text, encoding='utf-8')
+
+          path = root / 'tests/test_skill_md_loader_context_only.py'
+          text = path.read_text(encoding='utf-8').replace(
+              'LocalSkillRegistry(allowed_skills=',
+              'LocalSkillRegistry(skill_refs=',
+          )
+          path.write_text(text, encoding='utf-8')
+
+          path = root / 'tests/test_adapter_context_boundary.py'
+          text = path.read_text(encoding='utf-8')
+          start = text.index('        skills=[')
+          end = text.index('        allowed_tools=', start)
+          text = text[:start] + '        skill_refs=["planning"],\n' + text[end:]
+          text = text.replace(
+              '    assert payload["skills"][0]["name"] == "planning"\n'
+              '    assert payload["skills"][0]["sop_content"] == "Plan step by step"',
+              '    assert payload["skill_refs"] == ["planning"]\n'
+              '    assert payload["skill_context"] == []',
+          )
+          text = text.replace(
+              '    server = claude_code._claude_mcp_server(_context(), ["planning"])',
+              '    server = claude_code._claude_mcp_server(_context())',
+          )
+          text = text.replace(
+              '    assert payload["skills"][0]["tools"] == ["write_plan"]',
+              '    assert payload["skill_refs"] == ["planning"]\n'
+              '    assert payload["skill_context"] == []',
+          )
+          path.write_text(text, encoding='utf-8')
+
+          path = root / 'tests/test_agent_server_boundary.py'
+          text = path.read_text(encoding='utf-8')
+          if 'test_agent_server_exposes_only_skill_refs_contract' not in text:
+              text += '''
+
+          def test_agent_server_exposes_only_skill_refs_contract():
+              text = _text()
+
+              assert "skill_refs: List[str]" in text
+              assert "allowed_skills" not in text
+              assert "_skill_names_from_legacy" not in text
+              assert "skills: List[Dict" not in text
+          '''
+          path.write_text(text, encoding='utf-8')
+
+          for relative in ('docs/AgentRuntimeBoundary.md', 'docs/设计文档.md'):
+              path = root / relative
+              path.write_text(
+                  path.read_text(encoding='utf-8').replace('allowed_skills', 'skill_refs'),
+                  encoding='utf-8',
+              )
+
+          runtime_files = (
+              'agent_network/scene_def.py',
+              'agent_network/agent_model.py',
+              'agent_network/api/agents.py',
+              'agent_network/api/simulations.py',
+              'agent_network/container_runtime.py',
+              'services/agent_server.py',
+              'agent_network/adapters/base.py',
+              'agent_network/adapters/openclaw.py',
+              'agent_network/adapters/claude_code.py',
+              'agent_network/adapters/direct_llm.py',
+              'agent_network/mcp_server.py',
+          )
+          for relative in runtime_files:
+              text = (root / relative).read_text(encoding='utf-8')
+              for forbidden in (
+                  'allowed_skills',
+                  '_SKILLS_CACHE',
+                  '_ALLOWED_SKILLS',
+                  '_skill_names_from_legacy',
+              ):
+                  if forbidden in text:
+                      raise RuntimeError(f'{forbidden} remains in {relative}')
+          PY
 
       - name: Compile
         if: steps.migrate.outcome == 'success'
