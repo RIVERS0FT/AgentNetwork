@@ -1,40 +1,10 @@
-name: One-shot dashboard topology rename
+name: Disabled one-shot topology rename
 
 on:
-  push:
-    paths:
-      - .github/workflows/one-shot-topology-rename.yml
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  rename:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Rename dashboard relationship fields to topology
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path('web/public/dashboard.js')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace('_relationships', '_topology')
-          text = text.replace('drawRelationshipLines', 'drawTopologyLines')
-          text = text.replace('drawRelationshipsComposite', 'drawTopologyComposite')
-          text = text.replace('hasRelationship', 'hasTopologyEdge')
-          text = re.sub(r'\brelationships\b', 'topology', text)
-          path.write_text(text, encoding='utf-8')
-          PY
-      - name: Commit dashboard rename
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/public/dashboard.js
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "rename dashboard relationships to topology"
-          git push
+      - run: echo "Topology rename already completed."
