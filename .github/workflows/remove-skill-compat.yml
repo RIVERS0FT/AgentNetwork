@@ -1,0 +1,58 @@
+name: Validate skill compatibility migration
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  migrate-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply migration
+        run: python scripts/remove_skill_compat.py
+
+      - name: Compile
+        run: python -m compileall -q agent_network services tests
+
+      - name: Run boundary tests
+        run: >-
+          pytest -q
+          tests/test_scene_building_boundary.py
+          tests/test_container_runtime_boundary.py
+          tests/test_mcp_server_boundary.py
+          tests/test_skill_md_loader_context_only.py
+          tests/test_adapter_context_boundary.py
+          tests/test_agent_server_boundary.py
+
+      - name: Build migration artifact
+        run: |
+          mkdir -p migration-output
+          cp --parents \
+            agent_network/agent_model.py \
+            agent_network/api/agents.py \
+            agent_network/api/simulations.py \
+            agent_network/container_runtime.py \
+            agent_network/adapters/base.py \
+            agent_network/adapters/openclaw.py \
+            agent_network/adapters/claude_code.py \
+            agent_network/adapters/direct_llm.py \
+            agent_network/skill_md_loader.py \
+            agent_network/mcp_server.py \
+            services/agent_server.py \
+            tests/test_scene_building_boundary.py \
+            tests/test_container_runtime_boundary.py \
+            tests/test_mcp_server_boundary.py \
+            tests/test_skill_md_loader_context_only.py \
+            tests/test_adapter_context_boundary.py \
+            tests/test_agent_server_boundary.py \
+            docs/AgentRuntimeBoundary.md \
+            docs/设计文档.md \
+            migration-output/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skill-refs-migration
+          path: migration-output
