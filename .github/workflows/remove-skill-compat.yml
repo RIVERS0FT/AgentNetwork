@@ -132,17 +132,6 @@ jobs:
         if: steps.migrate.outcome == 'success'
         run: python -m compileall -q agent_network services tests
 
-      - name: Run boundary tests
-        if: steps.migrate.outcome == 'success'
-        run: >-
-          pytest -q
-          tests/test_scene_building_boundary.py
-          tests/test_container_runtime_boundary.py
-          tests/test_mcp_server_boundary.py
-          tests/test_skill_md_loader_context_only.py
-          tests/test_adapter_context_boundary.py
-          tests/test_agent_server_boundary.py
-
       - name: Build migration artifact
         if: steps.migrate.outcome == 'success'
         run: |
@@ -169,11 +158,26 @@ jobs:
             docs/设计文档.md \
             migration-output/
 
+      - name: Run boundary tests
+        id: tests
+        if: steps.migrate.outcome == 'success'
+        continue-on-error: true
+        run: >-
+          pytest -q
+          tests/test_scene_building_boundary.py
+          tests/test_container_runtime_boundary.py
+          tests/test_mcp_server_boundary.py
+          tests/test_skill_md_loader_context_only.py
+          tests/test_adapter_context_boundary.py
+          tests/test_agent_server_boundary.py
+          > pytest.log 2>&1
+
       - name: Collect diagnostics
         if: always()
         run: |
           mkdir -p diagnostics
           cp migration.log diagnostics/migration.log
+          if [ -f pytest.log ]; then cp pytest.log diagnostics/pytest.log; fi
           if [ -d migration-output ]; then cp -R migration-output diagnostics/; fi
 
       - uses: actions/upload-artifact@v4
@@ -182,6 +186,6 @@ jobs:
           name: skill-refs-migration
           path: diagnostics
 
-      - name: Fail when migration failed
-        if: steps.migrate.outcome != 'success'
+      - name: Fail when migration or tests failed
+        if: steps.migrate.outcome != 'success' || steps.tests.outcome == 'failure'
         run: exit 1
