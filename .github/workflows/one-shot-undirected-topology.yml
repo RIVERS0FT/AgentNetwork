@@ -1,0 +1,164 @@
+name: One-shot undirected topology migration
+
+on:
+  push:
+    paths:
+      - .github/workflows/one-shot-undirected-topology.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Migrate topology endpoints and semantics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_required(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"missing expected fragment for {label}: {old!r}")
+              return text.replace(old, new)
+
+          simulations = Path("agent_network/api/simulations.py")
+          text = simulations.read_text(encoding="utf-8")
+          text = replace_required(
+              text,
+              "validation_errors.append(f\"{edge.get('from', '')}->{edge.get('to', '')}: {exc}\")",
+              "validation_errors.append(f\"{edge.get('endpoint_a', '')}<->{edge.get('endpoint_b', '')}: {exc}\")",
+              "network validation endpoints",
+          )
+          text = replace_required(
+              text,
+              'source = str(edge.get("from", "")).lower()\n        target = str(edge.get("to", "")).lower()\n        if source in agents and target in agents:\n            add_profile(source, target, network)\n        if edge.get("bidirectional") and source in agents and target in agents:\n            add_profile(target, source, network)',
+              'endpoint_a = str(edge.get("endpoint_a", "")).lower()\n        endpoint_b = str(edge.get("endpoint_b", "")).lower()\n        if endpoint_a in agents and endpoint_b in agents:\n            add_profile(endpoint_a, endpoint_b, network)\n            add_profile(endpoint_b, endpoint_a, network)',
+              "bidirectional network profiles",
+          )
+          text = replace_required(
+              text,
+              'for edge in (scene_def.topology or []):\n        if edge.get("can_direct_chat", True) is False:\n            continue\n        src = edge.get("from", "").lower()\n        dst = edge.get("to", "").lower()\n        if src and dst:\n            _comm_matrix.setdefault(src, set()).add(dst)\n            if edge.get("bidirectional", False):\n                _comm_matrix.setdefault(dst, set()).add(src)',
+              'for edge in (scene_def.topology or []):\n        endpoint_a = edge.get("endpoint_a", "").lower()\n        endpoint_b = edge.get("endpoint_b", "").lower()\n        if endpoint_a and endpoint_b:\n            _comm_matrix.setdefault(endpoint_a, set()).add(endpoint_b)\n            _comm_matrix.setdefault(endpoint_b, set()).add(endpoint_a)',
+              "bidirectional communication matrix",
+          )
+          text = replace_required(
+              text,
+              'topology_edges.append({"from": edge["source"].lower(), "to": edge["target"].lower(), "relation_type": edge.get("paradigm", ""), "value": weight, "can_direct_chat": edge.get("direct_chat", True), "bidirectional": edge.get("bidirectional", False), "channel_id": edge.get("channel_id", ""), "network": edge.get("network", {})})',
+              'topology_edges.append({"endpoint_a": edge["endpoint_a"].lower(), "endpoint_b": edge["endpoint_b"].lower(), "relation_type": edge.get("paradigm", ""), "value": weight, "channel_id": edge.get("channel_id", ""), "network": edge.get("network", {})})',
+              "topology edge model",
+          )
+          simulations.write_text(text, encoding="utf-8")
+
+          dashboard = Path("web/public/dashboard.js")
+          text = dashboard.read_text(encoding="utf-8")
+          for old, new in (
+              ("r.from.toLowerCase()", "r.endpoint_a.toLowerCase()"),
+              ("r.to.toLowerCase()", "r.endpoint_b.toLowerCase()"),
+              ("rel.from.toLowerCase()", "rel.endpoint_a.toLowerCase()"),
+              ("rel.to.toLowerCase()", "rel.endpoint_b.toLowerCase()"),
+          ):
+              text = replace_required(text, old, new, f"dashboard {old}")
+          dashboard.write_text(text, encoding="utf-8")
+
+          scenario = Path("scenes/scenario.py")
+          text = scenario.read_text(encoding="utf-8")
+          text = replace_required(
+              text,
+              '"source": {"type": "string", "description": "源角色ID"},\n                                                "target": {"type": "string", "description": "目标角色ID"},',
+              '"endpoint_a": {"type": "string", "description": "双向链路端点A的角色ID"},\n                                                "endpoint_b": {"type": "string", "description": "双向链路端点B的角色ID"},',
+              "scenario endpoint schema",
+          )
+          text = replace_required(
+              text,
+              '"required": ["source", "target", "paradigm", "channel_id"]',
+              '"required": ["endpoint_a", "endpoint_b", "paradigm", "channel_id"]',
+              "scenario required endpoints",
+          )
+          text = replace_required(
+              text,
+              'src, dst = edge["source"], edge["target"]',
+              'src, dst = edge["endpoint_a"], edge["endpoint_b"]',
+              "scenario peer construction",
+          )
+          scenario.write_text(text, encoding="utf-8")
+
+          test_file = Path("tests/test_network_emulation.py")
+          text = test_file.read_text(encoding="utf-8")
+          text = replace_required(
+              text,
+              "def test_simulation_translates_bidirectional_edge_into_two_agent_profiles():",
+              "def test_simulation_translates_undirected_edge_into_two_agent_profiles():",
+              "network emulation test name",
+          )
+          text = replace_required(
+              text,
+              '"from": "a",\n            "to": "b",\n            "bidirectional": True,',
+              '"endpoint_a": "a",\n            "endpoint_b": "b",',
+              "network emulation test edge",
+          )
+          test_file.write_text(text, encoding="utf-8")
+
+          changed_scene_files = 0
+          for path in Path("scenes").rglob("network_topology.json"):
+              data = json.loads(path.read_text(encoding="utf-8"))
+              changed = False
+              for subnet in data.get("sub_networks", []):
+                  for edge in subnet.get("edges", []):
+                      migrated = {}
+                      for key, value in edge.items():
+                          if key == "source":
+                              migrated["endpoint_a"] = value
+                              changed = True
+                          elif key == "target":
+                              migrated["endpoint_b"] = value
+                              changed = True
+                          elif key in {"direct_chat", "can_direct_chat", "bidirectional"}:
+                              changed = True
+                          else:
+                              migrated[key] = value
+                      edge.clear()
+                      edge.update(migrated)
+              if changed:
+                  path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                  changed_scene_files += 1
+          print(f"migrated {changed_scene_files} network_topology.json files")
+          PY
+      - name: Validate migration
+        run: |
+          python -m compileall -q agent_network scenes/scenario.py tests
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          forbidden = ["can_direct_chat", "bidirectional"]
+          code_paths = [
+              Path("agent_network/api/simulations.py"),
+              Path("web/public/dashboard.js"),
+              Path("tests/test_network_emulation.py"),
+          ]
+          for path in code_paths:
+              text = path.read_text(encoding="utf-8")
+              for token in forbidden:
+                  if token in text:
+                      raise SystemExit(f"{token} still present in {path}")
+          for path in Path("scenes").rglob("network_topology.json"):
+              data = json.loads(path.read_text(encoding="utf-8"))
+              for subnet in data.get("sub_networks", []):
+                  for edge in subnet.get("edges", []):
+                      if "endpoint_a" not in edge or "endpoint_b" not in edge:
+                          raise SystemExit(f"unmigrated edge in {path}")
+                      if any(key in edge for key in ("source", "target", "direct_chat", "can_direct_chat", "bidirectional")):
+                          raise SystemExit(f"legacy edge field in {path}")
+          PY
+          pytest -q tests/test_network_emulation.py tests/test_scene_building_boundary.py
+      - name: Commit migration and remove workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/one-shot-undirected-topology.yml
+          git add agent_network/api/simulations.py web/public/dashboard.js scenes/scenario.py tests/test_network_emulation.py scenes
+          git commit -m "model topology as undirected endpoint links"
+          git push
