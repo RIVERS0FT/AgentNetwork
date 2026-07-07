@@ -22,21 +22,21 @@
     },
     "DEV_FW": {
       "name": "嵌入式固件工程师",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "无线通信研发部固件开发，负责5G基站设备固件",
       "core_goal": "在10轮内修复3个固件bug并提交代码",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"
     },
     "DEV_AI": {
       "name": "AI模型训练工程师",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "云计算与AI部AI训练，负责大模型训练与推理",
       "core_goal": "在10轮内完成1次模型训练任务并提交模型文件",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
     },
     "DEV_IC": {
       "name": "IC设计工程师",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "芯片设计部IC设计，负责芯片仿真",
       "core_goal": "在10轮内通过外部EDA云仿真资源完成1次芯片仿真",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"

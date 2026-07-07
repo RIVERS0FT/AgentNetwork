@@ -86,25 +86,27 @@ def test_scene_building_uses_identity_role_and_skill_refs(tmp_path, monkeypatch)
     scene_def = simulations._build_scene_from_folder("demo_scene")
     agent = scene_def.agents[0]
 
+    assert scene_def.scene_key == "demo_scene"
+    assert scene_def.title == "Demo Scene"
+    assert scene_def.description == "Global rules"
     assert agent.agent_id == "ceo"
     assert agent.role == "Leader"
-    assert agent.tasks == ["Coordinate the team"]
+    assert agent.core_goal == "Coordinate the team"
+    assert agent.backend == "openclaw"
+    assert agent.tasks == []
     assert agent.skill_refs == ["planning", "reporting"]
-    assert agent.extra_meta["allowed_tools"] == ["write_plan"]
-    assert "identity" not in agent.extra_meta
-    assert "allowed_skills" not in agent.extra_meta
-    assert "skills_list" not in agent.extra_meta
-    assert agent.extra_meta["action_space"] == ["send_message", "broadcast", "write_plan"]
-    assert agent.extra_meta["skill_execution_mode"] == "backend_native_mcp"
+    assert agent.allowed_tools == ["write_plan"]
+    assert not hasattr(agent, "extra_meta")
 
 
-def test_scene_building_normalizes_claudecode_backend(tmp_path, monkeypatch):
+def test_scene_building_rejects_removed_claudecode_backend(tmp_path, monkeypatch):
     _write_scene(tmp_path, backend="claudecode")
     monkeypatch.setattr(simulations, "_SCENES_DIR", tmp_path)
 
-    scene_def = simulations._build_scene_from_folder("demo_scene")
+    with pytest.raises(ValueError) as exc:
+        simulations._build_scene_from_folder("demo_scene")
 
-    assert scene_def.agents[0].extra_meta["backend"] == "claude-code"
+    assert "removed backend alias 'claudecode'" in str(exc.value)
 
 
 def test_scene_building_rejects_removed_brain_backend(tmp_path, monkeypatch):

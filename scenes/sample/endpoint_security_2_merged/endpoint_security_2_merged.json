@@ -27,7 +27,7 @@
     },
     "SERES_MFG": {
       "name": "塞力斯智能制造部",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "塞力斯集团智能制造部门，推进工业4.0，对生产连续性要求极高",
       "core_goal": "保持生产线上线率不低于99.5%，安全方案不能影响生产效率",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION",
@@ -41,7 +41,7 @@
     },
     "CSG_ICS": {
       "name": "南网工控安全科",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "南方电网工控安全科，负责电网关键基础设施防护",
       "core_goal": "实现工控系统零日漏洞检测率提升至90%，且不影响电网稳定性",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -57,7 +57,7 @@
     },
     "ICBC_DATA": {
       "name": "工行数据中心",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "工商银行数据中心，提供金融级数据加密与审计服务",
       "core_goal": "在满足监管合规前提下，为工控场景设计加密流量审计方案，预算不超过500万",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -105,7 +105,7 @@
     },
     "ETA_VENDOR": {
       "name": "加密流量分析厂商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "专注加密流量分析的新兴厂商，利用AI技术",
       "core_goal": "在4轮内获得至少3个付费客户，营收达到1000万",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",

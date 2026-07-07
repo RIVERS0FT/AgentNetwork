@@ -67,7 +67,7 @@ python scenes/scenario.py \
 | `scenario_metadata.max_rounds` | int | 硬上限 (3–30) |
 | `scenario_metadata.stalemate_rounds` | int | 僵局阈值 (2–10) |
 | `roles.{role_id}` | object | `{name, model_backbone, identity, core_goal, primary_interaction_paradigm}` |
-| `roles.{role_id}.model_backbone` | enum | `openclaw` / `claudecode` |
+| `roles.{role_id}.model_backbone` | enum | `openclaw` / `claude-code` |
 | `roles.{role_id}.primary_interaction_paradigm` | enum | `INTERNAL_COLLABORATION` / `EXTERNAL_NEGOTIATION` / `ZERO_SUM_GAME` |
 
 ### instances_and_skills.json

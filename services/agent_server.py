@@ -33,15 +33,10 @@ AGENT_PORT = int(os.environ.get("PORT", "8000"))
 SERVER_URL = os.environ.get("SERVER_URL", "http://localhost:8000")
 
 AGENT_CORE_GOAL = os.environ.get("AGENT_CORE_GOAL", "")
-AGENT_ACTION_SPACE = json.loads(os.environ.get("AGENT_ACTION_SPACE", "[]"))
-AGENT_INITIAL_ASSETS = json.loads(os.environ.get("AGENT_INITIAL_ASSETS", "{}"))
 AGENT_SYSTEM_PROMPT = os.environ.get("AGENT_SYSTEM_PROMPT", "")
-AGENT_INTERACTION_PARADIGM = os.environ.get("AGENT_INTERACTION_PARADIGM", "")
 AGENT_PARADIGM_HINT = os.environ.get("AGENT_PARADIGM_HINT", "")
 
 BACKEND = os.environ.get("AGENT_BACKEND", "openclaw")
-if BACKEND == "claudecode":
-    BACKEND = "claude-code"
 if BACKEND in {"direct-llm", "directllm"}:
     BACKEND = "direct_llm"
 
@@ -264,8 +259,6 @@ async def status():
         "inbox_size": _inbox_size(),
         "has_llm": bool(API_KEY),
         "core_goal": AGENT_CORE_GOAL or None,
-        "action_space": AGENT_ACTION_SPACE,
-        "initial_assets": AGENT_INITIAL_ASSETS,
     }
 
 

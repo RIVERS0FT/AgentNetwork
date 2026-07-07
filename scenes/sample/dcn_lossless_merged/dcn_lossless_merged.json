@@ -29,7 +29,7 @@
     },
     "ICBC_FINTECH": {
       "name": "工商银行金融科技部",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "工商银行金融科技部，负责全行网络架构规划，对DCN无损网络有高要求。",
       "core_goal": "实现跨数据中心流量零丢包，且总成本增加不超过10%。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -49,7 +49,7 @@
     },
     "CHIP_VENDOR": {
       "name": "交换机芯片厂商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "全球领先的交换机芯片厂商，提供支持PFC的芯片方案。",
       "core_goal": "推广其最新支持智能流控的芯片，市场份额提升20%。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -100,7 +100,7 @@
     },
     "REGULATOR": {
       "name": "金融监管科技局",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "金融监管机构下属科技局，制定金融数据中心网络标准。",
       "core_goal": "推动形成金融行业无损网络白皮书，要求所有方案通过测试。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",
@@ -146,7 +146,7 @@
     },
     "CHIP_RIVAL": {
       "name": "竞争对手芯片厂",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "另一家芯片厂商，主推基于RoCEv2的方案。",
       "core_goal": "在5轮内争取到至少一家银行的试用机会。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",

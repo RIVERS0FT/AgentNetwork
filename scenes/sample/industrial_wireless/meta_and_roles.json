@@ -22,14 +22,14 @@
     },
     "SOUTH_PLANT": {
       "name": "南方工厂产线管理科",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "传统制造工厂，产线升级中，对成本敏感，希望以最低成本解决带宽问题。",
       "core_goal": "将带宽采购成本降低20%，同时保证产线停机时间减少50%。",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"
     },
     "5G_VENDOR": {
       "name": "5G专网设备商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "提供5G专网解决方案，希望推广其高带宽低延迟方案。",
       "core_goal": "签订至少2份5G专网合同，每份合同价值不低于500万。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -43,14 +43,14 @@
     },
     "OTA_PLATFORM": {
       "name": "OTA升级平台商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "提供OTA升级管理平台，依赖底层网络带宽，希望优化升级策略。",
       "core_goal": "将OTA升级成功率提升至99.5%，同时降低对生产网络的冲击。",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"
     },
     "REGULATOR": {
       "name": "工业无线监管局",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "政府监管机构，负责频谱分配和网络合规。",
       "core_goal": "确保频谱利用率不低于80%，且无违规占用。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME"
@@ -64,7 +64,7 @@
     },
     "PROD_LINE": {
       "name": "高速产线控制系统",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "控制高速自动化产线，对网络抖动敏感。",
       "core_goal": "产线抖动低于1ms，且带宽保障不低于200Mbps。",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"

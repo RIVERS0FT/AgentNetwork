@@ -9,7 +9,7 @@
   "roles": {
     "CMCC_COMPUTE": {
       "name": "中国移动算力事业部",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "三大运营商之一，拥有大量分散GPU算卡，希望主导算力标准获取定价权。",
       "core_goal": "在6轮内促成自有算力池化标准被采纳，并占据至少40%的调度份额。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -28,7 +28,7 @@
     },
     "CT_CLOUD": {
       "name": "中国电信云网中心",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "三大运营商之一，云网融合优势，寻求与移动竞争，同时与联通合作。",
       "core_goal": "在仿真结束时，通过联盟获得至少30%的算力调度收益，预算结余>20%。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -98,7 +98,7 @@
     },
     "SCHEDULER": {
       "name": "第三方算力调度平台",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "中立平台，提供算力撮合与调度服务，收取佣金。",
       "core_goal": "最大化平台交易量，每轮促成至少3笔交易，总佣金收入>500万。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -116,7 +116,7 @@
     },
     "GPU_VENDOR": {
       "name": "GPU设备供应商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "硬件厂商，希望推广自家GPU标准，与运营商合作。",
       "core_goal": "在仿真结束时，与至少两家运营商签订供货协议，销售额>2000万。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",

@@ -28,7 +28,10 @@ def test_agent_status_and_registry_use_skill_refs_only():
         agent_id="agent_a",
         role="planner",
         name="Agent A",
+        core_goal="Plan work",
+        backend="openclaw",
         skill_refs=["planning"],
+        allowed_tools=["write_plan"],
     )
     AgentRegistry.register(agent)
 
@@ -36,7 +39,12 @@ def test_agent_status_and_registry_use_skill_refs_only():
 
     assert status["agent_id"] == "agent_a"
     assert status["role"] == "planner"
+    assert status["core_goal"] == "Plan work"
+    assert status["backend"] == "openclaw"
     assert status["skill_refs"] == ["planning"]
+    assert status["allowed_tools"] == ["write_plan"]
+    assert "extra_meta" not in status
+    assert not hasattr(agent, "extra_meta")
     assert "skills" not in status
     assert "tags" not in status
     assert AgentRegistry.get("agent_a") is agent

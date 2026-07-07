@@ -15,7 +15,7 @@
     },
     "FIN_BANK": {
       "name": "金融银行",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "大型商业银行，追求低延迟与高可靠性，对价格敏感",
       "core_goal": "在15轮内与至少两家运营商签约备份，总通信成本低于预算的75%",
       "primary_interaction_paradigm": "ZERO_SUM_GAME"
@@ -36,14 +36,14 @@
     },
     "IND_FACTORY": {
       "name": "工业工厂",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "智能制造工厂，需要5G专网，对性价比和定制化要求高",
       "core_goal": "在10轮内签约一家运营商，且合同期内至少触发一次违约转投以测试灵活性",
       "primary_interaction_paradigm": "ZERO_SUM_GAME"
     },
     "OP_MOBILE": {
       "name": "移动运营商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "中国移动，市场份额最大，覆盖广，价格中等",
       "core_goal": "在20轮内至少与3家机构签约，总合同价值>1500万",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -64,7 +64,7 @@
     },
     "REGULATOR": {
       "name": "监管机构",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "通信管理局，监督市场公平竞争，防止垄断和恶意竞价",
       "core_goal": "在20轮内确保无运营商市场份额超过50%，且无机构被强制绑定",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"

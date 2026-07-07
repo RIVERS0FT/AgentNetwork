@@ -5,7 +5,7 @@ Agent 数据模型与注册中心。
 - agent_id / role / name
 - skill_refs / capability_scores
 - status / container_url
-- position / extra_meta
+- position / explicit runtime metadata
 - pending task descriptions
 
 本模块不负责单 Agent 执行、ReAct、Tool 调用或 Memory。单 Agent
@@ -48,13 +48,19 @@ class Agent:
         agent_id: str = None,
         role: str = "generic",
         name: str = "",
+        core_goal: str = "",
+        backend: str = "openclaw",
         skill_refs: List[str] = None,
+        allowed_tools: List[str] = None,
         capability_scores: Dict[str, float] = None,
     ):
         self.agent_id = agent_id or f"agent-{str(uuid.uuid4())}"
         self.role = role
         self.name = name or self.agent_id
+        self.core_goal = core_goal
+        self.backend = backend
         self.skill_refs = list(skill_refs or [])
+        self.allowed_tools = list(allowed_tools or [])
         self.capability_scores = capability_scores or {}
         self.status = "idle"
         self.container_id = f"docker-{self.agent_id}"
@@ -63,7 +69,6 @@ class Agent:
         self.task_queue: List[Message] = []
         self.completed_tasks: List[Dict[str, Any]] = []
         self.pending_task_descs: List[str] = []
-        self.extra_meta: Dict[str, Any] = {}
         self._created_at = datetime.now().isoformat(timespec="seconds")
 
         # Frontend layout position.
@@ -131,6 +136,9 @@ class Agent:
             "agent_id": self.agent_id,
             "name": self.name,
             "role": self.role,
+            "core_goal": self.core_goal,
+            "backend": self.backend,
+            "allowed_tools": self.allowed_tools,
             "url": getattr(self, "container_url", ""),
             "container_id": self.container_id,
             "status": self.status,
@@ -138,7 +146,6 @@ class Agent:
             "capability_scores": self.capability_scores,
             "pending_tasks": len(self.task_queue),
             "pending_task_descs": self.pending_task_descs,
-            "extra_meta": self.extra_meta,
             "completed_tasks": len(self.completed_tasks),
             "created_at": self._created_at,
             "x": self.x,

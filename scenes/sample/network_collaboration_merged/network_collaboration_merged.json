@@ -9,7 +9,7 @@
   "roles": {
     "CEO": {
       "name": "首席执行官",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "公司最高决策者，统筹全局战略，协调各部门资源。",
       "core_goal": "公司整体利润增长20%，市场份额提升5%",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION",
@@ -41,7 +41,7 @@
     },
     "CFO": {
       "name": "首席财务官",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "财务部门负责人，控制成本与预算分配。",
       "core_goal": "预算结余大于10%，降低运营成本15%",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION",
@@ -86,7 +86,7 @@
     },
     "SALES_LEAD": {
       "name": "销售总监",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "销售团队负责人，开拓市场与客户关系。",
       "core_goal": "签约新客户10个，销售额增长30%",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -105,7 +105,7 @@
     },
     "SUPPLIER_A": {
       "name": "供应商A（云服务）",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "外部云服务提供商，提供计算与存储资源。",
       "core_goal": "与公司签订长期合同，利润最大化",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -137,7 +137,7 @@
     },
     "COMPETITOR": {
       "name": "竞争对手公司",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "同行业竞争对手，争夺同一市场份额。",
       "core_goal": "抢占公司客户，降低公司市场占有率",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",
@@ -152,7 +152,7 @@
     },
     "REGULATOR": {
       "name": "监管机构",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "行业监管机构，制定合规标准与处罚。",
       "core_goal": "确保所有公司合规经营，罚款收入最大化",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",

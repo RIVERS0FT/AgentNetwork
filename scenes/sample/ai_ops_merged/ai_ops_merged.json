@@ -9,7 +9,7 @@
   "roles": {
     "BANK_DC": {
       "name": "交通银行数据中心",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "大型银行数据中心，拥有多厂商多代际设备（华为、思科、IBM等），对业务连续性要求极高。",
       "core_goal": "将平均故障定位时间（MTTI）从当前45分钟降低至15分钟以内，且年度运维预算结余不低于10%。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -27,7 +27,7 @@
     },
     "GOV_INFRA": {
       "name": "江苏政数局基础设施处",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "省级政务云基础设施管理部门，负责监管多家服务商，对数据安全和合规性有严格要求。",
       "core_goal": "实现跨厂商设备统一纳管率≥90%，且年度第三方服务采购成本降低20%。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -83,7 +83,7 @@
     },
     "AGENT_A": {
       "name": "华为设备网管代理商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "华为设备官方网管代理商，掌握华为设备私有接口和配置权限。",
       "core_goal": "保持华为设备网管服务收入不下降，且争取AI平台集成后仍保留独立运维入口。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",
@@ -103,7 +103,7 @@
     },
     "AGENT_B": {
       "name": "思科设备网管代理商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "思科设备官方网管代理商，掌握思科设备私有协议。",
       "core_goal": "阻止AI平台直接接管思科设备管理，维持自身价值，实现服务续约率100%。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",
@@ -162,7 +162,7 @@
     },
     "REGULATOR": {
       "name": "行业监管机构（虚拟角色）",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "金融、政务、教育行业的虚拟监管者，制定接口开放和网络安全标准。",
       "core_goal": "推动所有角色在仿真结束前签署一份统一南向接口标准协议。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -180,7 +180,7 @@
     },
     "VENDOR_OEM": {
       "name": "设备原厂代表（虚拟角色）",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "代表各大设备原厂（华为、思科等）的利益，维护私有协议壁垒。",
       "core_goal": "阻止统一南向接口标准通过，至少让两家客户保留私有协议。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME",

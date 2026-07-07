@@ -8,12 +8,19 @@ from typing import Callable, Dict, List, Any, Optional, Set
 from dataclasses import dataclass, field
 
 
+SYSTEM_TOOLS = ("send_message", "broadcast")
+
+
 @dataclass
 class ContainerAgent:
     agent_id: str
     name: str
     role: str
+    core_goal: str = ""
+    backend: str = "openclaw"
     skill_refs: List[str] = field(default_factory=list)
+    allowed_tools: List[str] = field(default_factory=list)
+    scene_key: str = ""
     container_id: str = ""
     container_name: str = ""
     container_ip: str = ""
@@ -21,6 +28,7 @@ class ContainerAgent:
     port: int = 8000
     status: str = "idle"
     url: str = ""
+    assign_error: str = ""
 
     def to_dict(self):
         return self.__dict__
@@ -62,8 +70,6 @@ class ContainerRuntime:
 
     def _normalize_backend(self, backend: str) -> str:
         backend = (backend or self.DEFAULT_BACKEND).strip()
-        if backend == "claudecode":
-            return "claude-code"
         if backend == "brain":
             raise RuntimeError("Backend 'brain' has been removed.")
         if backend not in self.BACKEND_CONFIG:
@@ -188,10 +194,19 @@ class ContainerRuntime:
         except Exception as exc:
             raise RuntimeError(f"Pool exhausted for backend '{backend}': {exc}")
 
-    def assign_agent(self, agent_id: str, role: str, name: str, skill_refs: List[str] = None, extra_meta: Dict = None) -> ContainerAgent:
-        extra_meta = extra_meta or {}
+    def assign_agent(
+        self,
+        agent_id: str,
+        role: str,
+        name: str,
+        core_goal: str = "",
+        backend: str = "openclaw",
+        skill_refs: List[str] = None,
+        allowed_tools: List[str] = None,
+        scene_key: str = "",
+    ) -> ContainerAgent:
         try:
-            backend = self._normalize_backend(extra_meta.get("backend", self.DEFAULT_BACKEND))
+            backend = self._normalize_backend(backend)
             container_name = self._get_or_create_container(backend)
             url = f"http://{container_name}:{self.INTERNAL_PORT}"
             status = "idle"
@@ -218,7 +233,11 @@ class ContainerRuntime:
             agent_id=agent_id,
             name=name,
             role=role,
+            core_goal=core_goal,
+            backend=backend,
             skill_refs=list(skill_refs or []),
+            allowed_tools=list(allowed_tools or []),
+            scene_key=scene_key,
             container_id=container_id,
             container_name=container_name,
             container_ip=container_ip,
@@ -226,9 +245,8 @@ class ContainerRuntime:
             port=self.INTERNAL_PORT,
             url=url,
             status=status,
+            assign_error=assign_error or "",
         )
-        ca._extra_meta = extra_meta
-        ca._assign_error = assign_error
         self.agents[agent_id] = ca
         self._set_status(ca, status, {"phase": "assign"})
         return ca
@@ -256,15 +274,12 @@ class ContainerRuntime:
                 ctx["agent_id"] = ca.agent_id
                 ctx["agent_name"] = ca.name
                 ctx["role"] = ca.role
+                ctx["core_goal"] = ca.core_goal
                 ctx["skill_refs"] = list(ca.skill_refs)
-                extra_meta = getattr(ca, "_extra_meta", {}) or {}
-                for src_key, dst_key in (("core_goal", "core_goal"), ("scene_key", "scene_key")):
-                    if extra_meta.get(src_key):
-                        ctx[dst_key] = extra_meta[src_key]
-                if extra_meta.get("action_space"):
-                    ctx["allowed_tools"] = extra_meta["action_space"]
-                if extra_meta.get("allowed_tools"):
-                    ctx["allowed_tools"] = list(dict.fromkeys((ctx.get("allowed_tools") or []) + extra_meta["allowed_tools"]))
+                ctx["allowed_tools"] = list(
+                    dict.fromkeys([*SYSTEM_TOOLS, *ca.allowed_tools])
+                )
+                ctx["scene_key"] = ca.scene_key
                 agent_tasks = (ctx.get("tasks") or {}).get(ca.agent_id, [])
                 if agent_tasks:
                     ctx["task"] = "\n".join([t for t in agent_tasks if t])

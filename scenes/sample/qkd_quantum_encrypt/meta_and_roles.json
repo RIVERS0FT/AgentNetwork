@@ -22,7 +22,7 @@
     },
     "CRC_ITC": {
       "name": "国铁信息中心",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "中国铁路信息中心，负责铁路沿线QKD中继节点部署",
       "core_goal": "保障高铁沿线密钥中继延迟<10ms，设备故障率<1%",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -36,7 +36,7 @@
     },
     "QKD_VENDOR": {
       "name": "量子设备供应商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "QKD设备制造商，提供量子光源、探测器和中继器",
       "core_goal": "最大化设备销售利润，市场份额>40%，售后成本<10%",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -50,21 +50,21 @@
     },
     "TPN_SERVICE": {
       "name": "第三方传输服务商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "提供光纤传输线路租赁与中继服务的商业公司",
       "core_goal": "租赁收入最大化，线路利用率>80%，客户满意度>90%",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
     },
     "REGULATOR": {
       "name": "国家密码管理局",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "国家密码行业监管机构，制定QKD应用标准与安全审计",
       "core_goal": "确保所有节点符合国密标准，违规事件0容忍",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
     },
     "ATTACKER": {
       "name": "量子黑客组织",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "针对QKD网络进行窃听与干扰的恶意第三方",
       "core_goal": "成功窃取至少1个密钥，或造成网络中断损失>100万",
       "primary_interaction_paradigm": "ZERO_SUM_GAME"

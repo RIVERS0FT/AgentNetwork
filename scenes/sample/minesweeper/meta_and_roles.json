@@ -8,7 +8,7 @@
   "roles": {
     "CMDR_01": {
       "name": "扫雷行动最高指挥官",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "扫雷行动的唯一核心大脑。掌握全局战术白板。需要根据小兵在当前Round反馈的局部‘安全雷数’或‘确凿雷区’信息绘制逻辑盲区，并在下一Round向麾下9个探雷兵下达‘移动至指定坐标侦察’的宏观指令。",
       "core_goal": "在 35 个全局 Round 内，通过合理调度小兵，将 9x9 棋盘中除了 10 枚地雷外的其余 71 个安全格子全部安全探测完毕，尽可能减少小兵误踩雷的次数（提高排雷效率）。",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"

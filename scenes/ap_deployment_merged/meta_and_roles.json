@@ -32,14 +32,14 @@
     },
     "RF_ENGINEER": {
       "name": "射频工程师",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "分析干扰源影响范围，进行信号覆盖仿真，提交覆盖报告。",
       "core_goal": "每轮提供覆盖热力图，识别信号盲区，确保覆盖≥95%",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
     },
     "COST_ANALYST": {
       "name": "成本分析师",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "评估不同AP方案的预算和性价比，控制成本。",
       "core_goal": "方案总成本不超过预算的100%，且性价比最高",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -60,7 +60,7 @@
     },
     "AI_ASSISTANT": {
       "name": "AI优化助手",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "外部agent节点，提供路径规划和信号仿真优化算法。",
       "core_goal": "提供准确的AP位置优化建议，最小化AP数量并最大化覆盖",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -81,7 +81,7 @@
     },
     "QA_ENGINEER": {
       "name": "质量保证工程师",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "最终测试验收，确保方案满足所有要求。",
       "core_goal": "验收通过率100%",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"

@@ -17,10 +17,13 @@ def test_container_runtime_rejects_brain_backend(monkeypatch):
     assert "Backend 'brain' has been removed" in str(exc.value)
 
 
-def test_container_runtime_normalizes_claudecode_backend(monkeypatch):
+def test_container_runtime_rejects_claudecode_backend(monkeypatch):
     runtime = _runtime(monkeypatch)
 
-    assert runtime._normalize_backend("claudecode") == "claude-code"
+    with pytest.raises(RuntimeError) as exc:
+        runtime._normalize_backend("claudecode")
+
+    assert "Unsupported backend" in str(exc.value)
 
 
 def test_container_runtime_rejects_unknown_backend(monkeypatch):
@@ -74,15 +77,14 @@ def test_run_all_posts_structured_context_without_local_agent_execution(monkeypa
         agent_id="agent_a",
         name="Agent A",
         role="planner",
+        core_goal="Coordinate",
+        backend="openclaw",
+        skill_refs=["planning"],
+        allowed_tools=["write_plan"],
+        scene_key="demo_scene",
         url="http://agent-a:8000",
         status="idle",
     )
-    ca._extra_meta = {
-        "core_goal": "Coordinate",
-        "action_space": ["send_message"],
-        "scene_key": "demo_scene",
-        "allowed_tools": ["write_plan"],
-    }
     runtime.agents["agent_a"] = ca
 
     posted = {}
@@ -111,7 +113,9 @@ def test_run_all_posts_structured_context_without_local_agent_execution(monkeypa
     assert "skills" not in posted["json"]
     assert "allowed_skills" not in posted["json"]
     assert posted["json"]["skill_refs"] == ["planning"]
-    assert posted["json"]["allowed_tools"] == ["send_message", "write_plan"]
+    assert posted["json"]["allowed_tools"] == ["send_message", "broadcast", "write_plan"]
+    assert posted["json"]["core_goal"] == "Coordinate"
+    assert not hasattr(ca, "_extra_meta")
 
 
 def test_run_all_wakes_agent_when_container_inbox_has_messages(monkeypatch):

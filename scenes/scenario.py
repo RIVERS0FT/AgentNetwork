@@ -26,7 +26,7 @@ SYSTEM_PROMPT = """
    - MESH (稠密网状，错综复杂的外部自由谈判桌)
    - RING (环状传递)
    network_topology.json 必须使用根级 topology 数组；每条链路使用 endpoint_a、endpoint_b、channel_id、delay_ms、jitter_ms、loss_pct、rate_mbit，链路天然双向。
-4. 异构模型底层：根据模型的特长和角色特征，每个角色必须明确它运行时依赖的底层基座模型（model_backbone），必须在 ['openclaw', 'claudecode'] 中二选一。例如内部协助侧、技术蓝图侧节点可倾向于 openclaw，涉及深度工程、对赌合同决策侧可倾向于 claudecode。
+4. 异构模型底层：根据模型的特长和角色特征，每个角色必须明确它运行时依赖的底层基座模型（model_backbone），必须在 ['openclaw', 'claude-code'] 中二选一。例如内部协助侧、技术蓝图侧节点可倾向于 openclaw，涉及深度工程、对赌合同决策侧可倾向于 claude-code。
 5. 技能绑定：每个角色在 instances_and_skills 中通过 skills 字段（字符串列表）挂载技能。技能名必须与 skills_code 中定义的函数名完全一致。技能数量按角色复杂度分配（核心角色2-4个，辅助角色1-2个）。
 6. 技能可执行代码落地（重点）：你必须为 instances_and_skills 中出现的每一个 skill_name 生成对应的 Python 函数实现，放入 skills_code 字段。代码要求：
    - 是一个完整可独立运行的 Python 模块字符串（含 SkillRegistry 注册中心类 + 所有技能函数）
@@ -84,7 +84,7 @@ RESPONSE_SCHEMA = {
                                 "type": "object",
                                 "properties": {
                                     "name": {"type": "string", "description": "角色人类可读名称"},
-                                    "model_backbone": {"type": "string", "enum": ["openclaw", "claudecode"], "description": "指定的底层模型基座"},
+                                    "model_backbone": {"type": "string", "enum": ["openclaw", "claude-code"], "description": "指定的底层模型基座"},
                                     "identity": {"type": "string", "description": "角色的身份特征与组织背景说明"},
                                     "core_goal": {"type": "string", "description": "量化的具体利益导向或终极指标"},
                                     "primary_interaction_paradigm": {"type": "string", "enum": ["INTERNAL_COLLABORATION", "EXTERNAL_NEGOTIATION", "ZERO_SUM_GAME"], "description": "角色主导的互动范式"}

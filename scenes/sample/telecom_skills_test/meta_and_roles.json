@@ -8,7 +8,7 @@
   "roles": {
     "TEL_A_CEO": {
       "name": "电信A公司CEO",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "电信运营商A的CEO，负责公司整体战略和重大决策，追求市场份额和利润最大化。",
       "core_goal": "12个月内市场份额达到35%，净利润增长20%。",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"
@@ -22,14 +22,14 @@
     },
     "TEL_A_CMO": {
       "name": "电信A公司CMO",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "电信运营商A的CMO，负责市场营销和客户关系，提升品牌影响力。",
       "core_goal": "12个月内客户满意度提升至90%，新增用户100万。",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"
     },
     "TEL_B_CEO": {
       "name": "电信B公司CEO",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "电信运营商B的CEO，与A公司竞争，同时寻求合作机会。",
       "core_goal": "12个月内市场份额达到30%，净利润增长15%。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -43,7 +43,7 @@
     },
     "REGULATOR": {
       "name": "通信监管局官员",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "政府通信监管局官员，负责市场秩序和频谱分配，维护公平竞争。",
       "core_goal": "12个月内确保市场公平竞争，消费者投诉率下降20%。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -64,14 +64,14 @@
     },
     "CONSUMER_GROUP": {
       "name": "消费者权益组织代表",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "代表广大消费者利益，监督运营商服务质量。",
       "core_goal": "12个月内推动运营商改善服务，客户满意度提升10个百分点。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME"
     },
     "NEW_ENTRANT": {
       "name": "新兴虚拟运营商CEO",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "新进入市场的虚拟运营商，利用现有网络资源提供差异化服务。",
       "core_goal": "12个月内获得5%市场份额，实现盈亏平衡。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME"

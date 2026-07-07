@@ -15,7 +15,7 @@
     },
     "SZ_AIRPORT_SECURITY": {
       "name": "深圳机场安保部",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "深圳宝安国际机场安保部门，需要高精度人员检测与体态识别，防止入侵和异常行为。",
       "core_goal": "在10轮内采购一套集成CSI和雷达的感知系统，预算500万以内，检测精度>95%。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION"
@@ -29,7 +29,7 @@
     },
     "CSI_VENDOR": {
       "name": "CSI感知设备厂商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "专注于CSI（信道状态信息）感知设备的制造商，产品可用于多人检测和生命体征监测。",
       "core_goal": "在10轮内获得至少1个订单，销售额不低于150万，并争取独家供应资格。",
       "primary_interaction_paradigm": "ZERO_SUM_GAME"
@@ -43,7 +43,7 @@
     },
     "AI_ALGO_SERVICE": {
       "name": "AI算法服务商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "提供基于深度学习的感知算法，能够融合CSI和雷达数据，实现高精度检测。",
       "core_goal": "在10轮内获得至少2个算法授权或开发合同，总收入不低于250万。",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"
@@ -57,7 +57,7 @@
     },
     "REGULATOR": {
       "name": "行业监管机构",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "虚拟角色代表政府或行业标准制定者，监督技术合规性和数据安全。",
       "core_goal": "在10轮内确保所有技术方案符合安全标准，并推动至少1项行业规范出台。",
       "primary_interaction_paradigm": "INTERNAL_COLLABORATION"

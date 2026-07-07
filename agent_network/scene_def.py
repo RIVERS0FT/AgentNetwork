@@ -19,15 +19,18 @@ class AgentDef:
     agent_id: str
     role: str  # 直接保存角色 identity 内容
     name: str
+    core_goal: str = ""
+    backend: str = "openclaw"
     skill_refs: List[str] = field(default_factory=list)
+    allowed_tools: List[str] = field(default_factory=list)
     tasks: List[str] = field(default_factory=list)
-    extra_meta: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class SceneDefinition:
     """完整场景定义。"""
-    scene_name: str = ""
+    scene_key: str = ""
+    title: str = ""
     description: str = ""
     agents: List[AgentDef] = field(default_factory=list)
     topology: List[Dict[str, Any]] = field(default_factory=list)

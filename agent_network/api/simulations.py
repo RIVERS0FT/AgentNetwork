@@ -211,15 +211,30 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
     direct_bus = DirectBus()
     pos = _layout(scene_def.agents)
     for ad in scene_def.agents:
-        agent = Agent(agent_id=ad.agent_id, role=ad.role, name=ad.name, skill_refs=ad.skill_refs)
+        agent = Agent(
+            agent_id=ad.agent_id,
+            role=ad.role,
+            name=ad.name,
+            core_goal=ad.core_goal,
+            backend=ad.backend,
+            skill_refs=ad.skill_refs,
+            allowed_tools=ad.allowed_tools,
+        )
         agent.set_comm(direct_bus)
         agent.x, agent.y = pos.get(ad.agent_id, (100, 100))
         agent.pending_task_descs = ad.tasks
-        agent.extra_meta = ad.extra_meta
         AgentRegistry.register(agent)
         agent.start()
     _pending_scene_def = scene_def
-    return {"agents": [a.get_status() for a in AgentRegistry.list_all()], "agent_stats": AgentRegistry.get_stats(), "topology": scene_def.topology, "scene_name": scene_def.scene_name, "network_mode": "direct", "seed": _pending_seed}
+    return {
+        "agents": [a.get_status() for a in AgentRegistry.list_all()],
+        "agent_stats": AgentRegistry.get_stats(),
+        "topology": scene_def.topology,
+        "scene_key": scene_def.scene_key,
+        "scene_title": scene_def.title,
+        "network_mode": "direct",
+        "seed": _pending_seed,
+    }
 
 
 def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]:
@@ -236,10 +251,19 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     assign_errors = []
 
     for ad in scene_def.agents:
-        ca = runtime.assign_agent(agent_id=ad.agent_id, role=ad.role, name=ad.name, skill_refs=ad.skill_refs, extra_meta=ad.extra_meta if ad.extra_meta else None)
+        ca = runtime.assign_agent(
+            agent_id=ad.agent_id,
+            role=ad.role,
+            name=ad.name,
+            core_goal=ad.core_goal,
+            backend=ad.backend,
+            skill_refs=ad.skill_refs,
+            allowed_tools=ad.allowed_tools,
+            scene_key=scene_def.scene_key,
+        )
         created_cas.append((ca, ad.tasks))
         if ca.status == "error":
-            assign_errors.append({"agent_id": ca.agent_id, "error": getattr(ca, "_assign_error", "unknown")})
+            assign_errors.append({"agent_id": ca.agent_id, "error": ca.assign_error or "unknown"})
         else:
             agent = AgentRegistry.get(ca.agent_id)
             if agent:
@@ -263,7 +287,7 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
             _comm_matrix.setdefault(endpoint_a, set()).add(endpoint_b)
             _comm_matrix.setdefault(endpoint_b, set()).add(endpoint_a)
 
-    logger.start_session(scene_def.scene_name)
+    logger.start_session(scene_def.scene_key)
     session_id = getattr(logger, "_session_id", "")
     talk_id = f"talk-{uuid.uuid4().hex[:12]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     state.reset_token_usage_state(session_id)
@@ -272,7 +296,7 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
             "agent_id": ca.agent_id,
             "name": ca.name,
             "role": ca.role,
-            "backend": (getattr(ca, "_extra_meta", {}) or {}).get("backend", ""),
+            "backend": ca.backend,
             "runtime_container": ca.container_name,
             "runtime_container_id": ca.container_id,
             "runtime_ip": ca.container_ip,
@@ -282,7 +306,7 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     ]
     create_manifest(
         session_id=session_id,
-        scene_name=scene_def.scene_name,
+        scene_name=scene_def.scene_key,
         scene_dir=_SCENES_DIR / state.current_scene_name,
         trace_id=talk_id,
         seed=_pending_seed,
@@ -384,7 +408,7 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
             context = {
                 "round": state.current_turn,
                 "total_rounds": max_rounds,
-                "scene": scene_def.scene_name,
+                "scene": scene_def.scene_key,
                 "agents": [{"id": ca.agent_id, "role": ca.role, "name": ca.name} for ca, _ in created_cas],
                 "tasks": {ca.agent_id: tasks for ca, tasks in created_cas} if round_num == 0 else {},
                 "comm_matrix": {k: list(v) for k, v in _comm_matrix.items()},
@@ -439,15 +463,18 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
         error=run_error,
     )
     quality = audit_session(session_id, verify_hashes=True)
-    return {"status": "error" if run_error else "completed", "error": run_error, "simulation_name": scene_def.scene_name, "session_id": session_id, "seed": _pending_seed, "experiment_status": experiment_status, "quality": quality, "agents": [a.get_status() for a in AgentRegistry.list_all()], "agent_stats": AgentRegistry.get_stats(), "packet_stats": packet_stats(session_id=session_id), "capture_health": capture_health, "rounds": len(results_log), "max_rounds": max_rounds, "stop_reason": stop_reason, "results_log": results_log, "topology": scene_def.topology, "comm_policy": {"mode": "direct", "matrix": {k: list(v) for k, v in _comm_matrix.items()}}, "agent_directory": agent_directory, "network_mode": "direct", "network_emulation": network_emulation, "network_clear": network_clear, "assign_errors": assign_errors}
+    return {"status": "error" if run_error else "completed", "error": run_error, "simulation_name": scene_def.title, "scene_key": scene_def.scene_key, "session_id": session_id, "seed": _pending_seed, "experiment_status": experiment_status, "quality": quality, "agents": [a.get_status() for a in AgentRegistry.list_all()], "agent_stats": AgentRegistry.get_stats(), "packet_stats": packet_stats(session_id=session_id), "capture_health": capture_health, "rounds": len(results_log), "max_rounds": max_rounds, "stop_reason": stop_reason, "results_log": results_log, "topology": scene_def.topology, "comm_policy": {"mode": "direct", "matrix": {k: list(v) for k, v in _comm_matrix.items()}}, "agent_directory": agent_directory, "network_mode": "direct", "network_emulation": network_emulation, "network_clear": network_clear, "assign_errors": assign_errors}
 
 
 def _normalize_backend(scene_name: str, role_id: str, backend: str) -> str:
     backend = (backend or "openclaw").strip()
-    if backend == "claudecode":
-        return "claude-code"
     if backend == "brain":
         raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses removed backend 'brain'.")
+    if backend == "claudecode":
+        raise ValueError(
+            f"Scene '{scene_name}' role '{role_id}' uses removed backend alias 'claudecode'; "
+            "use 'claude-code'."
+        )
     if backend not in {"openclaw", "claude-code"}:
         raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses unsupported backend '{backend}'.")
     return backend
@@ -482,27 +509,17 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
         allowed_tools = instance.get("tool_refs") or []
         backend = _normalize_backend(scene_name, role_id, role.get("model_backbone", "openclaw"))
         core_goal = role.get("core_goal", "")
-        paradigm = role.get("primary_interaction_paradigm", "")
         identity = role.get("identity", "") or role.get("name", role_id)
         agents.append(
             AgentDef(
                 agent_id=role_id.lower(),
                 role=identity,
                 name=role.get("name", role_id),
+                core_goal=core_goal,
+                backend=backend,
                 skill_refs=skill_refs,
-                tasks=[core_goal] if core_goal else [],
-                extra_meta={
-                    "core_goal": core_goal,
-                    "initial_assets": role.get("initial_assets", {}),
-                    "action_space": ["send_message", "broadcast"] + allowed_tools,
-                    "background_rules": bg,
-                    "backend": backend,
-                    "interaction_paradigm": paradigm,
-                    "scene_key": scene_name,
-                    "scene_title": title,
-                    "allowed_tools": allowed_tools,
-                    "skill_execution_mode": "backend_native_mcp",
-                },
+                allowed_tools=list(allowed_tools),
+                tasks=[],
             )
         )
     raw_topology = topology_config.get("topology")
@@ -554,7 +571,13 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
             "channel_id": channel_id,
             **network,
         })
-    return SceneDefinition(scene_name=title, description=bg, agents=agents, topology=topology_edges)
+    return SceneDefinition(
+        scene_key=scene_name,
+        title=title,
+        description=bg,
+        agents=agents,
+        topology=topology_edges,
+    )
 
 
 @router.post("/simulations/setup")

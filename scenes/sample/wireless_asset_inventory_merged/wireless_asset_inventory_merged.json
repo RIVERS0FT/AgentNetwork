@@ -51,7 +51,7 @@
     },
     "RFID_CORP": {
       "name": "RFID定位设备厂商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "专业RFID标签与读写器制造商，提供硬件方案，追求利润最大化。",
       "core_goal": "在项目中获取至少100万的硬件订单，并争取后续独家供应权。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -70,7 +70,7 @@
     },
     "WIFI_CORP": {
       "name": "WiFi定位设备厂商",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "基于WiFi指纹的定位技术提供商，软件方案为主，硬件成本低。",
       "core_goal": "推动WiFi定位方案成为主流，获取至少80万订单，并建立长期维护合同。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -138,7 +138,7 @@
     },
     "THU_FIN": {
       "name": "清华大学财务处",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "负责项目预算审批与支付，要求性价比最优。",
       "core_goal": "总支出不超过预算200万，且至少节省10%作为储备金。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -156,7 +156,7 @@
     },
     "ZZU_FIN": {
       "name": "郑大一附院财务处",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "医院财务，严格控制预算，倾向低成本方案。",
       "core_goal": "总支出不超过150万，且要求分阶段付款，降低风险。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
@@ -174,7 +174,7 @@
     },
     "GOV_REG": {
       "name": "行业监管机构",
-      "model_backbone": "claudecode",
+      "model_backbone": "claude-code",
       "identity": "负责制定资产盘点标准与数据安全规范，监督项目合规性。",
       "core_goal": "确保项目符合最新数据安全法，且盘点数据可审计。",
       "primary_interaction_paradigm": "EXTERNAL_NEGOTIATION",
