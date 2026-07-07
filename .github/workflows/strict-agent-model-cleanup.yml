@@ -1,0 +1,71 @@
+name: Strict agent model cleanup
+
+on:
+  push:
+    branches:
+      - refactor/remove-agent-extra-meta
+    paths:
+      - scripts/strict_agent_model_cleanup.py
+      - .github/workflows/strict-agent-model-cleanup.yml
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-and-test:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/remove-agent-extra-meta
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Apply strict agent model cleanup
+        run: python scripts/strict_agent_model_cleanup.py
+
+      - name: Compile changed Python files
+        run: |
+          python -m py_compile \
+            agent_network/scene_def.py \
+            agent_network/agent_model.py \
+            agent_network/api/simulations.py \
+            agent_network/container_runtime.py \
+            services/agent_server.py \
+            tests/test_scene_building_boundary.py \
+            tests/test_container_runtime_boundary.py \
+            tests/test_agent_model_control_plane_only.py \
+            tests/test_adapter_context_boundary.py
+
+      - name: Run strict agent model tests
+        run: |
+          pytest -q \
+            tests/test_scene_building_boundary.py \
+            tests/test_container_runtime_boundary.py \
+            tests/test_agent_model_control_plane_only.py \
+            tests/test_adapter_context_boundary.py
+
+      - name: Verify compatibility tokens are gone
+        run: |
+          ! grep -RIn --exclude-dir=.git --exclude='strict_agent_model_cleanup.py' 'extra_meta\|_extra_meta\|"action_space"\|'"'"'action_space'"'"'\|skill_execution_mode\|claudecode' .
+
+      - name: Remove one-shot cleanup files
+        run: rm scripts/strict_agent_model_cleanup.py .github/workflows/strict-agent-model-cleanup.yml
+
+      - uses: EndBug/add-and-commit@v9
+        with:
+          message: 'refactor: remove agent extra_meta compatibility contract'
+          push: true
