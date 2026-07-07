@@ -10,18 +10,20 @@ from contextlib import asynccontextmanager
 
 from agent_network import state
 from agent_network.logger import get_logger
-from agent_network.agent_model import AgentRegistry
+from agent_network.agent_management import AgentRegistry
 from agent_network.event_bus import PacketRecorder
 
 # 导入路由模块
-from agent_network.api import system, agents, containers, simulations, logs, packets
+from agent_network.api import system, agents, simulations, logs, packets
 
 logger = get_logger()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     state.server_loop = asyncio.get_running_loop()
     yield
+
 
 # ═══════════════════════════════════════════════
 # FastAPI 应用初始化
@@ -46,16 +48,17 @@ from agent_network.traffic_log import TrafficMiddleware, traffic_enabled
 if traffic_enabled():
     app.add_middleware(TrafficMiddleware, component="srv", server_url="http://localhost:8000")
 
+
 # ═══════════════════════════════════════════════
 # 挂载 API 路由模块
 # ═══════════════════════════════════════════════
 
 app.include_router(system.router, prefix="/api", tags=["System"])
 app.include_router(agents.router, prefix="/api/agents", tags=["Agents"])
-app.include_router(containers.router, prefix="/api/containers", tags=["Containers"])
 app.include_router(simulations.router, prefix="/api", tags=["Simulations & Scenes"])
 app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])
 app.include_router(packets.router, prefix="/api/packets", tags=["Packets"])
+
 
 # ═══════════════════════════════════════════════
 # WebSocket & 前端页面
@@ -128,9 +131,11 @@ if os.path.isdir("web/public"):
 if os.path.isdir("web/src"):
     app.mount("/src", StaticFiles(directory="web/src"), name="src")
 
+
 @app.get("/", response_class=FileResponse)
 async def serve_dashboard():
     return FileResponse("web/public/dashboard.html")
+
 
 if __name__ == "__main__":
     import uvicorn
