@@ -5,7 +5,7 @@ Agent 数据模型与注册中心。
 - agent_id / role / name
 - skill_refs / capability_scores
 - status / container_url
-- position / explicit runtime metadata
+- explicit runtime metadata
 - pending task descriptions
 
 本模块不负责单 Agent 执行、ReAct、Tool 调用或 Memory。单 Agent
@@ -13,7 +13,6 @@ Agent 数据模型与注册中心。
 """
 
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 from dataclasses import dataclass
 import threading
 import uuid
@@ -69,14 +68,6 @@ class Agent:
         self.task_queue: List[Message] = []
         self.completed_tasks: List[Dict[str, Any]] = []
         self.pending_task_descs: List[str] = []
-        self._created_at = datetime.now().isoformat(timespec="seconds")
-
-        # Frontend layout position.
-        self.x: float = 0.0
-        self.y: float = 0.0
-        self.speed: float = 1.0
-        self._target_x: Optional[float] = None
-        self._target_y: Optional[float] = None
 
     def set_comm(self, comm, registry=None):
         """Attach the control-plane communication layer."""
@@ -147,9 +138,6 @@ class Agent:
             "pending_tasks": len(self.task_queue),
             "pending_task_descs": self.pending_task_descs,
             "completed_tasks": len(self.completed_tasks),
-            "created_at": self._created_at,
-            "x": self.x,
-            "y": self.y,
         }
 
     def start(self):
