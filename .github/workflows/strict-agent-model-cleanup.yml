@@ -51,20 +51,29 @@ jobs:
             tests/test_adapter_context_boundary.py
 
       - name: Run strict agent model tests
+        id: strict_tests
+        continue-on-error: true
         run: |
           pytest -q \
             tests/test_scene_building_boundary.py \
             tests/test_container_runtime_boundary.py \
             tests/test_agent_model_control_plane_only.py \
-            tests/test_adapter_context_boundary.py
+            tests/test_adapter_context_boundary.py \
+            > strict-tests.log 2>&1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: strict-agent-model-test-log
+          path: strict-tests.log
+
+      - name: Stop on test failure
+        if: steps.strict_tests.outcome != 'success'
+        run: exit 1
 
       - name: Verify compatibility tokens are gone
         run: |
-          ! grep -RIn \
-            --exclude-dir=.git \
-            --exclude='strict_agent_model_cleanup.py' \
-            --exclude='strict-agent-model-cleanup.yml' \
-            'extra_meta\|_extra_meta\|"action_space"\|'"'"'action_space'"'"'\|skill_execution_mode\|claudecode' .
+          python scripts/strict_agent_model_cleanup.py
 
       - name: Remove one-shot cleanup files
         run: rm scripts/strict_agent_model_cleanup.py .github/workflows/strict-agent-model-cleanup.yml
