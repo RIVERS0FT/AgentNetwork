@@ -8,6 +8,9 @@ on:
       - scripts/migrate_topology_link_model.py
       - scripts/prepare_topology_link_migration.py
       - .github/workflows/migrate-topology-link-model.yml
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
