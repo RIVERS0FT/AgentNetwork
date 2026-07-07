@@ -76,11 +76,11 @@ GET /api/scenes/state
   "capability_scores": {},
   "pending_tasks": 0,
   "pending_task_descs": ["submit_code"],
-  "extra_meta": {
+  "AgentDef 显式字段": {
     "identity": "消费者BG研发部前端开发",
     "core_goal": "在10轮内完成3个前端模块的代码提交并通过CI流水线",
     "hidden_secret": "",
-    "action_space": ["submit_code"],
+    "allowed_tools": ["submit_code"],
     "initial_assets": {},
     "interaction_paradigm": "INTERNAL_COLLABORATION"
   },
@@ -100,7 +100,7 @@ GET /api/scenes/state
 | `pending_task_descs` | string[] | 待执行任务描述 |
 | `completed_tasks` | int | 已完成任务数（注：当前由 skills 模块 agent_progress 统计，此字段可能为 0） |
 | `x` / `y` | float | Agent 世界坐标 |
-| `extra_meta.core_goal` | string | Agent 核心目标 |
+| `AgentDef 显式字段.core_goal` | string | Agent 核心目标 |
 
 #### custom 对象结构（由 skills.py get_panel_state() 返回）
 

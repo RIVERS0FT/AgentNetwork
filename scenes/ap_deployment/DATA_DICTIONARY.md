@@ -191,7 +191,7 @@
     status: "idle"|"thinking"|"acting"|"error";
     skills: string[]; x, y: number;
     pending_task_descs: string[]; completed_tasks: number;
-    extra_meta: { identity, core_goal, interaction_paradigm };
+    AgentDef 显式字段: { identity, core_goal, interaction_paradigm };
   }>;
   custom: { /* ≡ get_panel_state() 返回 */ };
 }

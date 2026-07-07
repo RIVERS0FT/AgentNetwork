@@ -1326,7 +1326,7 @@ function showTooltip(agent, mx, my) {
   }
   hoveredAgent = agent;
   let html = '<div class=tt-name>' + escapeHtml(agent.name || agent.agent_id) + '</div>';
-  const backend = (agent.extra_meta || {}).backend || '';
+  const backend = agent.backend || '';
   html += '<div class=tt-role>' + escapeHtml(roleLabel[agent.role] || backendLabel[backend] || agent.role) + '</div>';
   html += '<div class=tt-row><span class=lbl>ID</span><span class=val>' + escapeHtml(agent.agent_id) + '</span></div>';
   html += '<div class=tt-row><span class=lbl>状态</span><span class=val>' + escapeHtml(statusLabel[agent.status] || agent.status) + '</span></div>';
@@ -1335,11 +1335,10 @@ function showTooltip(agent, mx, my) {
   }
   const tasks = agent.pending_task_descs || [];
   if (tasks.length > 0) { html += '<div class=tt-section>任务</div>'; tasks.forEach((t, i) => { html += '<div class=tt-task><span class=tt-task-n>' + (i+1) + '.</span> ' + escapeHtml(t) + '</div>'; }); }
-  const meta = agent.extra_meta || {};
-  if (meta.core_goal) { html += '<div class=tt-section>目标</div><div class=tt-task>' + escapeHtml(meta.core_goal) + '</div>'; }
-  if (meta.hidden_secret) { html += '<div class=tt-section>秘密</div><div class="tt-task tt-secret">' + escapeHtml(meta.hidden_secret) + '</div>'; }
-  if (meta.action_space && meta.action_space.length) {
-    html += '<div class=tt-section>行动</div><div class=tt-skills>' + meta.action_space.map(a => '<span class=tt-tag>' + escapeHtml(a) + '</span>').join('') + '</div>';
+  if (agent.core_goal) { html += '<div class=tt-section>目标</div><div class=tt-task>' + escapeHtml(agent.core_goal) + '</div>'; }
+  const tools = agent.allowed_tools || [];
+  if (tools.length) {
+    html += '<div class=tt-section>工具</div><div class=tt-skills>' + tools.map(tool => '<span class=tt-tag>' + escapeHtml(tool) + '</span>').join('') + '</div>';
   }
   tt.innerHTML = html;
   tt.style.display = 'block';

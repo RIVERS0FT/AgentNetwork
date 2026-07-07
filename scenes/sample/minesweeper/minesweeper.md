@@ -19,7 +19,7 @@
 
 | 角色ID | 角色名称 | 基座模型 | 核心目标与行为模式 |
 | :--- | :--- | :--- | :--- |
-| **CMDR_01** | 扫雷行动最高指挥官 | `claudecode` | 战术大脑。整合多源异步情报，规避已知雷区，在每轮向 9 个小兵分发最优的移动探测坐标。 |
+| **CMDR_01** | 扫雷行动最高指挥官 | `claude-code` | 战术大脑。整合多源异步情报，规避已知雷区，在每轮向 9 个小兵分发最优的移动探测坐标。 |
 | **SOLDIER_01 ~ 09** | 探雷侦察兵 (共9人) | `openclaw` | 前线执行单元。严格响应指挥官的坐标指令，执行探测技能，实时上报踩雷事件或邻近雷数。 |
 
 ---
@@ -31,7 +31,7 @@
     * `{Agent_ID}`: `object`，具体角色配置。
         * `skills`: `array[string]`，该角色绑定的技能名称列表，与 `skills.py` 中注册名一致。
 
-> Docker 镜像由 `meta_and_roles.json` 中角色的 `model_backbone` 决定（`claudecode` → `agentnetwork-ag-c1`，`openclaw` → `agentnetwork-ag-o1`）。
+> Docker 镜像由 `meta_and_roles.json` 中角色的 `model_backbone` 决定（`claude-code` → `agentnetwork-ag-c1`，`openclaw` → `agentnetwork-ag-o1`）。
 
 ### 3.2 技能输入与输出参数 (`skills.py`)
 
