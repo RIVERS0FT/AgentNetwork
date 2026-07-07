@@ -22,7 +22,7 @@ DEFAULT_TEST_TARGETS = [
     "tests/test_skill_md_loader_context_only.py",
     "tests/test_adapter_context_boundary.py",
     "tests/test_scene_building_boundary.py",
-    "tests/test_agent_management_control_plane_only.py",
+    "tests/test_agent_management.py",
     "tests/test_container_runtime_boundary.py",
     "tests/test_agent_server_boundary.py",
     "tests/test_direct_tool_execute_debug_only.py",

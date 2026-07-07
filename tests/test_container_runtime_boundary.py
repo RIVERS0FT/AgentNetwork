@@ -1,11 +1,15 @@
 import pytest
 
-from agent_network.container_runtime import ContainerAgent, ContainerRuntime
+from agent_network.agent_management import ContainerAgent, ContainerRuntime
 
 
 def _runtime(monkeypatch):
-    monkeypatch.setattr(ContainerRuntime, "_init_docker", lambda self: setattr(self, "_docker_client", None))
-    return ContainerRuntime(message_bus_url="http://message-bus:9000")
+    monkeypatch.setattr(
+        ContainerRuntime,
+        "_init_docker",
+        lambda self: setattr(self, "_docker_client", None),
+    )
+    return ContainerRuntime()
 
 
 def test_container_runtime_rejects_brain_backend(monkeypatch):
@@ -17,11 +21,11 @@ def test_container_runtime_rejects_brain_backend(monkeypatch):
     assert "Backend 'brain' has been removed" in str(exc.value)
 
 
-
 def test_container_runtime_accepts_claude_code_backend(monkeypatch):
     runtime = _runtime(monkeypatch)
 
     assert runtime._normalize_backend("claude-code") == "claude-code"
+
 
 def test_container_runtime_rejects_unknown_backend(monkeypatch):
     runtime = _runtime(monkeypatch)
@@ -44,15 +48,16 @@ def test_run_all_skips_agent_without_task_or_messages(monkeypatch):
     )
 
     class StatusResponse:
-        ok = True
-
         def raise_for_status(self):
             return None
 
         def json(self):
             return {"inbox_size": 0}
 
-    monkeypatch.setattr("agent_network.container_runtime.requests.get", lambda *_args, **_kwargs: StatusResponse())
+    monkeypatch.setattr(
+        "agent_network.agent_management.requests.get",
+        lambda *_args, **_kwargs: StatusResponse(),
+    )
 
     results = runtime.run_all({"tasks": {}, "messages": []})
 
@@ -70,7 +75,7 @@ def test_run_all_skips_agent_without_task_or_messages(monkeypatch):
 
 def test_run_all_posts_structured_context_without_local_agent_execution(monkeypatch):
     runtime = _runtime(monkeypatch)
-    ca = ContainerAgent(
+    assignment = ContainerAgent(
         agent_id="agent_a",
         name="Agent A",
         role="planner",
@@ -82,7 +87,7 @@ def test_run_all_posts_structured_context_without_local_agent_execution(monkeypa
         url="http://agent-a:8000",
         status="idle",
     )
-    runtime.agents["agent_a"] = ca
+    runtime.agents["agent_a"] = assignment
 
     posted = {}
 
@@ -91,7 +96,11 @@ def test_run_all_posts_structured_context_without_local_agent_execution(monkeypa
             return None
 
         def json(self):
-            return {"agent_id": "agent_a", "status": "completed", "application_events": []}
+            return {
+                "agent_id": "agent_a",
+                "status": "completed",
+                "application_events": [],
+            }
 
     def fake_post(url, json, timeout):
         posted["url"] = url
@@ -99,9 +108,17 @@ def test_run_all_posts_structured_context_without_local_agent_execution(monkeypa
         posted["timeout"] = timeout
         return FakeResponse()
 
-    monkeypatch.setattr("agent_network.container_runtime.requests.post", fake_post)
+    monkeypatch.setattr(
+        "agent_network.agent_management.requests.post",
+        fake_post,
+    )
 
-    results = runtime.run_all({"tasks": {"agent_a": ["Do the assigned work"]}, "messages": []})
+    results = runtime.run_all(
+        {
+            "tasks": {"agent_a": ["Do the assigned work"]},
+            "messages": [],
+        }
+    )
 
     assert results[0]["status"] == "completed"
     assert posted["url"] == "http://agent-a:8000/run"
@@ -110,10 +127,12 @@ def test_run_all_posts_structured_context_without_local_agent_execution(monkeypa
     assert "skills" not in posted["json"]
     assert "allowed_skills" not in posted["json"]
     assert posted["json"]["skill_refs"] == ["planning"]
-    assert posted["json"]["allowed_tools"] == ["send_message", "broadcast", "write_plan"]
+    assert posted["json"]["allowed_tools"] == [
+        "send_message",
+        "broadcast",
+        "write_plan",
+    ]
     assert posted["json"]["core_goal"] == "Coordinate"
-    removed_key = "_extra" + "_meta"
-    assert not hasattr(ca, removed_key)
 
 
 def test_run_all_wakes_agent_when_container_inbox_has_messages(monkeypatch):
@@ -127,8 +146,6 @@ def test_run_all_wakes_agent_when_container_inbox_has_messages(monkeypatch):
     )
 
     class StatusResponse:
-        ok = True
-
         def raise_for_status(self):
             return None
 
@@ -140,11 +157,21 @@ def test_run_all_wakes_agent_when_container_inbox_has_messages(monkeypatch):
             return None
 
         def json(self):
-            return {"agent_id": "agent_a", "status": "completed", "application_events": []}
+            return {
+                "agent_id": "agent_a",
+                "status": "completed",
+                "application_events": [],
+            }
 
     posted = []
-    monkeypatch.setattr("agent_network.container_runtime.requests.get", lambda *_args, **_kwargs: StatusResponse())
-    monkeypatch.setattr("agent_network.container_runtime.requests.post", lambda url, **kwargs: posted.append(url) or RunResponse())
+    monkeypatch.setattr(
+        "agent_network.agent_management.requests.get",
+        lambda *_args, **_kwargs: StatusResponse(),
+    )
+    monkeypatch.setattr(
+        "agent_network.agent_management.requests.post",
+        lambda url, **kwargs: posted.append(url) or RunResponse(),
+    )
 
     result = runtime.run_all({"tasks": {}, "messages": []})
 

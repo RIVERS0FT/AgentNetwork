@@ -1,8 +1,4 @@
-"""Shared LLM configuration — single source of truth."""
+"""Shared LLM configuration."""
 
-# Default model used across brain.py, scene_def.py, terrain.py
+# Default model used when a scene does not specify one.
 DEFAULT_LLM_MODEL = "claude-sonnet-4-6"
-
-# OpenAI-compatible fallback
-DEFAULT_OPENAI_MODEL = "deepseek-chat"
-DEFAULT_OPENAI_BASE = "https://api.deepseek.com/v1"

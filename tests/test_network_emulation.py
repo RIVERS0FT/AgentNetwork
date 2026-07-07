@@ -1,8 +1,8 @@
 import pytest
 
 from agent_network import network_emulation
+from agent_network.agent_management import ContainerAgent
 from agent_network.api import simulations
-from agent_network.container_runtime import ContainerAgent
 
 
 def test_normalize_network_profile_accepts_canonical_fields():
@@ -45,9 +45,18 @@ def test_configure_network_emulation_builds_per_peer_tc_rules(monkeypatch):
 
     def runner(command):
         commands.append(command)
-        return {"command": command, "returncode": 0, "stdout": "", "stderr": ""}
+        return {
+            "command": command,
+            "returncode": 0,
+            "stdout": "",
+            "stderr": "",
+        }
 
-    monkeypatch.setattr(network_emulation.shutil, "which", lambda _name: "/sbin/tc")
+    monkeypatch.setattr(
+        network_emulation.shutil,
+        "which",
+        lambda _name: "/sbin/tc",
+    )
     result = network_emulation.configure_network_emulation(
         profiles=[{
             "target_agent": "agent_b",
@@ -68,8 +77,22 @@ def test_configure_network_emulation_builds_per_peer_tc_rules(monkeypatch):
 
 
 def test_simulation_translates_topology_link_into_two_agent_profiles():
-    a = ContainerAgent("a", "A", "role", container_name="ag-a", container_ip="172.20.0.3", url="http://ag-a:8000")
-    b = ContainerAgent("b", "B", "role", container_name="ag-b", container_ip="172.20.0.4", url="http://ag-b:8000")
+    first = ContainerAgent(
+        "a",
+        "A",
+        "role",
+        container_name="ag-a",
+        container_ip="172.20.0.3",
+        url="http://ag-a:8000",
+    )
+    second = ContainerAgent(
+        "b",
+        "B",
+        "role",
+        container_name="ag-b",
+        container_ip="172.20.0.4",
+        url="http://ag-b:8000",
+    )
     posted = []
 
     class Response:
@@ -85,7 +108,7 @@ def test_simulation_translates_topology_link_into_two_agent_profiles():
             return Response()
 
     result = simulations._configure_network(
-        [(a, []), (b, [])],
+        [(first, []), (second, [])],
         [{
             "endpoint_a": "a",
             "endpoint_b": "b",

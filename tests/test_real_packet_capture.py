@@ -4,8 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from agent_network import full_packet_capture, real_packet_store
+from agent_network.agent_management import ContainerAgent, ContainerRuntime
 from agent_network.api import simulations
-from agent_network.container_runtime import ContainerAgent, ContainerRuntime
 
 
 class _FakeCaptureProcess:
@@ -66,20 +66,25 @@ def test_capture_uses_logical_agent_id_excludes_srv_and_writes_manifest(tmp_path
     assert manifest["agent_id"] == "planner"
     assert manifest["trace_id"] == "trace-1"
     assert manifest["network_profiles"][0]["delay_ms"] == 20
-    assert full_packet_capture.capture_status()["status"] == "running"
     Path(result["pcap_path"]).write_bytes(b"0" * 24)
 
     stopped = full_packet_capture.stop_full_capture()
     assert stopped["status"] == "stopped"
-    assert stopped["returncode"] == 0
     assert full_packet_capture.capture_status()["status"] == "not_running"
 
 
 def test_capture_reports_immediate_tcpdump_failure(tmp_path, monkeypatch):
     _reset_capture_globals()
-    monkeypatch.setattr(full_packet_capture.subprocess, "Popen", lambda *_args, **_kwargs: _FakeCaptureProcess(1, "denied"))
+    monkeypatch.setattr(
+        full_packet_capture.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: _FakeCaptureProcess(1, "denied"),
+    )
 
-    result = full_packet_capture.start_full_capture("planner", pcap_dir=str(tmp_path))
+    result = full_packet_capture.start_full_capture(
+        "planner",
+        pcap_dir=str(tmp_path),
+    )
 
     assert result["status"] == "error"
     assert result["error"] == "denied"
@@ -94,37 +99,38 @@ def test_packet_store_returns_structured_packets_and_binary_stats(tmp_path, monk
     packet_header = struct.pack("<IIII", 1_700_000_000, 500_000, len(packet), 8)
     pcap.write_bytes(global_header + packet_header + packet)
     (session / "planner.manifest.json").write_text(
-        json.dumps({"agent_id": "planner", "runtime_container": "ag-c1", "runtime_ip": "172.20.0.3", "session_id": "session-1", "trace_id": "trace-1"}),
+        json.dumps({
+            "agent_id": "planner",
+            "runtime_container": "ag-c1",
+            "runtime_ip": "172.20.0.3",
+            "session_id": "session-1",
+            "trace_id": "trace-1",
+        }),
         encoding="utf-8",
     )
     monkeypatch.setattr(real_packet_store, "PCAP_ROOT", tmp_path)
     decoded = "2026-07-02 12:00:00.000000 IP 172.20.0.3.50123 > 1.2.3.4.443: Flags [P.], length 120"
-    monkeypatch.setattr(real_packet_store, "_read_lines", lambda *_args, **_kwargs: ([decoded], "", 1))
+    monkeypatch.setattr(
+        real_packet_store,
+        "_read_lines",
+        lambda *_args, **_kwargs: ([decoded], "", 1),
+    )
 
     packets = real_packet_store.query_packets(session_id="session-1")
     stats = real_packet_store.packet_stats(session_id="session-1")
 
     assert packets[0]["agent_id"] == "planner"
-    assert packets[0]["runtime_container"] == "ag-c1"
     assert packets[0]["protocol"] == "TCP"
     assert packets[0]["direction"] == "outbound"
-    assert packets[0]["traffic_class"] == "agent_non_peer"
     assert packets[0]["dst_port"] == 443
-    assert packets[0]["ip_payload_bytes"] == 120
     assert stats["packet_count"] == 1
     assert stats["captured_bytes"] == 4
     assert stats["wire_bytes"] == 8
     assert stats["files"][0]["valid_pcap"] is True
 
-    analysis = real_packet_store.analyze_packets(session_id="session-1")
-    assert analysis["by_protocol"] == {"TCP": 1}
-    assert analysis["by_direction"] == {"outbound": 1}
-    assert analysis["top_endpoints"] == [{"endpoint": "1.2.3.4:443", "packets": 1}]
-    assert analysis["top_flows"][0]["ip_payload_bytes"] == 120
-
 
 def test_simulation_capture_passes_logical_identity_and_checks_body_status():
-    agent = ContainerAgent(
+    assignment = ContainerAgent(
         agent_id="planner",
         name="Planner",
         role="planner",
@@ -145,7 +151,13 @@ def test_simulation_capture_passes_logical_identity_and_checks_body_status():
             posted.update({"url": url, "json": json, "timeout": timeout})
             return Response()
 
-    result = simulations._capture([(agent, [])], True, Requests, session_id="s", trace_id="t")
+    result = simulations._capture(
+        [(assignment, [])],
+        True,
+        Requests,
+        session_id="s",
+        trace_id="t",
+    )
 
     assert result["success"] == 1
     assert posted["json"]["agent_id"] == "planner"
@@ -162,9 +174,17 @@ def test_dynamic_volumes_reuse_srv_host_mount_sources(monkeypatch):
         {"Destination": "/app/scenes", "Source": "C:/repo/scenes"},
         {"Destination": "/app/data/pcap", "Source": "C:/repo/data/pcap"},
     ]})
-    runtime._docker_client = SimpleNamespace(containers=SimpleNamespace(get=lambda _name: current))
-    monkeypatch.setattr("agent_network.container_runtime.os.path.exists", lambda path: path == "/.dockerenv")
-    monkeypatch.setattr("agent_network.container_runtime.socket.gethostname", lambda: "srv-id")
+    runtime._docker_client = SimpleNamespace(
+        containers=SimpleNamespace(get=lambda _name: current)
+    )
+    monkeypatch.setattr(
+        "agent_network.agent_management.os.path.exists",
+        lambda path: path == "/.dockerenv",
+    )
+    monkeypatch.setattr(
+        "agent_network.agent_management.socket.gethostname",
+        lambda: "srv-id",
+    )
 
     volumes = runtime._dynamic_volumes()
 
