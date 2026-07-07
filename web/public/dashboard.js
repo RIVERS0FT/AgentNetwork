@@ -768,10 +768,13 @@ function getAgentWorldPos(agentId) {
 }
 
 function hasTopologyEdge(fromId, toId) {
-  return _topology.some(r => {
-    const f = r.from.toLowerCase();
-    const t = r.to.toLowerCase();
-    return (f === fromId && t === toId) || (f === toId && t === fromId);
+  return _topology.some(link => {
+    const endpointA = String(link.endpoint_a || '').toLowerCase();
+    const endpointB = String(link.endpoint_b || '').toLowerCase();
+    return (
+      (endpointA === fromId && endpointB === toId) ||
+      (endpointA === toId && endpointB === fromId)
+    );
   });
 }
 
@@ -903,36 +906,33 @@ function drawTopologyLines(topology, agents) {
 
   ctx.save();
   ctx.lineCap = 'round';
-
-  for (const rel of topology) {
-    const fromPos = getAgentWorldPos(rel.from.toLowerCase());
-    const toPos = getAgentWorldPos(rel.to.toLowerCase());
+  for (const link of topology) {
+    const endpointA = String(link.endpoint_a || '').toLowerCase();
+    const endpointB = String(link.endpoint_b || '').toLowerCase();
+    const fromPos = getAgentWorldPos(endpointA);
+    const toPos = getAgentWorldPos(endpointB);
     if (!fromPos || !toPos) continue;
 
     const from = worldToScreen(fromPos.x, fromPos.y);
     const to = worldToScreen(toPos.x, toPos.y);
-
-    const dx = to.sx - from.sx;
-    const dy = to.sy - from.sy;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len === 0) continue;
-
-    const isCooperative = (rel.value || 0) > 0;
-    const alpha = Math.min(1, Math.abs(rel.value || 50) / 100 + 0.22);
-    const color = isCooperative
-      ? `rgba(56,213,255,${alpha.toFixed(2)})`
-      : `rgba(255,78,94,${alpha.toFixed(2)})`;
-    const glow = isCooperative ? 'rgba(47,140,255,0.24)' : 'rgba(255,78,94,0.24)';
+    const delay = Math.max(0, Number(link.delay_ms) || 0);
+    const jitter = Math.max(0, Number(link.jitter_ms) || 0);
+    const loss = Math.max(0, Number(link.loss_pct) || 0);
+    const rate = Math.max(0, Number(link.rate_mbit) || 0);
+    const constrained = delay > 0 || jitter > 0 || loss > 0 || rate > 0;
+    const color = constrained ? 'rgba(255,191,90,0.82)' : 'rgba(56,213,255,0.62)';
+    const glow = constrained ? 'rgba(255,191,90,0.28)' : 'rgba(47,140,255,0.24)';
 
     ctx.beginPath();
     ctx.moveTo(from.sx, from.sy);
     ctx.lineTo(to.sx, to.sy);
-    ctx.setLineDash([10, 7]);
+    ctx.setLineDash(constrained ? [7, 5] : [10, 7]);
     ctx.lineWidth = 3.4;
     ctx.strokeStyle = glow;
     ctx.shadowColor = glow;
     ctx.shadowBlur = 14;
     ctx.stroke();
+
     ctx.beginPath();
     ctx.moveTo(from.sx, from.sy);
     ctx.lineTo(to.sx, to.sy);
@@ -1157,12 +1157,13 @@ function drawAgents(agents, hoveredId, time) {
 
   // Build adjacency from topology
   const adj = new Map();
-  for (const rel of _topology) {
-    const f = rel.from.toLowerCase();
-    const t = rel.to.toLowerCase();
-    if (!adj.has(f)) adj.set(f, new Set());
-    if (!adj.has(t)) adj.set(t, new Set());
-    adj.get(f).add(t); adj.get(t).add(f);
+  for (const link of _topology) {
+    const endpointA = String(link.endpoint_a || '').toLowerCase();
+    const endpointB = String(link.endpoint_b || '').toLowerCase();
+    if (!adj.has(endpointA)) adj.set(endpointA, new Set());
+    if (!adj.has(endpointB)) adj.set(endpointB, new Set());
+    adj.get(endpointA).add(endpointB);
+    adj.get(endpointB).add(endpointA);
   }
 
   const entries = Array.from(_simState.entries());
@@ -1564,8 +1565,8 @@ if (msg.type === 'agent_log' && msg.data) {
       } else if (action === 'broadcast') {
         if (to === '0.0.0.0') {
           for (const rel of _topology) {
-            const rf = rel.from.toLowerCase();
-            const rt = rel.to.toLowerCase();
+            const rf = String(rel.endpoint_a || '').toLowerCase();
+            const rt = String(rel.endpoint_b || '').toLowerCase();
             if (rf === from.toLowerCase()) {
               pushCommEvent(from.toLowerCase(), rt, true);
             } else if (rt === from.toLowerCase()) {

@@ -1,109 +1,103 @@
 {
-  "global_topology_type": "HYBRID_MESH",
-  "sub_networks": [
+  "topology": [
     {
-      "sub_id": "internal_collab",
-      "topology_type": "TREE",
-      "description": "工厂内部协作树：运维中心、制造部、高校实验室",
-      "nodes": [
-        "SEC_OP_CENTER",
-        "SERES_MFG",
-        "XDU_LAB"
-      ],
-      "edges": [
-        {
-          "source": "SEC_OP_CENTER",
-          "target": "SERES_MFG",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_plant_101"
-        },
-        {
-          "source": "SEC_OP_CENTER",
-          "target": "XDU_LAB",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_research_202"
-        }
-      ]
+      "endpoint_a": "sec_op_center",
+      "endpoint_b": "seres_mfg",
+      "channel_id": "vlan_plant_101",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "external_negotiation",
-      "topology_type": "MESH",
-      "description": "外部多方谈判网：电网、银行、监管、厂商",
-      "nodes": [
-        "CSG_ICS",
-        "ICBC_DATA",
-        "REGULATOR",
-        "FW_VENDOR",
-        "ETA_VENDOR"
-      ],
-      "edges": [
-        {
-          "source": "CSG_ICS",
-          "target": "ICBC_DATA",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vpn_gov_bank_301"
-        },
-        {
-          "source": "CSG_ICS",
-          "target": "REGULATOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vpn_gov_reg_302"
-        },
-        {
-          "source": "ICBC_DATA",
-          "target": "REGULATOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vpn_bank_reg_303"
-        },
-        {
-          "source": "FW_VENDOR",
-          "target": "ETA_VENDOR",
-          "paradigm": "GAME",
-          "channel_id": "vlan_market_401"
-        },
-        {
-          "source": "FW_VENDOR",
-          "target": "REGULATOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vpn_vendor_reg_402"
-        },
-        {
-          "source": "ETA_VENDOR",
-          "target": "REGULATOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vpn_vendor_reg_403"
-        }
-      ]
+      "endpoint_a": "sec_op_center",
+      "endpoint_b": "xdu_lab",
+      "channel_id": "vlan_research_202",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "zero_sum_game",
-      "topology_type": "RING",
-      "description": "零和博弈环：防火墙厂商与加密分析厂商争夺市场份额",
-      "nodes": [
-        "FW_VENDOR",
-        "ETA_VENDOR",
-        "SEC_OP_CENTER"
-      ],
-      "edges": [
-        {
-          "source": "FW_VENDOR",
-          "target": "ETA_VENDOR",
-          "paradigm": "GAME",
-          "channel_id": "vlan_market_501"
-        },
-        {
-          "source": "ETA_VENDOR",
-          "target": "SEC_OP_CENTER",
-          "paradigm": "GAME",
-          "channel_id": "vlan_market_502"
-        },
-        {
-          "source": "SEC_OP_CENTER",
-          "target": "FW_VENDOR",
-          "paradigm": "GAME",
-          "channel_id": "vlan_market_503"
-        }
-      ]
+      "endpoint_a": "csg_ics",
+      "endpoint_b": "icbc_data",
+      "channel_id": "vpn_gov_bank_301",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "csg_ics",
+      "endpoint_b": "regulator",
+      "channel_id": "vpn_gov_reg_302",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "icbc_data",
+      "endpoint_b": "regulator",
+      "channel_id": "vpn_bank_reg_303",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "fw_vendor",
+      "endpoint_b": "eta_vendor",
+      "channel_id": "vlan_market_401",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "fw_vendor",
+      "endpoint_b": "regulator",
+      "channel_id": "vpn_vendor_reg_402",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "eta_vendor",
+      "endpoint_b": "regulator",
+      "channel_id": "vpn_vendor_reg_403",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "fw_vendor",
+      "endpoint_b": "eta_vendor",
+      "channel_id": "vlan_market_501",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "eta_vendor",
+      "endpoint_b": "sec_op_center",
+      "channel_id": "vlan_market_502",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "sec_op_center",
+      "endpoint_b": "fw_vendor",
+      "channel_id": "vlan_market_503",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     }
   ]
 }

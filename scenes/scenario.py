@@ -25,7 +25,7 @@ SYSTEM_PROMPT = """
    - TREE (层级制，如监管局->大集团->子公司)
    - MESH (稠密网状，错综复杂的外部自由谈判桌)
    - RING (环状传递)
-   你必须在剧本中声明总体拓扑类型（global_topology_type），并通过子网（sub_networks）的形式，把角色分入不同的拓扑层。
+   network_topology.json 必须使用根级 topology 数组；每条链路使用 endpoint_a、endpoint_b、channel_id、delay_ms、jitter_ms、loss_pct、rate_mbit，链路天然双向。
 4. 异构模型底层：根据模型的特长和角色特征，每个角色必须明确它运行时依赖的底层基座模型（model_backbone），必须在 ['openclaw', 'claudecode'] 中二选一。例如内部协助侧、技术蓝图侧节点可倾向于 openclaw，涉及深度工程、对赌合同决策侧可倾向于 claudecode。
 5. 技能绑定：每个角色在 instances_and_skills 中通过 skills 字段（字符串列表）挂载技能。技能名必须与 skills_code 中定义的函数名完全一致。技能数量按角色复杂度分配（核心角色2-4个，辅助角色1-2个）。
 6. 技能可执行代码落地（重点）：你必须为 instances_and_skills 中出现的每一个 skill_name 生成对应的 Python 函数实现，放入 skills_code 字段。代码要求：
@@ -121,47 +121,30 @@ RESPONSE_SCHEMA = {
                     "required": ["container_instances"],
                     "additionalProperties": False
                 },
-                # 模块三：丰富拓扑结构关系网络 (对应 network_topology.json)
+                # 模块三：Agent 双向网络链路 (对应 network_topology.json)
                 "network_topology": {
                     "type": "object",
                     "properties": {
-                        "global_topology_type": {"type": "string", "enum": ["STAR", "MESH", "TREE", "RING", "HYBRID_MESH"], "description": "全局宏观拓扑结构类型"},
-                        "sub_networks": {
+                        "topology": {
                             "type": "array",
-                            "description": "划分的复合拓扑子网络列表，前端根据此配置铺设网络和UI样式",
+                            "description": "Agent 间天然双向的网络链路列表",
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "sub_id": {"type": "string", "description": "子网唯一ID"},
-                                    "topology_type": {"type": "string", "enum": ["STAR", "MESH", "TREE", "RING"], "description": "此局部子网的拓扑类型"},
-                                    "description": {"type": "string", "description": "该层网络的业务关联或物理含义"},
-                                    "nodes": {
-                                        "type": "array",
-                                        "description": "包含在此子网中的角色ID数组",
-                                        "items": {"type": "string"}
-                                    },
-                                    "edges": {
-                                        "type": "array",
-                                        "description": "节点间的连线拓扑",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "source": {"type": "string", "description": "源角色ID"},
-                                                "target": {"type": "string", "description": "目标角色ID"},
-                                                "paradigm": {"type": "string", "enum": ["COLLABORATION", "NEGOTIATION", "GAME"], "description": "连线代表的互动本质类型"},
-                                                "channel_id": {"type": "string", "description": "物理或网络虚拟通道名称，如 vlan_bridge_102"}
-                                            },
-                                            "required": ["source", "target", "paradigm", "channel_id"],
-                                            "additionalProperties": False
-                                        }
-                                    }
+                                    "endpoint_a": {"type": "string"},
+                                    "endpoint_b": {"type": "string"},
+                                    "channel_id": {"type": "string"},
+                                    "delay_ms": {"type": "number", "minimum": 0, "maximum": 60000},
+                                    "jitter_ms": {"type": "number", "minimum": 0, "maximum": 60000},
+                                    "loss_pct": {"type": "number", "minimum": 0, "maximum": 100},
+                                    "rate_mbit": {"type": "number", "minimum": 0, "maximum": 1000000}
                                 },
-                                "required": ["sub_id", "topology_type", "description", "nodes", "edges"],
+                                "required": ["endpoint_a", "endpoint_b", "channel_id", "delay_ms", "jitter_ms", "loss_pct", "rate_mbit"],
                                 "additionalProperties": False
                             }
                         }
                     },
-                    "required": ["global_topology_type", "sub_networks"],
+                    "required": ["topology"],
                     "additionalProperties": False
                 },
                 # 模块四：技能可执行代码 (对应 skills.py)
@@ -335,15 +318,15 @@ def generate_and_dispatch_scenarios(user_idea: str, output_directory: str) -> No
     biz_topo = full_blueprint.get("business_topology", {})
     roles = meta_and_roles["roles"]
 
-    # 从 edges 构建双向 peers
+    # TopologyLink 天然双向，构建 peers。
     peer_map = {rid: set() for rid in roles}
-    for subnet in topo.get("sub_networks", []):
-        for edge in subnet.get("edges", []):
-            src, dst = edge["source"], edge["target"]
-            if src in roles:
-                peer_map[src].add(dst)
-            if dst in roles:
-                peer_map[dst].add(src)
+    for link in topo.get("topology", []):
+        endpoint_a = link["endpoint_a"]
+        endpoint_b = link["endpoint_b"]
+        if endpoint_a in roles:
+            peer_map[endpoint_a].add(endpoint_b)
+        if endpoint_b in roles:
+            peer_map[endpoint_b].add(endpoint_a)
 
     # 合并 peers + skills 到每个 role
     merged_roles = {}
@@ -364,7 +347,7 @@ def generate_and_dispatch_scenarios(user_idea: str, output_directory: str) -> No
     merged_name = os.path.basename(output_directory.rstrip("/\\")) + "_merged.json"
     merged_json = {
         "scenario_metadata": meta_and_roles["scenario_metadata"],
-        "global_topology_type": topo["global_topology_type"],
+        "topology": topo["topology"],
         "roles": merged_roles,
         "business_topology": biz_topo,
     }
@@ -381,8 +364,7 @@ def generate_and_dispatch_scenarios(user_idea: str, output_directory: str) -> No
     total_biz_links = len(biz_topo.get("links", []))
     print(f"1. 声明节点总数: {total_roles}")
     print(f"2. 通信信道连线: {total_edges} (固定)")
-    print(f"3. 宏观拓扑结构: {topo['global_topology_type']}")
-    print(f"4. 包含子网络数: {len(topo['sub_networks'])}")
+    print(f"3. 双向拓扑链路数: {len(topo['topology'])}")
     print(f"5. 技能实现总数: {total_skills} (已写入 skills.py)")
     print(f"6. 业务合约初始连线: {total_biz_links} (全部 NEGOTIATING，运行时演进)")
     print(f"7. 合并版: {merged_dir}/")

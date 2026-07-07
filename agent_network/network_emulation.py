@@ -21,10 +21,10 @@ def _number(data: dict, names: tuple[str, ...], default: float = 0.0) -> float:
 
 def normalize_profile(raw: dict) -> dict:
     raw = raw or {}
-    delay_ms = _number(raw, ("delay_ms", "latency_ms", "latency"))
-    jitter_ms = _number(raw, ("jitter_ms", "jitter"))
-    loss_pct = _number(raw, ("loss_pct", "loss_percent", "packet_loss_pct", "packet_loss"))
-    rate_mbit = _number(raw, ("rate_mbit", "bandwidth_mbps", "bandwidth"))
+    delay_ms = _number(raw, ("delay_ms",))
+    jitter_ms = _number(raw, ("jitter_ms",))
+    loss_pct = _number(raw, ("loss_pct",))
+    rate_mbit = _number(raw, ("rate_mbit",))
     if not 0 <= delay_ms <= 60_000:
         raise ValueError("network delay must be between 0 and 60000 ms")
     if not 0 <= jitter_ms <= 60_000:
@@ -74,7 +74,7 @@ def configure_network_emulation(
     runner(["tc", "qdisc", "del", "dev", interface, "root"])
     normalized = []
     for item in profiles or []:
-        profile = normalize_profile(item.get("network", {}))
+        profile = normalize_profile(item)
         if not any(profile.values()):
             continue
         host = item.get("target_host", "")

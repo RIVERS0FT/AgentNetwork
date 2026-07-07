@@ -1,67 +1,274 @@
 {
-  "global_topology_type": "HYBRID_MESH",
-  "sub_networks": [
+  "topology": [
     {
-      "sub_id": "sub_dev_collab",
-      "topology_type": "MESH",
-      "description": "开发团队内部协作网络",
-      "nodes": [
-        "DEV_FE", "DEV_BE", "DEV_FW", "DEV_AI", "DEV_IC",
-        "PM", "DOC_WRITER", "ARCHITECT", "QA", "DEV_OPS"
-      ],
-      "edges": [
-        { "source": "PM",       "target": "DEV_FE",   "paradigm": "COLLABORATION", "channel_id": "vlan_pm_fe" },
-        { "source": "PM",       "target": "DEV_BE",   "paradigm": "COLLABORATION", "channel_id": "vlan_pm_be" },
-        { "source": "PM",       "target": "DOC_WRITER","paradigm": "COLLABORATION", "channel_id": "vlan_pm_doc" },
-        { "source": "ARCHITECT","target": "DOC_WRITER","paradigm": "COLLABORATION", "channel_id": "vlan_arch_doc" },
-        { "source": "ARCHITECT","target": "DEV_FE",   "paradigm": "COLLABORATION", "channel_id": "vlan_arch_fe" },
-        { "source": "ARCHITECT","target": "DEV_BE",   "paradigm": "COLLABORATION", "channel_id": "vlan_arch_be" },
-        { "source": "ARCHITECT","target": "DEV_FW",   "paradigm": "COLLABORATION", "channel_id": "vlan_arch_fw" },
-        { "source": "ARCHITECT","target": "DEV_AI",   "paradigm": "COLLABORATION", "channel_id": "vlan_arch_ai" },
-        { "source": "ARCHITECT","target": "DEV_IC",   "paradigm": "COLLABORATION", "channel_id": "vlan_arch_ic" },
-        { "source": "DEV_FE",   "target": "DEV_BE",   "paradigm": "COLLABORATION", "channel_id": "vlan_fe_be" },
-        { "source": "DEV_AI",   "target": "DEV_BE",   "paradigm": "COLLABORATION", "channel_id": "vlan_ai_be" },
-        { "source": "DEV_OPS",  "target": "DEV_FE",   "paradigm": "COLLABORATION", "channel_id": "vlan_ops_fe" },
-        { "source": "DEV_OPS",  "target": "DEV_BE",   "paradigm": "COLLABORATION", "channel_id": "vlan_ops_be" },
-        { "source": "DEV_OPS",  "target": "ARCHITECT","paradigm": "COLLABORATION", "channel_id": "vlan_ops_arch" }
-      ]
+      "endpoint_a": "pm",
+      "endpoint_b": "dev_fe",
+      "channel_id": "vlan_pm_fe",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_repo_ci",
-      "topology_type": "STAR",
-      "description": "代码仓库/CI/CD中心：所有内容生产者连接 REPO_ADMIN 和 DEV_OPS",
-      "nodes": [
-        "DEV_FE", "DEV_BE", "DEV_FW", "DEV_AI", "DEV_IC",
-        "ARCHITECT", "PM", "DOC_WRITER", "QA", "REPO_ADMIN", "DEV_OPS"
-      ],
-      "edges": [
-        { "source": "DEV_FE",   "target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_fe" },
-        { "source": "DEV_BE",   "target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_be" },
-        { "source": "DEV_FW",   "target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_fw" },
-        { "source": "DEV_AI",   "target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_ai" },
-        { "source": "DEV_IC",   "target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_ic" },
-        { "source": "ARCHITECT","target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_arch" },
-        { "source": "PM",       "target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_pm" },
-        { "source": "DOC_WRITER","target":"REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_doc" },
-        { "source": "QA",       "target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_qa" },
-        { "source": "DEV_OPS",  "target": "REPO_ADMIN", "paradigm": "COLLABORATION", "channel_id": "vlan_repo_ops" }
-      ]
+      "endpoint_a": "pm",
+      "endpoint_b": "dev_be",
+      "channel_id": "vlan_pm_be",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_qa_notify",
-      "topology_type": "MESH",
-      "description": "测试反馈闭环：QA↔各开发组 + 架构师",
-      "nodes": [
-        "QA", "DEV_FE", "DEV_BE", "DEV_FW", "DEV_AI", "DEV_IC", "ARCHITECT"
-      ],
-      "edges": [
-        { "source": "QA", "target": "DEV_FE", "paradigm": "COLLABORATION", "channel_id": "vlan_qa_fe" },
-        { "source": "QA", "target": "DEV_BE", "paradigm": "COLLABORATION", "channel_id": "vlan_qa_be" },
-        { "source": "QA", "target": "DEV_FW", "paradigm": "COLLABORATION", "channel_id": "vlan_qa_fw" },
-        { "source": "QA", "target": "DEV_AI", "paradigm": "COLLABORATION", "channel_id": "vlan_qa_ai" },
-        { "source": "QA", "target": "DEV_IC", "paradigm": "COLLABORATION", "channel_id": "vlan_qa_ic" },
-        { "source": "QA", "target": "ARCHITECT","paradigm": "COLLABORATION", "channel_id": "vlan_qa_arch" }
-      ]
+      "endpoint_a": "pm",
+      "endpoint_b": "doc_writer",
+      "channel_id": "vlan_pm_doc",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "architect",
+      "endpoint_b": "doc_writer",
+      "channel_id": "vlan_arch_doc",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "architect",
+      "endpoint_b": "dev_fe",
+      "channel_id": "vlan_arch_fe",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "architect",
+      "endpoint_b": "dev_be",
+      "channel_id": "vlan_arch_be",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "architect",
+      "endpoint_b": "dev_fw",
+      "channel_id": "vlan_arch_fw",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "architect",
+      "endpoint_b": "dev_ai",
+      "channel_id": "vlan_arch_ai",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "architect",
+      "endpoint_b": "dev_ic",
+      "channel_id": "vlan_arch_ic",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_fe",
+      "endpoint_b": "dev_be",
+      "channel_id": "vlan_fe_be",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_ai",
+      "endpoint_b": "dev_be",
+      "channel_id": "vlan_ai_be",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_ops",
+      "endpoint_b": "dev_fe",
+      "channel_id": "vlan_ops_fe",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_ops",
+      "endpoint_b": "dev_be",
+      "channel_id": "vlan_ops_be",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_ops",
+      "endpoint_b": "architect",
+      "channel_id": "vlan_ops_arch",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_fe",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_fe",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_be",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_be",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_fw",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_fw",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_ai",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_ai",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_ic",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_ic",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "architect",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_arch",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "pm",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_pm",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "doc_writer",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_doc",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_qa",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "dev_ops",
+      "endpoint_b": "repo_admin",
+      "channel_id": "vlan_repo_ops",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa",
+      "endpoint_b": "dev_fe",
+      "channel_id": "vlan_qa_fe",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa",
+      "endpoint_b": "dev_be",
+      "channel_id": "vlan_qa_be",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa",
+      "endpoint_b": "dev_fw",
+      "channel_id": "vlan_qa_fw",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa",
+      "endpoint_b": "dev_ai",
+      "channel_id": "vlan_qa_ai",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa",
+      "endpoint_b": "dev_ic",
+      "channel_id": "vlan_qa_ic",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa",
+      "endpoint_b": "architect",
+      "channel_id": "vlan_qa_arch",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     }
   ]
 }

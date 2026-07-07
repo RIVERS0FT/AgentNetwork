@@ -28,6 +28,9 @@ _pending_config: Dict[str, str] = {}
 _comm_matrix: Dict[str, set] = {}
 _pending_seed: int = 0
 
+_TOPOLOGY_NETWORK_FIELDS = ("delay_ms", "jitter_ms", "loss_pct", "rate_mbit")
+_TOPOLOGY_LINK_FIELDS = {"endpoint_a", "endpoint_b", "channel_id", *_TOPOLOGY_NETWORK_FIELDS}
+
 
 class SimulationRunRequest(BaseModel):
     scene: str = ""
@@ -107,31 +110,37 @@ def _configure_network(created_cas: List[tuple], topology: List[Dict], requests_
             "target_agent": target,
             "target_host": agents[target].container_name,
             "target_ip": agents[target].container_ip,
-            "network": network,
+            **network,
         }
         previous = profile_maps[source].get(target)
-        if previous and previous["network"] != network:
+        if previous and any(
+            previous.get(field) != network.get(field)
+            for field in ("delay_ms", "jitter_ms", "loss_pct", "rate_mbit")
+        ):
             validation_errors.append(f"conflicting network profiles for {source}->{target}")
             return
         profile_maps[source][target] = profile
 
     for edge in topology or []:
-        raw_network = edge.get("network") or {}
-        if not raw_network:
+        endpoint_a = str(edge.get("endpoint_a", "")).lower()
+        endpoint_b = str(edge.get("endpoint_b", "")).lower()
+        if endpoint_a not in agents or endpoint_b not in agents:
+            validation_errors.append(
+                f"unknown topology endpoints: {endpoint_a}<->{endpoint_b}"
+            )
             continue
         try:
-            network = normalize_profile(raw_network)
+            network = normalize_profile({
+                field: edge.get(field, 0)
+                for field in _TOPOLOGY_NETWORK_FIELDS
+            })
         except ValueError as exc:
-            validation_errors.append(f"{edge.get('from', '')}->{edge.get('to', '')}: {exc}")
+            validation_errors.append(f"{endpoint_a}<->{endpoint_b}: {exc}")
             continue
         if not any(network.values()):
             continue
-        source = str(edge.get("from", "")).lower()
-        target = str(edge.get("to", "")).lower()
-        if source in agents and target in agents:
-            add_profile(source, target, network)
-        if edge.get("bidirectional") and source in agents and target in agents:
-            add_profile(target, source, network)
+        add_profile(endpoint_a, endpoint_b, network)
+        add_profile(endpoint_b, endpoint_a, network)
 
     profiles = {agent_id: list(items.values()) for agent_id, items in profile_maps.items()}
     requested = sum(len(items) for items in profiles.values())
@@ -248,14 +257,11 @@ def _launch_containers(config: Dict[str, str], scene_def=None) -> Dict[str, Any]
     agent_directory = {ca.agent_id.lower(): ca.url for ca, _ in created_cas if ca.url}
     _comm_matrix.clear()
     for edge in (scene_def.topology or []):
-        if edge.get("can_direct_chat", True) is False:
-            continue
-        src = edge.get("from", "").lower()
-        dst = edge.get("to", "").lower()
-        if src and dst:
-            _comm_matrix.setdefault(src, set()).add(dst)
-            if edge.get("bidirectional", False):
-                _comm_matrix.setdefault(dst, set()).add(src)
+        endpoint_a = str(edge.get("endpoint_a", "")).lower()
+        endpoint_b = str(edge.get("endpoint_b", "")).lower()
+        if endpoint_a and endpoint_b:
+            _comm_matrix.setdefault(endpoint_a, set()).add(endpoint_b)
+            _comm_matrix.setdefault(endpoint_b, set()).add(endpoint_a)
 
     logger.start_session(scene_def.scene_name)
     session_id = getattr(logger, "_session_id", "")
@@ -499,13 +505,55 @@ def _build_scene_from_folder(scene_name: str) -> SceneDefinition:
                 },
             )
         )
+    raw_topology = topology_config.get("topology")
+    if not isinstance(raw_topology, list):
+        raise ValueError(
+            f"Scene '{scene_name}' network_topology.json must contain a root-level topology array."
+        )
+
+    agent_ids = {agent.agent_id for agent in agents}
+    channel_ids = set()
     topology_edges = []
-    for subnet in topology_config.get("sub_networks", []):
-        for edge in subnet.get("edges", []):
-            weight = edge.get("weight")
-            if weight is None:
-                weight = 70 if edge.get("paradigm") == "COLLABORATION" else -50
-            topology_edges.append({"from": edge["source"].lower(), "to": edge["target"].lower(), "relation_type": edge.get("paradigm", ""), "value": weight, "can_direct_chat": edge.get("direct_chat", True), "bidirectional": edge.get("bidirectional", False), "channel_id": edge.get("channel_id", ""), "network": edge.get("network", {})})
+    for index, edge in enumerate(raw_topology):
+        if not isinstance(edge, dict):
+            raise ValueError(f"Scene '{scene_name}' topology[{index}] must be an object.")
+        unexpected = set(edge) - _TOPOLOGY_LINK_FIELDS
+        missing = {"endpoint_a", "endpoint_b", "channel_id"} - set(edge)
+        if unexpected:
+            raise ValueError(
+                f"Scene '{scene_name}' topology[{index}] has unsupported fields: {sorted(unexpected)}"
+            )
+        if missing:
+            raise ValueError(
+                f"Scene '{scene_name}' topology[{index}] is missing fields: {sorted(missing)}"
+            )
+        endpoint_a = str(edge["endpoint_a"]).strip().lower()
+        endpoint_b = str(edge["endpoint_b"]).strip().lower()
+        channel_id = str(edge["channel_id"]).strip()
+        if not endpoint_a or not endpoint_b or endpoint_a == endpoint_b:
+            raise ValueError(
+                f"Scene '{scene_name}' topology[{index}] must connect two distinct endpoints."
+            )
+        unknown = {endpoint_a, endpoint_b} - agent_ids
+        if unknown:
+            raise ValueError(
+                f"Scene '{scene_name}' topology[{index}] references unknown agents: {sorted(unknown)}"
+            )
+        if not channel_id:
+            raise ValueError(f"Scene '{scene_name}' topology[{index}] channel_id must be non-empty.")
+        if channel_id in channel_ids:
+            raise ValueError(f"Scene '{scene_name}' contains duplicate channel_id '{channel_id}'.")
+        channel_ids.add(channel_id)
+        network = normalize_profile({
+            field: edge.get(field, 0)
+            for field in _TOPOLOGY_NETWORK_FIELDS
+        })
+        topology_edges.append({
+            "endpoint_a": endpoint_a,
+            "endpoint_b": endpoint_b,
+            "channel_id": channel_id,
+            **network,
+        })
     return SceneDefinition(scene_name=title, description=bg, agents=agents, topology=topology_edges)
 
 

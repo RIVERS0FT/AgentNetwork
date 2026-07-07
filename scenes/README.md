@@ -43,7 +43,7 @@ python scenes/scenario.py \
 |------|------|
 | `meta_and_roles.json` | 元数据、终止条件、角色定义 (含 identity/core_goal/paradigm) |
 | `instances_and_skills.json` | 角色→技能绑定表 |
-| `network_topology.json` | 通信信道层：子网划分 + 静态边 (STAR/MESH/BIPARTITE) |
+| `network_topology.json` | 通信信道层：天然双向的 TopologyLink 列表 |
 | `business_topology.json` | 业务合约层：种子连线 + event_stream (NEGOTIATING→SIGNED→BREACH_FLASHING→TERMINATED) |
 | `skills.py` | 技能可执行代码 (SkillRegistry + 所有技能函数) |
 
@@ -80,10 +80,14 @@ python scenes/scenario.py \
 
 | 路径 | 类型 | 说明 |
 |------|------|------|
-| `global_topology_type` | enum | `STAR` / `MESH` / `TREE` / `RING` / `HYBRID_MESH` |
-| `sub_networks[]` | object | `{sub_id, topology_type, description, nodes[], edges[]}` |
-| `sub_networks[].edges[]` | object | `{source, target, paradigm, channel_id}` |
-| `edges[].paradigm` | enum | `COLLABORATION` / `NEGOTIATION` / `GAME` |
+| `topology[]` | object[] | Agent 间天然双向的网络链路 |
+| `topology[].endpoint_a` | string | 链路端点 A |
+| `topology[].endpoint_b` | string | 链路端点 B |
+| `topology[].channel_id` | string | 唯一通道 ID |
+| `topology[].delay_ms` | number | 双向链路时延 |
+| `topology[].jitter_ms` | number | 双向链路抖动 |
+| `topology[].loss_pct` | number | 双向链路丢包率 |
+| `topology[].rate_mbit` | number | 双向链路带宽限制 |
 
 ### business_topology.json
 
@@ -113,8 +117,8 @@ SkillRegistry.execute("submit_code", developer="dev_fe", repo="main", round=1)
 | 字段 | 来源 |
 |------|------|
 | `scenario_metadata` | meta_and_roles |
-| `global_topology_type` | network_topology |
-| `roles.{id}` (含 `peers[]` `skills[]`) | roles + edges 双向推导 + instances 提取 |
+| `topology` | network_topology |
+| `roles.{id}` (含 `peers[]` `skills[]`) | roles + topology 双向推导 + instances 提取 |
 | `business_topology` | business_topology.json |
 
 ---

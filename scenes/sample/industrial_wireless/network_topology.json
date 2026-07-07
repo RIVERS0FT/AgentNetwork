@@ -1,129 +1,130 @@
 {
-  "global_topology_type": "HYBRID_MESH",
-  "sub_networks": [
+  "topology": [
     {
-      "sub_id": "sub_plant_internal",
-      "topology_type": "STAR",
-      "description": "工厂内部网络，以工厂IT为中心连接产线、AGV、租户管理器",
-      "nodes": [
-        "BYD_IT",
-        "AGV_FLEET",
-        "PROD_LINE",
-        "TENANT_MGR"
-      ],
-      "edges": [
-        {
-          "source": "BYD_IT",
-          "target": "AGV_FLEET",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_plant_01"
-        },
-        {
-          "source": "BYD_IT",
-          "target": "PROD_LINE",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_plant_02"
-        },
-        {
-          "source": "BYD_IT",
-          "target": "TENANT_MGR",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_plant_03"
-        }
-      ]
+      "endpoint_a": "byd_it",
+      "endpoint_b": "agv_fleet",
+      "channel_id": "vlan_plant_01",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_supplier_negotiation",
-      "topology_type": "MESH",
-      "description": "供应商与工厂之间的谈判网络，多方博弈带宽方案",
-      "nodes": [
-        "BYD_IT",
-        "SERES_IT",
-        "SOUTH_PLANT",
-        "5G_VENDOR",
-        "WIFI_VENDOR",
-        "OTA_PLATFORM"
-      ],
-      "edges": [
-        {
-          "source": "BYD_IT",
-          "target": "5G_VENDOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "biz_chan_1"
-        },
-        {
-          "source": "BYD_IT",
-          "target": "WIFI_VENDOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "biz_chan_2"
-        },
-        {
-          "source": "SERES_IT",
-          "target": "5G_VENDOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "biz_chan_3"
-        },
-        {
-          "source": "SERES_IT",
-          "target": "WIFI_VENDOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "biz_chan_4"
-        },
-        {
-          "source": "SOUTH_PLANT",
-          "target": "5G_VENDOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "biz_chan_5"
-        },
-        {
-          "source": "SOUTH_PLANT",
-          "target": "WIFI_VENDOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "biz_chan_6"
-        },
-        {
-          "source": "BYD_IT",
-          "target": "OTA_PLATFORM",
-          "paradigm": "COLLABORATION",
-          "channel_id": "ota_chan_1"
-        },
-        {
-          "source": "SERES_IT",
-          "target": "OTA_PLATFORM",
-          "paradigm": "COLLABORATION",
-          "channel_id": "ota_chan_2"
-        },
-        {
-          "source": "SOUTH_PLANT",
-          "target": "OTA_PLATFORM",
-          "paradigm": "COLLABORATION",
-          "channel_id": "ota_chan_3"
-        }
-      ]
+      "endpoint_a": "byd_it",
+      "endpoint_b": "prod_line",
+      "channel_id": "vlan_plant_02",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_regulatory",
-      "topology_type": "TREE",
-      "description": "监管层级，监管局管理频谱分配，影响所有无线方案",
-      "nodes": [
-        "REGULATOR",
-        "5G_VENDOR",
-        "WIFI_VENDOR"
-      ],
-      "edges": [
-        {
-          "source": "REGULATOR",
-          "target": "5G_VENDOR",
-          "paradigm": "GAME",
-          "channel_id": "spectrum_5g"
-        },
-        {
-          "source": "REGULATOR",
-          "target": "WIFI_VENDOR",
-          "paradigm": "GAME",
-          "channel_id": "spectrum_wifi"
-        }
-      ]
+      "endpoint_a": "byd_it",
+      "endpoint_b": "tenant_mgr",
+      "channel_id": "vlan_plant_03",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "byd_it",
+      "endpoint_b": "5g_vendor",
+      "channel_id": "biz_chan_1",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "byd_it",
+      "endpoint_b": "wifi_vendor",
+      "channel_id": "biz_chan_2",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "seres_it",
+      "endpoint_b": "5g_vendor",
+      "channel_id": "biz_chan_3",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "seres_it",
+      "endpoint_b": "wifi_vendor",
+      "channel_id": "biz_chan_4",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "south_plant",
+      "endpoint_b": "5g_vendor",
+      "channel_id": "biz_chan_5",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "south_plant",
+      "endpoint_b": "wifi_vendor",
+      "channel_id": "biz_chan_6",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "byd_it",
+      "endpoint_b": "ota_platform",
+      "channel_id": "ota_chan_1",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "seres_it",
+      "endpoint_b": "ota_platform",
+      "channel_id": "ota_chan_2",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "south_plant",
+      "endpoint_b": "ota_platform",
+      "channel_id": "ota_chan_3",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "regulator",
+      "endpoint_b": "5g_vendor",
+      "channel_id": "spectrum_5g",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "regulator",
+      "endpoint_b": "wifi_vendor",
+      "channel_id": "spectrum_wifi",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     }
   ]
 }

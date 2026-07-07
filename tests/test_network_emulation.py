@@ -5,19 +5,33 @@ from agent_network.api import simulations
 from agent_network.container_runtime import ContainerAgent
 
 
-def test_normalize_network_profile_accepts_documented_aliases():
+def test_normalize_network_profile_accepts_canonical_fields():
     profile = network_emulation.normalize_profile({
-        "latency_ms": 20,
+        "delay_ms": 20,
         "jitter_ms": 5,
-        "packet_loss_pct": 0.5,
-        "bandwidth_mbps": 100,
+        "loss_pct": 0.5,
+        "rate_mbit": 100,
     })
-
     assert profile == {
         "delay_ms": 20,
         "jitter_ms": 5,
         "loss_pct": 0.5,
         "rate_mbit": 100,
+    }
+
+
+def test_normalize_network_profile_does_not_accept_legacy_aliases():
+    profile = network_emulation.normalize_profile({
+        "latency_ms": 20,
+        "jitter": 5,
+        "packet_loss_pct": 0.5,
+        "bandwidth_mbps": 100,
+    })
+    assert profile == {
+        "delay_ms": 0,
+        "jitter_ms": 0,
+        "loss_pct": 0,
+        "rate_mbit": 0,
     }
 
 
@@ -38,7 +52,10 @@ def test_configure_network_emulation_builds_per_peer_tc_rules(monkeypatch):
         profiles=[{
             "target_agent": "agent_b",
             "target_host": "ag-c2",
-            "network": {"delay_ms": 20, "jitter_ms": 5, "loss_pct": 1, "rate_mbit": 100},
+            "delay_ms": 20,
+            "jitter_ms": 5,
+            "loss_pct": 1,
+            "rate_mbit": 100,
         }],
         runner=runner,
         resolver=lambda _host: "172.20.0.4",
@@ -50,7 +67,7 @@ def test_configure_network_emulation_builds_per_peer_tc_rules(monkeypatch):
     assert any(command[-2:] == ["flowid", "1:10"] for command in commands)
 
 
-def test_simulation_translates_bidirectional_edge_into_two_agent_profiles():
+def test_simulation_translates_topology_link_into_two_agent_profiles():
     a = ContainerAgent("a", "A", "role", container_name="ag-a", container_ip="172.20.0.3", url="http://ag-a:8000")
     b = ContainerAgent("b", "B", "role", container_name="ag-b", container_ip="172.20.0.4", url="http://ag-b:8000")
     posted = []
@@ -70,10 +87,13 @@ def test_simulation_translates_bidirectional_edge_into_two_agent_profiles():
     result = simulations._configure_network(
         [(a, []), (b, [])],
         [{
-            "from": "a",
-            "to": "b",
-            "bidirectional": True,
-            "network": {"delay_ms": 20},
+            "endpoint_a": "a",
+            "endpoint_b": "b",
+            "channel_id": "ch_a_b",
+            "delay_ms": 20,
+            "jitter_ms": 0,
+            "loss_pct": 0,
+            "rate_mbit": 0,
         }],
         Requests,
     )

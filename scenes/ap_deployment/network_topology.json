@@ -1,70 +1,202 @@
 {
-  "global_topology_type": "HYBRID_MESH",
-  "sub_networks": [
+  "topology": [
     {
-      "sub_id": "core_team",
-      "topology_type": "STAR",
-      "description": "核心规划团队，以AP规划师为中心的技术协作子网",
-      "nodes": [
-        "PLANNER",
-        "RF_ENGINEER",
-        "COST_ANALYST",
-        "SURVEYOR",
-        "ARCHITECT",
-        "VERIFIER",
-        "DEPLOYER",
-        "QA_ENGINEER",
-        "DOCUMENTER"
-      ],
-      "edges": [
-        { "source": "PLANNER", "target": "RF_ENGINEER",  "paradigm": "COLLABORATION", "channel_id": "vlan_core_01" },
-        { "source": "PLANNER", "target": "COST_ANALYST", "paradigm": "NEGOTIATION",   "channel_id": "vlan_core_02" },
-        { "source": "PLANNER", "target": "SURVEYOR",     "paradigm": "COLLABORATION", "channel_id": "vlan_core_03" },
-        { "source": "PLANNER", "target": "ARCHITECT",    "paradigm": "COLLABORATION", "channel_id": "vlan_core_04" },
-        { "source": "PLANNER", "target": "VERIFIER",     "paradigm": "COLLABORATION", "channel_id": "vlan_core_05" },
-        { "source": "PLANNER", "target": "DEPLOYER",     "paradigm": "COLLABORATION", "channel_id": "vlan_core_06" },
-        { "source": "PLANNER", "target": "QA_ENGINEER",  "paradigm": "COLLABORATION", "channel_id": "vlan_core_07" },
-        { "source": "PLANNER", "target": "DOCUMENTER",   "paradigm": "COLLABORATION", "channel_id": "vlan_core_08" }
-      ]
+      "endpoint_a": "planner",
+      "endpoint_b": "rf_engineer",
+      "channel_id": "vlan_core_01",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "ai_network",
-      "topology_type": "MESH",
-      "description": "AI优化助手与各角色的算法服务调用网络",
-      "nodes": [
-        "AI_ASSISTANT",
-        "PLANNER",
-        "RF_ENGINEER",
-        "VERIFIER"
-      ],
-      "edges": [
-        { "source": "PLANNER",     "target": "AI_ASSISTANT", "paradigm": "NEGOTIATION", "channel_id": "vlan_ai_01" },
-        { "source": "RF_ENGINEER", "target": "AI_ASSISTANT", "paradigm": "NEGOTIATION", "channel_id": "vlan_ai_02" },
-        { "source": "VERIFIER",    "target": "AI_ASSISTANT", "paradigm": "NEGOTIATION", "channel_id": "vlan_ai_03" }
-      ]
+      "endpoint_a": "planner",
+      "endpoint_b": "cost_analyst",
+      "channel_id": "vlan_core_02",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "faction_dynamics",
-      "topology_type": "BIPARTITE",
-      "description": "跨阵营博弈通信信道 — 政治技能(投诉/妥协/推诿)的传输层。不同于core_team的技术协作，此子网承载博弈流量。",
-      "nodes": [
-        "PLANNER", "COST_ANALYST",
-        "QA_ENGINEER", "DEPLOYER", "SURVEYOR", "VERIFIER",
-        "DOCUMENTER", "RF_ENGINEER", "ARCHITECT", "AI_ASSISTANT"
-      ],
-      "edges": [
-        { "source": "PLANNER",     "target": "COST_ANALYST", "paradigm": "NEGOTIATION",   "channel_id": "vlan_fd_01", "desc": "预算审批博弈: make_compromise / escalate_complaint" },
-        { "source": "QA_ENGINEER", "target": "DEPLOYER",     "paradigm": "ADVERSARIAL",    "channel_id": "vlan_fd_02", "desc": "验收vs部署: escalate_complaint / shortcut_acceptance" },
-        { "source": "VERIFIER",    "target": "RF_ENGINEER",  "paradigm": "ADVERSARIAL",    "channel_id": "vlan_fd_03", "desc": "覆盖验证vs仿真: shift_responsibility / falsify_coverage_data" },
-        { "source": "QA_ENGINEER", "target": "VERIFIER",     "paradigm": "ADVERSARIAL",    "channel_id": "vlan_fd_04", "desc": "验收vs验证: 覆盖不达标责任推诿" },
-        { "source": "DEPLOYER",    "target": "SURVEYOR",     "paradigm": "ADVERSARIAL",    "channel_id": "vlan_fd_05", "desc": "部署vs勘测: 现场问题互相推诿" },
-        { "source": "DOCUMENTER",  "target": "PLANNER",      "paradigm": "NEGOTIATION",   "channel_id": "vlan_fd_06", "desc": "归档vs规划: 选择性记录 / 免责归档" },
-        { "source": "DOCUMENTER",  "target": "QA_ENGINEER",  "paradigm": "NEGOTIATION",   "channel_id": "vlan_fd_07", "desc": "归档vs验收: 恶意行为记录 / 免责盾" },
-        { "source": "RF_ENGINEER", "target": "AI_ASSISTANT", "paradigm": "ADVERSARIAL",   "channel_id": "vlan_fd_08", "desc": "仿真vsAI: 保守报告 vs 过量推荐博弈" },
-        { "source": "ARCHITECT",   "target": "PLANNER",      "paradigm": "NEGOTIATION",   "channel_id": "vlan_fd_09", "desc": "架构vs规划: 模糊通过意见 / 免责盾" },
-        { "source": "PLANNER",     "target": "DEPLOYER",     "paradigm": "NEGOTIATION",   "channel_id": "vlan_fd_10", "desc": "规划vs部署: overclock_ap_power共谋风险" },
-        { "source": "COST_ANALYST","target": "DOCUMENTER",   "paradigm": "COLLABORATION", "channel_id": "vlan_fd_11", "desc": "成本vs文档: 同阵营信息共享 / 免责同盟" }
-      ]
+      "endpoint_a": "planner",
+      "endpoint_b": "surveyor",
+      "channel_id": "vlan_core_03",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "architect",
+      "channel_id": "vlan_core_04",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "verifier",
+      "channel_id": "vlan_core_05",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "deployer",
+      "channel_id": "vlan_core_06",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "qa_engineer",
+      "channel_id": "vlan_core_07",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "documenter",
+      "channel_id": "vlan_core_08",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "ai_assistant",
+      "channel_id": "vlan_ai_01",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "rf_engineer",
+      "endpoint_b": "ai_assistant",
+      "channel_id": "vlan_ai_02",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "verifier",
+      "endpoint_b": "ai_assistant",
+      "channel_id": "vlan_ai_03",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "cost_analyst",
+      "channel_id": "vlan_fd_01",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa_engineer",
+      "endpoint_b": "deployer",
+      "channel_id": "vlan_fd_02",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "verifier",
+      "endpoint_b": "rf_engineer",
+      "channel_id": "vlan_fd_03",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qa_engineer",
+      "endpoint_b": "verifier",
+      "channel_id": "vlan_fd_04",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "deployer",
+      "endpoint_b": "surveyor",
+      "channel_id": "vlan_fd_05",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "documenter",
+      "endpoint_b": "planner",
+      "channel_id": "vlan_fd_06",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "documenter",
+      "endpoint_b": "qa_engineer",
+      "channel_id": "vlan_fd_07",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "rf_engineer",
+      "endpoint_b": "ai_assistant",
+      "channel_id": "vlan_fd_08",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "architect",
+      "endpoint_b": "planner",
+      "channel_id": "vlan_fd_09",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "deployer",
+      "channel_id": "vlan_fd_10",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "cost_analyst",
+      "endpoint_b": "documenter",
+      "channel_id": "vlan_fd_11",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     }
   ]
 }

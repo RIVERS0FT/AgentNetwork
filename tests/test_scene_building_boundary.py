@@ -49,7 +49,7 @@ def _write_scene(root, scene_name="demo_scene", backend="openclaw"):
     )
 
     (folder / "network_topology.json").write_text(
-        json.dumps({"sub_networks": [{"edges": []}]}, ensure_ascii=False),
+        json.dumps({"topology": []}, ensure_ascii=False),
         encoding="utf-8",
     )
 

@@ -1,132 +1,130 @@
 {
-  "global_topology_type": "HYBRID_MESH",
-  "sub_networks": [
+  "topology": [
     {
-      "sub_id": "sub_operator_internal",
-      "topology_type": "TREE",
-      "description": "三大运营商内部技术团队与业务部门之间的层级协作网络",
-      "nodes": [
-        "CMCC_COMPUTE",
-        "CMCC_ENG",
-        "CT_CLOUD",
-        "CT_ENG",
-        "CU_SMART",
-        "CU_ENG"
-      ],
-      "edges": [
-        {
-          "source": "CMCC_COMPUTE",
-          "target": "CMCC_ENG",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_internal_101"
-        },
-        {
-          "source": "CT_CLOUD",
-          "target": "CT_ENG",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_internal_102"
-        },
-        {
-          "source": "CU_SMART",
-          "target": "CU_ENG",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_internal_103"
-        }
-      ]
+      "endpoint_a": "cmcc_compute",
+      "endpoint_b": "cmcc_eng",
+      "channel_id": "vlan_internal_101",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_negotiation_ring",
-      "topology_type": "RING",
-      "description": "运营商与供应商、调度平台之间的定价与标准谈判环网",
-      "nodes": [
-        "CMCC_COMPUTE",
-        "CT_CLOUD",
-        "CU_SMART",
-        "GPU_VENDOR",
-        "SCHEDULER"
-      ],
-      "edges": [
-        {
-          "source": "CMCC_COMPUTE",
-          "target": "GPU_VENDOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_negot_201"
-        },
-        {
-          "source": "GPU_VENDOR",
-          "target": "CT_CLOUD",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_negot_202"
-        },
-        {
-          "source": "CT_CLOUD",
-          "target": "SCHEDULER",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_negot_203"
-        },
-        {
-          "source": "SCHEDULER",
-          "target": "CU_SMART",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_negot_204"
-        },
-        {
-          "source": "CU_SMART",
-          "target": "CMCC_COMPUTE",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_negot_205"
-        }
-      ]
+      "endpoint_a": "ct_cloud",
+      "endpoint_b": "ct_eng",
+      "channel_id": "vlan_internal_102",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_research_mesh",
-      "topology_type": "MESH",
-      "description": "科研机构与运营商、政府之间的密集交互网络",
-      "nodes": [
-        "PENGLAB",
-        "CU_SMART",
-        "GX_BIGDATA",
-        "SCHEDULER",
-        "CMCC_COMPUTE"
-      ],
-      "edges": [
-        {
-          "source": "PENGLAB",
-          "target": "CU_SMART",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_research_301"
-        },
-        {
-          "source": "PENGLAB",
-          "target": "SCHEDULER",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_research_302"
-        },
-        {
-          "source": "CU_SMART",
-          "target": "GX_BIGDATA",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_research_303"
-        },
-        {
-          "source": "GX_BIGDATA",
-          "target": "SCHEDULER",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_research_304"
-        },
-        {
-          "source": "GX_BIGDATA",
-          "target": "CMCC_COMPUTE",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_research_305"
-        },
-        {
-          "source": "CMCC_COMPUTE",
-          "target": "PENGLAB",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_research_306"
-        }
-      ]
+      "endpoint_a": "cu_smart",
+      "endpoint_b": "cu_eng",
+      "channel_id": "vlan_internal_103",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "cmcc_compute",
+      "endpoint_b": "gpu_vendor",
+      "channel_id": "vlan_negot_201",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "gpu_vendor",
+      "endpoint_b": "ct_cloud",
+      "channel_id": "vlan_negot_202",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "ct_cloud",
+      "endpoint_b": "scheduler",
+      "channel_id": "vlan_negot_203",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "scheduler",
+      "endpoint_b": "cu_smart",
+      "channel_id": "vlan_negot_204",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "cu_smart",
+      "endpoint_b": "cmcc_compute",
+      "channel_id": "vlan_negot_205",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "penglab",
+      "endpoint_b": "cu_smart",
+      "channel_id": "vlan_research_301",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "penglab",
+      "endpoint_b": "scheduler",
+      "channel_id": "vlan_research_302",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "cu_smart",
+      "endpoint_b": "gx_bigdata",
+      "channel_id": "vlan_research_303",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "gx_bigdata",
+      "endpoint_b": "scheduler",
+      "channel_id": "vlan_research_304",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "gx_bigdata",
+      "endpoint_b": "cmcc_compute",
+      "channel_id": "vlan_research_305",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "cmcc_compute",
+      "endpoint_b": "penglab",
+      "channel_id": "vlan_research_306",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     }
   ]
 }

@@ -1,132 +1,121 @@
 {
-  "global_topology_type": "HYBRID_MESH",
-  "sub_networks": [
+  "topology": [
     {
-      "sub_id": "sub_power",
-      "topology_type": "TREE",
-      "description": "电力行业QKD网络：南网与国网分层管理",
-      "nodes": [
-        "NANET_COM",
-        "SGCC_ITC"
-      ],
-      "edges": [
-        {
-          "source": "SGCC_ITC",
-          "target": "NANET_COM",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_power_backbone"
-        }
-      ]
+      "endpoint_a": "sgcc_itc",
+      "endpoint_b": "nanet_com",
+      "channel_id": "vlan_power_backbone",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_transport",
-      "topology_type": "STAR",
-      "description": "交通与政务节点通过第三方传输服务商连接",
-      "nodes": [
-        "CRC_ITC",
-        "XIONGAN_DCA",
-        "TPN_SERVICE"
-      ],
-      "edges": [
-        {
-          "source": "CRC_ITC",
-          "target": "TPN_SERVICE",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "fiber_rail_001"
-        },
-        {
-          "source": "XIONGAN_DCA",
-          "target": "TPN_SERVICE",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "fiber_city_002"
-        }
-      ]
+      "endpoint_a": "crc_itc",
+      "endpoint_b": "tpn_service",
+      "channel_id": "fiber_rail_001",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_supply",
-      "topology_type": "MESH",
-      "description": "设备供应商、研究院、监管机构与黑客形成密集博弈网",
-      "nodes": [
-        "QKD_VENDOR",
-        "QKD_ACADEMY",
-        "REGULATOR",
-        "ATTACKER"
-      ],
-      "edges": [
-        {
-          "source": "QKD_VENDOR",
-          "target": "QKD_ACADEMY",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_rd_shared"
-        },
-        {
-          "source": "QKD_VENDOR",
-          "target": "REGULATOR",
-          "paradigm": "NEGOTIATION",
-          "channel_id": "vlan_compliance"
-        },
-        {
-          "source": "QKD_ACADEMY",
-          "target": "REGULATOR",
-          "paradigm": "COLLABORATION",
-          "channel_id": "vlan_standard"
-        },
-        {
-          "source": "ATTACKER",
-          "target": "QKD_VENDOR",
-          "paradigm": "GAME",
-          "channel_id": "dark_fiber_tap"
-        },
-        {
-          "source": "ATTACKER",
-          "target": "QKD_ACADEMY",
-          "paradigm": "GAME",
-          "channel_id": "dark_fiber_tap"
-        },
-        {
-          "source": "ATTACKER",
-          "target": "REGULATOR",
-          "paradigm": "GAME",
-          "channel_id": "dark_fiber_tap"
-        }
-      ]
+      "endpoint_a": "xiongan_dca",
+      "endpoint_b": "tpn_service",
+      "channel_id": "fiber_city_002",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     },
     {
-      "sub_id": "sub_cross",
-      "topology_type": "RING",
-      "description": "跨行业密钥分发环：各行业节点通过中继环交换密钥",
-      "nodes": [
-        "NANET_COM",
-        "CRC_ITC",
-        "XIONGAN_DCA",
-        "SGCC_ITC"
-      ],
-      "edges": [
-        {
-          "source": "NANET_COM",
-          "target": "CRC_ITC",
-          "paradigm": "COLLABORATION",
-          "channel_id": "relay_ring_01"
-        },
-        {
-          "source": "CRC_ITC",
-          "target": "XIONGAN_DCA",
-          "paradigm": "COLLABORATION",
-          "channel_id": "relay_ring_02"
-        },
-        {
-          "source": "XIONGAN_DCA",
-          "target": "SGCC_ITC",
-          "paradigm": "COLLABORATION",
-          "channel_id": "relay_ring_03"
-        },
-        {
-          "source": "SGCC_ITC",
-          "target": "NANET_COM",
-          "paradigm": "COLLABORATION",
-          "channel_id": "relay_ring_04"
-        }
-      ]
+      "endpoint_a": "qkd_vendor",
+      "endpoint_b": "qkd_academy",
+      "channel_id": "vlan_rd_shared",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qkd_vendor",
+      "endpoint_b": "regulator",
+      "channel_id": "vlan_compliance",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "qkd_academy",
+      "endpoint_b": "regulator",
+      "channel_id": "vlan_standard",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "attacker",
+      "endpoint_b": "qkd_vendor",
+      "channel_id": "dark_fiber_tap__attacker__qkd_vendor",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "attacker",
+      "endpoint_b": "qkd_academy",
+      "channel_id": "dark_fiber_tap__attacker__qkd_academy",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "attacker",
+      "endpoint_b": "regulator",
+      "channel_id": "dark_fiber_tap__attacker__regulator",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "nanet_com",
+      "endpoint_b": "crc_itc",
+      "channel_id": "relay_ring_01",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "crc_itc",
+      "endpoint_b": "xiongan_dca",
+      "channel_id": "relay_ring_02",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "xiongan_dca",
+      "endpoint_b": "sgcc_itc",
+      "channel_id": "relay_ring_03",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
+    },
+    {
+      "endpoint_a": "sgcc_itc",
+      "endpoint_b": "nanet_com",
+      "channel_id": "relay_ring_04",
+      "delay_ms": 0.0,
+      "jitter_ms": 0.0,
+      "loss_pct": 0.0,
+      "rate_mbit": 0.0
     }
   ]
 }
