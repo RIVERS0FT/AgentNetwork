@@ -1,0 +1,184 @@
+{
+  "agents": [
+    {
+      "agent_id": "planner",
+      "role": "负责统筹AP部署规划，调用AI优化助手获取最优位置建议，协调各方意见。",
+      "name": "AP规划师",
+      "background": "",
+      "core_goal": "在10轮内输出覆盖≥95%、成本≤预算的AP部署方案",
+      "backend": "openclaw",
+      "skill_refs": [
+        "plan_next_ap",
+        "confirm_ap",
+        "reject_ap",
+        "relocate_ap",
+        "confirm_relocation",
+        "evaluate_cost",
+        "plan_deployment"
+      ],
+      "allowed_tools": [
+        "plan_next_ap_tool",
+        "confirm_ap_tool",
+        "reject_ap_tool",
+        "relocate_ap_tool",
+        "confirm_relocation_tool",
+        "evaluate_cost_tool",
+        "plan_deployment_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "rf_engineer",
+      "role": "分析干扰源影响范围，进行信号覆盖仿真，提交覆盖报告。",
+      "name": "射频工程师",
+      "background": "",
+      "core_goal": "每轮提供覆盖热力图，识别信号盲区，确保覆盖≥95%",
+      "backend": "claude-code",
+      "skill_refs": [
+        "simulate_coverage",
+        "analyze_interference",
+        "generate_heatmap",
+        "evaluate_single_ap"
+      ],
+      "allowed_tools": [
+        "simulate_coverage_tool",
+        "analyze_interference_tool",
+        "generate_heatmap_tool",
+        "evaluate_single_ap_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "cost_analyst",
+      "role": "评估不同AP方案的预算和性价比，控制成本。",
+      "name": "成本分析师",
+      "background": "",
+      "core_goal": "方案总成本不超过预算的100%，且性价比最高",
+      "backend": "claude-code",
+      "skill_refs": [
+        "evaluate_cost"
+      ],
+      "allowed_tools": [
+        "evaluate_cost_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "surveyor",
+      "role": "实地检查AP部署位置的物理可行性（电源、安装条件等）。",
+      "name": "现场勘测员",
+      "background": "",
+      "core_goal": "确保所有AP候选位置至少80%物理可行",
+      "backend": "openclaw",
+      "skill_refs": [
+        "check_feasibility",
+        "report_obstacles"
+      ],
+      "allowed_tools": [
+        "check_feasibility_tool",
+        "report_obstacles_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "architect",
+      "role": "验证网络拓扑的合理性和可扩展性。",
+      "name": "网络架构师",
+      "background": "",
+      "core_goal": "确保方案满足网络架构标准，无环路和过度冗余",
+      "backend": "openclaw",
+      "skill_refs": [
+        "validate_topology"
+      ],
+      "allowed_tools": [
+        "validate_topology_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "ai_assistant",
+      "role": "外部agent节点，提供路径规划和信号仿真优化算法。",
+      "name": "AI优化助手",
+      "background": "",
+      "core_goal": "提供准确的AP位置优化建议，最小化AP数量并最大化覆盖",
+      "backend": "claude-code",
+      "skill_refs": [
+        "optimize_ap_positions",
+        "simulate_signal",
+        "suggest_improvements"
+      ],
+      "allowed_tools": [
+        "optimize_ap_positions_tool",
+        "simulate_signal_tool",
+        "suggest_improvements_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "verifier",
+      "role": "使用AI助手仿真信号强度，验证覆盖效果。",
+      "name": "覆盖验证员",
+      "background": "",
+      "core_goal": "验证最终方案覆盖≥95%",
+      "backend": "openclaw",
+      "skill_refs": [
+        "verify_coverage"
+      ],
+      "allowed_tools": [
+        "verify_coverage_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "deployer",
+      "role": "协调AP的物理部署和执行。",
+      "name": "部署管理员",
+      "background": "",
+      "core_goal": "确保部署计划在预算和时间内完成",
+      "backend": "openclaw",
+      "skill_refs": [
+        "plan_deployment",
+        "schedule_tasks"
+      ],
+      "allowed_tools": [
+        "plan_deployment_tool",
+        "schedule_tasks_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "qa_engineer",
+      "role": "最终测试验收，确保方案满足所有要求。",
+      "name": "质量保证工程师",
+      "background": "",
+      "core_goal": "验收通过率100%",
+      "backend": "claude-code",
+      "skill_refs": [
+        "final_inspection",
+        "acceptance_test"
+      ],
+      "allowed_tools": [
+        "final_inspection_tool",
+        "acceptance_test_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "documenter",
+      "role": "记录规划过程和最终方案。",
+      "name": "文档记录员",
+      "background": "",
+      "core_goal": "完整记录所有决策和参数",
+      "backend": "openclaw",
+      "skill_refs": [
+        "record_decision",
+        "archive_solution"
+      ],
+      "allowed_tools": [
+        "record_decision_tool",
+        "archive_solution_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "agents": [
+    {
+      "agent_id": "bank_dc",
+      "role": "大型银行数据中心，拥有多厂商多代际设备（华为、思科、IBM等），对业务连续性要求极高。",
+      "name": "交通银行数据中心",
+      "background": "",
+      "core_goal": "将平均故障定位时间（MTTI）从当前45分钟降低至15分钟以内，且年度运维预算结余不低于10%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "negotiate_contract",
+        "evaluate_vendor",
+        "monitor_sla"
+      ],
+      "allowed_tools": [
+        "negotiate_contract_tool",
+        "evaluate_vendor_tool",
+        "monitor_sla_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "gov_infra",
+      "role": "省级政务云基础设施管理部门，负责监管多家服务商，对数据安全和合规性有严格要求。",
+      "name": "江苏政数局基础设施处",
+      "background": "",
+      "core_goal": "实现跨厂商设备统一纳管率≥90%，且年度第三方服务采购成本降低20%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "negotiate_contract",
+        "audit_compliance",
+        "approve_budget"
+      ],
+      "allowed_tools": [
+        "negotiate_contract_tool",
+        "audit_compliance_tool",
+        "approve_budget_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "univ_net",
+      "role": "高校网络中心，设备品牌混杂（Cisco、H3C、锐捷），预算有限，技术力量相对薄弱。",
+      "name": "郑州大学网络中心",
+      "background": "",
+      "core_goal": "将网络故障平均恢复时间（MTTR）从2小时压缩至1小时以内，且不增加额外人员编制。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "troubleshoot_network",
+        "request_proposal",
+        "train_staff"
+      ],
+      "allowed_tools": [
+        "troubleshoot_network_tool",
+        "request_proposal_tool",
+        "train_staff_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "ai_provider",
+      "role": "提供基于AI的智能运维平台，意图统一南向接口，实现故障预测和自动定位。",
+      "name": "AI运维平台提供商",
+      "background": "",
+      "core_goal": "在仿真周期内获得至少3个客户（银行、政务、高校）的采购合同，且平台部署后客户满意度评分≥85。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "demo_platform",
+        "customize_interface",
+        "propose_integration",
+        "calculate_roi"
+      ],
+      "allowed_tools": [
+        "demo_platform_tool",
+        "customize_interface_tool",
+        "propose_integration_tool",
+        "calculate_roi_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "agent_a",
+      "role": "华为设备官方网管代理商，掌握华为设备私有接口和配置权限。",
+      "name": "华为设备网管代理商",
+      "background": "",
+      "core_goal": "保持华为设备网管服务收入不下降，且争取AI平台集成后仍保留独立运维入口。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "protect_exclusive_access",
+        "negotiate_terms",
+        "provide_support"
+      ],
+      "allowed_tools": [
+        "protect_exclusive_access_tool",
+        "negotiate_terms_tool",
+        "provide_support_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "agent_b",
+      "role": "思科设备官方网管代理商，掌握思科设备私有协议。",
+      "name": "思科设备网管代理商",
+      "background": "",
+      "core_goal": "阻止AI平台直接接管思科设备管理，维持自身价值，实现服务续约率100%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "protect_exclusive_access",
+        "negotiate_terms",
+        "provide_support"
+      ],
+      "allowed_tools": [
+        "protect_exclusive_access_tool",
+        "negotiate_terms_tool",
+        "provide_support_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "agent_c",
+      "role": "代理H3C、锐捷等国产设备网管，技术栈开放，但市场份额较小。",
+      "name": "国产设备网管代理商（H3C/锐捷）",
+      "background": "",
+      "core_goal": "借AI平台集成机会扩大自身服务范围，争取设备管理数量增长30%。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "collaborate_integration",
+        "share_data",
+        "expand_service"
+      ],
+      "allowed_tools": [
+        "collaborate_integration_tool",
+        "share_data_tool",
+        "expand_service_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "it_outsourcer",
+      "role": "提供一线运维人力外包，负责日常巡检和简单故障处理。",
+      "name": "IT服务外包商",
+      "background": "",
+      "core_goal": "确保外包合同金额不减少，且人员技能升级后能承接更多自动化运维任务。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "perform_maintenance",
+        "report_incident",
+        "upskill_team"
+      ],
+      "allowed_tools": [
+        "perform_maintenance_tool",
+        "report_incident_tool",
+        "upskill_team_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "regulator",
+      "role": "金融、政务、教育行业的虚拟监管者，制定接口开放和网络安全标准。",
+      "name": "行业监管机构（虚拟角色）",
+      "background": "",
+      "core_goal": "推动所有角色在仿真结束前签署一份统一南向接口标准协议。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "draft_standard",
+        "enforce_compliance",
+        "mediate_dispute"
+      ],
+      "allowed_tools": [
+        "draft_standard_tool",
+        "enforce_compliance_tool",
+        "mediate_dispute_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "vendor_oem",
+      "role": "代表各大设备原厂（华为、思科等）的利益，维护私有协议壁垒。",
+      "name": "设备原厂代表（虚拟角色）",
+      "background": "",
+      "core_goal": "阻止统一南向接口标准通过，至少让两家客户保留私有协议。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "lobby_against_standard",
+        "offer_incentive",
+        "delay_cooperation"
+      ],
+      "allowed_tools": [
+        "lobby_against_standard_tool",
+        "offer_incentive_tool",
+        "delay_cooperation_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}

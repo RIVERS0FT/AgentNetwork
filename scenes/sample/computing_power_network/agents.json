@@ -1,0 +1,188 @@
+{
+  "agents": [
+    {
+      "agent_id": "cmcc_compute",
+      "role": "三大运营商之一，拥有大量分散GPU算卡，希望主导算力标准获取定价权。",
+      "name": "中国移动算力事业部",
+      "background": "",
+      "core_goal": "在6轮内促成自有算力池化标准被采纳，并占据至少40%的调度份额。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "negotiate_standard",
+        "price_setting",
+        "pool_resources"
+      ],
+      "allowed_tools": [
+        "negotiate_standard_tool",
+        "price_setting_tool",
+        "pool_resources_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "ct_cloud",
+      "role": "三大运营商之一，云网融合优势，寻求与移动竞争，同时与联通合作。",
+      "name": "中国电信云网中心",
+      "background": "",
+      "core_goal": "在仿真结束时，通过联盟获得至少30%的算力调度收益，预算结余>20%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "negotiate_standard",
+        "alliance_strategy",
+        "cost_optimize"
+      ],
+      "allowed_tools": [
+        "negotiate_standard_tool",
+        "alliance_strategy_tool",
+        "cost_optimize_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "cu_smart",
+      "role": "三大运营商之一，技术中立，倾向于与科研机构合作。",
+      "name": "中国联通智算中心",
+      "background": "",
+      "core_goal": "在8轮内完成与鹏程实验室的联合模型训练，并确保数据合规。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "collaborate_training",
+        "data_compliance",
+        "resource_sharing"
+      ],
+      "allowed_tools": [
+        "collaborate_training_tool",
+        "data_compliance_tool",
+        "resource_sharing_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "gx_bigdata",
+      "role": "政府监管部门，负责政策引导与数据安全合规审查。",
+      "name": "广西大数据局",
+      "background": "",
+      "core_goal": "确保所有算力交易符合数据安全法，并推动至少一个公共算力池落地。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "audit_compliance",
+        "policy_guide",
+        "approve_pool"
+      ],
+      "allowed_tools": [
+        "audit_compliance_tool",
+        "policy_guide_tool",
+        "approve_pool_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "penglab",
+      "role": "国家级科研机构，需要大规模算力训练AI模型，预算有限。",
+      "name": "鹏程实验室",
+      "background": "",
+      "core_goal": "在10轮内获得至少1000 PFlops的稳定算力，且成本低于市场价20%。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "request_compute",
+        "negotiate_price",
+        "evaluate_performance"
+      ],
+      "allowed_tools": [
+        "request_compute_tool",
+        "negotiate_price_tool",
+        "evaluate_performance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "scheduler",
+      "role": "中立平台，提供算力撮合与调度服务，收取佣金。",
+      "name": "第三方算力调度平台",
+      "background": "",
+      "core_goal": "最大化平台交易量，每轮促成至少3笔交易，总佣金收入>500万。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "match_resources",
+        "settle_transaction",
+        "monitor_network"
+      ],
+      "allowed_tools": [
+        "match_resources_tool",
+        "settle_transaction_tool",
+        "monitor_network_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "gpu_vendor",
+      "role": "硬件厂商，希望推广自家GPU标准，与运营商合作。",
+      "name": "GPU设备供应商",
+      "background": "",
+      "core_goal": "在仿真结束时，与至少两家运营商签订供货协议，销售额>2000万。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "supply_gpu",
+        "promote_standard",
+        "bid_contract"
+      ],
+      "allowed_tools": [
+        "supply_gpu_tool",
+        "promote_standard_tool",
+        "bid_contract_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "cmcc_eng",
+      "role": "中国移动内部技术部门，负责算力池化技术实现。",
+      "name": "移动内部技术团队",
+      "background": "",
+      "core_goal": "在5轮内完成技术方案验证，支持移动的标准化目标。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "develop_pool_tech",
+        "test_integration"
+      ],
+      "allowed_tools": [
+        "develop_pool_tech_tool",
+        "test_integration_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "ct_eng",
+      "role": "中国电信内部技术团队，负责云网融合技术。",
+      "name": "电信内部技术团队",
+      "background": "",
+      "core_goal": "在5轮内完成与移动的技术对接测试，支持联盟策略。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "develop_api",
+        "test_integration"
+      ],
+      "allowed_tools": [
+        "develop_api_tool",
+        "test_integration_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "cu_eng",
+      "role": "中国联通内部技术团队，负责与鹏程实验室的接口开发。",
+      "name": "联通内部技术团队",
+      "background": "",
+      "core_goal": "在4轮内完成API对接，确保数据安全。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "develop_api",
+        "data_encrypt"
+      ],
+      "allowed_tools": [
+        "develop_api_tool",
+        "data_encrypt_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}

@@ -1,0 +1,175 @@
+{
+  "agents": [
+    {
+      "agent_id": "nanet_com",
+      "role": "南方电网下属通信调度中心，负责电网QKD网络运维与密钥调度",
+      "name": "南网通信调度中心",
+      "background": "",
+      "core_goal": "确保电网调度密钥供应满足99.99%可靠性，预算结余>20%",
+      "backend": "openclaw",
+      "skill_refs": [
+        "key_request",
+        "cost_analysis",
+        "reliability_check"
+      ],
+      "allowed_tools": [
+        "key_request_tool",
+        "cost_analysis_tool",
+        "reliability_check_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "sgcc_itc",
+      "role": "国家电网信息通信分公司，负责国网QKD骨干网建设与运营",
+      "name": "国网信通",
+      "background": "",
+      "core_goal": "实现QKD骨干网覆盖率提升30%，密钥生成成本降低15%",
+      "backend": "openclaw",
+      "skill_refs": [
+        "network_plan",
+        "cost_optimization",
+        "coverage_analysis"
+      ],
+      "allowed_tools": [
+        "network_plan_tool",
+        "cost_optimization_tool",
+        "coverage_analysis_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "crc_itc",
+      "role": "中国铁路信息中心，负责铁路沿线QKD中继节点部署",
+      "name": "国铁信息中心",
+      "background": "",
+      "core_goal": "保障高铁沿线密钥中继延迟<10ms，设备故障率<1%",
+      "backend": "claude-code",
+      "skill_refs": [
+        "latency_monitor",
+        "fault_detection",
+        "negotiate_lease"
+      ],
+      "allowed_tools": [
+        "latency_monitor_tool",
+        "fault_detection_tool",
+        "negotiate_lease_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "xiongan_dca",
+      "role": "雄安新区数字城市管理部门，规划智慧城市QKD基础设施",
+      "name": "雄安数字城市管理局",
+      "background": "",
+      "core_goal": "在预算内完成3个政务QKD节点部署，密钥分发成功率>95%",
+      "backend": "openclaw",
+      "skill_refs": [
+        "node_deploy",
+        "budget_control",
+        "success_rate_eval"
+      ],
+      "allowed_tools": [
+        "node_deploy_tool",
+        "budget_control_tool",
+        "success_rate_eval_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "qkd_vendor",
+      "role": "QKD设备制造商，提供量子光源、探测器和中继器",
+      "name": "量子设备供应商",
+      "background": "",
+      "core_goal": "最大化设备销售利润，市场份额>40%，售后成本<10%",
+      "backend": "claude-code",
+      "skill_refs": [
+        "quote_price",
+        "market_share_calc",
+        "after_sale_cost"
+      ],
+      "allowed_tools": [
+        "quote_price_tool",
+        "market_share_calc_tool",
+        "after_sale_cost_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "qkd_academy",
+      "role": "国家级量子密码研究机构，负责QKD协议优化与安全评估",
+      "name": "量子密码研究院",
+      "background": "",
+      "core_goal": "发布2项新协议标准，密钥生成效率提升25%",
+      "backend": "openclaw",
+      "skill_refs": [
+        "protocol_optimize",
+        "security_assessment",
+        "efficiency_boost"
+      ],
+      "allowed_tools": [
+        "protocol_optimize_tool",
+        "security_assessment_tool",
+        "efficiency_boost_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "tpn_service",
+      "role": "提供光纤传输线路租赁与中继服务的商业公司",
+      "name": "第三方传输服务商",
+      "background": "",
+      "core_goal": "租赁收入最大化，线路利用率>80%，客户满意度>90%",
+      "backend": "claude-code",
+      "skill_refs": [
+        "lease_line",
+        "utilization_report",
+        "customer_survey"
+      ],
+      "allowed_tools": [
+        "lease_line_tool",
+        "utilization_report_tool",
+        "customer_survey_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "regulator",
+      "role": "国家密码行业监管机构，制定QKD应用标准与安全审计",
+      "name": "国家密码管理局",
+      "background": "",
+      "core_goal": "确保所有节点符合国密标准，违规事件0容忍",
+      "backend": "claude-code",
+      "skill_refs": [
+        "compliance_audit",
+        "standard_enforce",
+        "penalty_assess"
+      ],
+      "allowed_tools": [
+        "compliance_audit_tool",
+        "standard_enforce_tool",
+        "penalty_assess_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "attacker",
+      "role": "针对QKD网络进行窃听与干扰的恶意第三方",
+      "name": "量子黑客组织",
+      "background": "",
+      "core_goal": "成功窃取至少1个密钥，或造成网络中断损失>100万",
+      "backend": "claude-code",
+      "skill_refs": [
+        "eavesdrop",
+        "interfere",
+        "theft_attempt"
+      ],
+      "allowed_tools": [
+        "eavesdrop_tool",
+        "interfere_tool",
+        "theft_attempt_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}

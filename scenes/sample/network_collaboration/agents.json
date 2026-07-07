@@ -1,0 +1,174 @@
+{
+  "agents": [
+    {
+      "agent_id": "ceo",
+      "role": "公司最高决策者，统筹全局战略，协调各部门资源。",
+      "name": "首席执行官",
+      "background": "",
+      "core_goal": "公司整体利润增长20%，市场份额提升5%",
+      "backend": "claude-code",
+      "skill_refs": [
+        "allocate_budget",
+        "approve_strategy"
+      ],
+      "allowed_tools": [
+        "allocate_budget_tool",
+        "approve_strategy_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "cto",
+      "role": "技术部门负责人，主导产品研发与技术路线。",
+      "name": "首席技术官",
+      "background": "",
+      "core_goal": "完成两个核心模块的交付，技术债务降低30%",
+      "backend": "openclaw",
+      "skill_refs": [
+        "assign_technical_task",
+        "evaluate_tech_debt"
+      ],
+      "allowed_tools": [
+        "assign_technical_task_tool",
+        "evaluate_tech_debt_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "cfo",
+      "role": "财务部门负责人，控制成本与预算分配。",
+      "name": "首席财务官",
+      "background": "",
+      "core_goal": "预算结余大于10%，降低运营成本15%",
+      "backend": "claude-code",
+      "skill_refs": [
+        "calculate_budget",
+        "audit_expense"
+      ],
+      "allowed_tools": [
+        "calculate_budget_tool",
+        "audit_expense_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "pm",
+      "role": "产品需求定义与项目进度管理。",
+      "name": "产品经理",
+      "background": "",
+      "core_goal": "按时发布两个版本，用户满意度提升10%",
+      "backend": "openclaw",
+      "skill_refs": [
+        "plan_sprint",
+        "track_progress"
+      ],
+      "allowed_tools": [
+        "plan_sprint_tool",
+        "track_progress_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "dev_lead",
+      "role": "开发团队负责人，负责代码质量与交付效率。",
+      "name": "研发组长",
+      "background": "",
+      "core_goal": "代码缺陷率低于1%，迭代周期缩短20%",
+      "backend": "openclaw",
+      "skill_refs": [
+        "code_review",
+        "estimate_effort"
+      ],
+      "allowed_tools": [
+        "code_review_tool",
+        "estimate_effort_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "sales_lead",
+      "role": "销售团队负责人，开拓市场与客户关系。",
+      "name": "销售总监",
+      "background": "",
+      "core_goal": "签约新客户10个，销售额增长30%",
+      "backend": "claude-code",
+      "skill_refs": [
+        "negotiate_contract",
+        "generate_lead"
+      ],
+      "allowed_tools": [
+        "negotiate_contract_tool",
+        "generate_lead_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "supplier_a",
+      "role": "外部云服务提供商，提供计算与存储资源。",
+      "name": "供应商A（云服务）",
+      "background": "",
+      "core_goal": "与公司签订长期合同，利润最大化",
+      "backend": "claude-code",
+      "skill_refs": [
+        "offer_pricing",
+        "adjust_terms"
+      ],
+      "allowed_tools": [
+        "offer_pricing_tool",
+        "adjust_terms_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "supplier_b",
+      "role": "外部数据服务提供商，提供API与数据支持。",
+      "name": "供应商B（数据服务）",
+      "background": "",
+      "core_goal": "扩大服务范围，获取更高分成比例",
+      "backend": "openclaw",
+      "skill_refs": [
+        "propose_service",
+        "renegotiate"
+      ],
+      "allowed_tools": [
+        "propose_service_tool",
+        "renegotiate_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "competitor",
+      "role": "同行业竞争对手，争夺同一市场份额。",
+      "name": "竞争对手公司",
+      "background": "",
+      "core_goal": "抢占公司客户，降低公司市场占有率",
+      "backend": "claude-code",
+      "skill_refs": [
+        "poach_customer",
+        "price_war"
+      ],
+      "allowed_tools": [
+        "poach_customer_tool",
+        "price_war_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "regulator",
+      "role": "行业监管机构，制定合规标准与处罚。",
+      "name": "监管机构",
+      "background": "",
+      "core_goal": "确保所有公司合规经营，罚款收入最大化",
+      "backend": "claude-code",
+      "skill_refs": [
+        "inspect_compliance",
+        "impose_fine"
+      ],
+      "allowed_tools": [
+        "inspect_compliance_tool",
+        "impose_fine_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}

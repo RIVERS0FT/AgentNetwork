@@ -1,0 +1,174 @@
+{
+  "agents": [
+    {
+      "agent_id": "tel_a_ceo",
+      "role": "电信运营商A的CEO，负责公司整体战略和重大决策，追求市场份额和利润最大化。",
+      "name": "电信A公司CEO",
+      "background": "",
+      "core_goal": "12个月内市场份额达到35%，净利润增长20%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "make_strategic_decision",
+        "approve_budget"
+      ],
+      "allowed_tools": [
+        "make_strategic_decision_tool",
+        "approve_budget_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "tel_a_cto",
+      "role": "电信运营商A的CTO，负责技术架构和网络部署，支持业务部门需求。",
+      "name": "电信A公司CTO",
+      "background": "",
+      "core_goal": "12个月内完成5G网络覆盖率达80%，成本控制在预算内。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "plan_network_deployment",
+        "calculate_cost"
+      ],
+      "allowed_tools": [
+        "plan_network_deployment_tool",
+        "calculate_cost_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "tel_a_cmo",
+      "role": "电信运营商A的CMO，负责市场营销和客户关系，提升品牌影响力。",
+      "name": "电信A公司CMO",
+      "background": "",
+      "core_goal": "12个月内客户满意度提升至90%，新增用户100万。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "run_marketing_campaign",
+        "analyze_customer_satisfaction"
+      ],
+      "allowed_tools": [
+        "run_marketing_campaign_tool",
+        "analyze_customer_satisfaction_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "tel_b_ceo",
+      "role": "电信运营商B的CEO，与A公司竞争，同时寻求合作机会。",
+      "name": "电信B公司CEO",
+      "background": "",
+      "core_goal": "12个月内市场份额达到30%，净利润增长15%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "negotiate_partnership",
+        "set_competitive_price"
+      ],
+      "allowed_tools": [
+        "negotiate_partnership_tool",
+        "set_competitive_price_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "tel_b_cto",
+      "role": "电信运营商B的CTO，负责技术规划和创新。",
+      "name": "电信B公司CTO",
+      "background": "",
+      "core_goal": "12个月内推出2项创新服务，网络成本降低10%。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "develop_new_service",
+        "optimize_network_cost"
+      ],
+      "allowed_tools": [
+        "develop_new_service_tool",
+        "optimize_network_cost_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "regulator",
+      "role": "政府通信监管局官员，负责市场秩序和频谱分配，维护公平竞争。",
+      "name": "通信监管局官员",
+      "background": "",
+      "core_goal": "12个月内确保市场公平竞争，消费者投诉率下降20%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "allocate_spectrum",
+        "enforce_compliance"
+      ],
+      "allowed_tools": [
+        "allocate_spectrum_tool",
+        "enforce_compliance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "supplier_1",
+      "role": "主要基站设备供应商，向运营商提供硬件设备。",
+      "name": "基站设备供应商A",
+      "background": "",
+      "core_goal": "12个月内销售额增长25%，利润率保持在15%以上。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "bid_for_contract",
+        "deliver_equipment"
+      ],
+      "allowed_tools": [
+        "bid_for_contract_tool",
+        "deliver_equipment_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "supplier_2",
+      "role": "光缆和传输设备供应商，为运营商提供基础设施。",
+      "name": "光缆设备供应商B",
+      "background": "",
+      "core_goal": "12个月内获得至少两个长期合同，营收增长30%。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "bid_for_contract",
+        "deliver_materials"
+      ],
+      "allowed_tools": [
+        "bid_for_contract_tool",
+        "deliver_materials_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "consumer_group",
+      "role": "代表广大消费者利益，监督运营商服务质量。",
+      "name": "消费者权益组织代表",
+      "background": "",
+      "core_goal": "12个月内推动运营商改善服务，客户满意度提升10个百分点。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "survey_customers",
+        "file_complaint"
+      ],
+      "allowed_tools": [
+        "survey_customers_tool",
+        "file_complaint_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "new_entrant",
+      "role": "新进入市场的虚拟运营商，利用现有网络资源提供差异化服务。",
+      "name": "新兴虚拟运营商CEO",
+      "background": "",
+      "core_goal": "12个月内获得5%市场份额，实现盈亏平衡。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "lease_network",
+        "launch_service"
+      ],
+      "allowed_tools": [
+        "lease_network_tool",
+        "launch_service_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}

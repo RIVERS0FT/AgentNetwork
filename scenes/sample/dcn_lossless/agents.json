@@ -1,0 +1,194 @@
+{
+  "agents": [
+    {
+      "agent_id": "bocom_dc",
+      "role": "交通银行数据中心运维团队，负责日常网络运维，遭遇PFC死锁导致交易延迟。",
+      "name": "交通银行数据中心",
+      "background": "",
+      "core_goal": "在5轮内将PFC死锁频率降低80%，丢包率降至0.01%以下。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "monitor_network",
+        "report_anomaly",
+        "request_support"
+      ],
+      "allowed_tools": [
+        "monitor_network_tool",
+        "report_anomaly_tool",
+        "request_support_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "icbc_fintech",
+      "role": "工商银行金融科技部，负责全行网络架构规划，对DCN无损网络有高要求。",
+      "name": "工商银行金融科技部",
+      "background": "",
+      "core_goal": "实现跨数据中心流量零丢包，且总成本增加不超过10%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "evaluate_budget",
+        "negotiate_contract",
+        "approve_plan"
+      ],
+      "allowed_tools": [
+        "evaluate_budget_tool",
+        "negotiate_contract_tool",
+        "approve_plan_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "chip_vendor",
+      "role": "全球领先的交换机芯片厂商，提供支持PFC的芯片方案。",
+      "name": "交换机芯片厂商",
+      "background": "",
+      "core_goal": "推广其最新支持智能流控的芯片，市场份额提升20%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "propose_chip",
+        "offer_discount",
+        "benchmark_performance"
+      ],
+      "allowed_tools": [
+        "propose_chip_tool",
+        "offer_discount_tool",
+        "benchmark_performance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "integrator",
+      "role": "国内大型网络设备集成商，提供端到端DCN解决方案。",
+      "name": "网络设备集成商",
+      "background": "",
+      "core_goal": "在6轮内中标交行工行联合采购项目，合同额不低于5000万。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "design_solution",
+        "quote_price",
+        "schedule_deployment"
+      ],
+      "allowed_tools": [
+        "design_solution_tool",
+        "quote_price_tool",
+        "schedule_deployment_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "test_lab",
+      "role": "第三方权威测试实验室，负责验证网络方案性能。",
+      "name": "无损网络测试实验室",
+      "background": "",
+      "core_goal": "在3轮内完成至少3种方案的对比测试，并出具报告。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "run_test",
+        "generate_report",
+        "verify_compliance"
+      ],
+      "allowed_tools": [
+        "run_test_tool",
+        "generate_report_tool",
+        "verify_compliance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "regulator",
+      "role": "金融监管机构下属科技局，制定金融数据中心网络标准。",
+      "name": "金融监管科技局",
+      "background": "",
+      "core_goal": "推动形成金融行业无损网络白皮书，要求所有方案通过测试。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "issue_standard",
+        "audit_compliance",
+        "penalize_noncompliance"
+      ],
+      "allowed_tools": [
+        "issue_standard_tool",
+        "audit_compliance_tool",
+        "penalize_noncompliance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "bocom_dev",
+      "role": "交通银行内部应用开发团队，依赖网络稳定性。",
+      "name": "交通银行开发部",
+      "background": "",
+      "core_goal": "确保交易系统在改造期间可用性不低于99.999%。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "test_application",
+        "report_downtime",
+        "request_stability"
+      ],
+      "allowed_tools": [
+        "test_application_tool",
+        "report_downtime_tool",
+        "request_stability_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "icbc_net",
+      "role": "工商银行网络运维团队，负责生产网络日常管理。",
+      "name": "工商银行网络运维中心",
+      "background": "",
+      "core_goal": "在8轮内完成网络升级方案部署，且不影响现有业务。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "deploy_update",
+        "monitor_traffic",
+        "rollback_change"
+      ],
+      "allowed_tools": [
+        "deploy_update_tool",
+        "monitor_traffic_tool",
+        "rollback_change_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "chip_rival",
+      "role": "另一家芯片厂商，主推基于RoCEv2的方案。",
+      "name": "竞争对手芯片厂",
+      "background": "",
+      "core_goal": "在5轮内争取到至少一家银行的试用机会。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "propose_alternative",
+        "undercut_price",
+        "lobby_decision"
+      ],
+      "allowed_tools": [
+        "propose_alternative_tool",
+        "undercut_price_tool",
+        "lobby_decision_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "consultant",
+      "role": "专业金融科技咨询公司，提供网络架构评估。",
+      "name": "第三方咨询机构",
+      "background": "",
+      "core_goal": "在4轮内发布行业分析报告，并获得至少3家客户引用。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "analyze_market",
+        "write_report",
+        "advise_strategy"
+      ],
+      "allowed_tools": [
+        "analyze_market_tool",
+        "write_report_tool",
+        "advise_strategy_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}

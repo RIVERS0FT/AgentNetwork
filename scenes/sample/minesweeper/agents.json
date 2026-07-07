@@ -1,0 +1,156 @@
+{
+  "agents": [
+    {
+      "agent_id": "cmdr_01",
+      "role": "扫雷行动的唯一核心大脑。掌握全局战术白板。需要根据小兵在当前Round反馈的局部‘安全雷数’或‘确凿雷区’信息绘制逻辑盲区，并在下一Round向麾下9个探雷兵下达‘移动至指定坐标侦察’的宏观指令。",
+      "name": "扫雷行动最高指挥官",
+      "background": "",
+      "core_goal": "在 35 个全局 Round 内，通过合理调度小兵，将 9x9 棋盘中除了 10 枚地雷外的其余 71 个安全格子全部安全探测完毕，尽可能减少小兵误踩雷的次数（提高排雷效率）。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "initialize_minesweeper_map",
+        "query_game_status"
+      ],
+      "allowed_tools": [
+        "initialize_minesweeper_map_tool",
+        "query_game_status_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_01",
+      "role": "前线执行单元，听从 CMDR_01 指令移动，在每个 Round 的执行窗口内上报踩雷或数字结果。具有无限存活能力，遇到雷区仅做记录汇报。",
+      "name": "探雷侦察兵-01",
+      "background": "",
+      "core_goal": "每 Round 响应指挥，执行移动指令并准确汇报坐标状态。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_02",
+      "role": "前线执行单元...",
+      "name": "探雷侦察兵-02",
+      "background": "",
+      "core_goal": "执行移动指令...",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_03",
+      "role": "前线执行单元...",
+      "name": "探雷侦察兵-03",
+      "background": "",
+      "core_goal": "执行移动指令...",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_04",
+      "role": "前线执行单元...",
+      "name": "探雷侦察兵-04",
+      "background": "",
+      "core_goal": "执行移动指令...",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_05",
+      "role": "前线执行单元...",
+      "name": "探雷侦察兵-05",
+      "background": "",
+      "core_goal": "执行移动指令...",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_06",
+      "role": "前线执行单元...",
+      "name": "探雷侦察兵-06",
+      "background": "",
+      "core_goal": "执行移动指令...",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_07",
+      "role": "前线执行单元...",
+      "name": "探雷侦察兵-07",
+      "background": "",
+      "core_goal": "执行移动指令...",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_08",
+      "role": "前线执行单元...",
+      "name": "探雷侦察兵-08",
+      "background": "",
+      "core_goal": "执行移动指令...",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "soldier_09",
+      "role": "前线执行单元...",
+      "name": "探雷侦察兵-09",
+      "background": "",
+      "core_goal": "执行移动指令并汇报...",
+      "backend": "openclaw",
+      "skill_refs": [
+        "move_and_reconnaissance"
+      ],
+      "allowed_tools": [
+        "move_and_reconnaissance_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "agents": [
+    {
+      "agent_id": "nan_wang_safety",
+      "role": "南方电网下属变电站安全管理部门，负责电力设施周边安全，对野生动物入侵、人员非法闯入有刚性需求。",
+      "name": "南网变电站安全科",
+      "background": "",
+      "core_goal": "在10轮内完成至少1个非视觉感知试点项目，预算控制在200万以内，且误报率低于5%。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "negotiate_contract",
+        "evaluate_proposal",
+        "manage_budget"
+      ],
+      "allowed_tools": [
+        "negotiate_contract_tool",
+        "evaluate_proposal_tool",
+        "manage_budget_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "sz_airport_security",
+      "role": "深圳宝安国际机场安保部门，需要高精度人员检测与体态识别，防止入侵和异常行为。",
+      "name": "深圳机场安保部",
+      "background": "",
+      "core_goal": "在10轮内采购一套集成CSI和雷达的感知系统，预算500万以内，检测精度>95%。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "negotiate_contract",
+        "evaluate_proposal",
+        "manage_budget"
+      ],
+      "allowed_tools": [
+        "negotiate_contract_tool",
+        "evaluate_proposal_tool",
+        "manage_budget_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "tsinghua_lab",
+      "role": "顶尖高校研究机构，专注于非视觉感知算法研究，拥有CSI和雷达数据处理核心技术。",
+      "name": "清华大学智能感知实验室",
+      "background": "",
+      "core_goal": "在10轮内完成至少2个技术专利授权，获得总计不低于300万的研发经费。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "develop_algorithm",
+        "license_patent",
+        "collaborate_research"
+      ],
+      "allowed_tools": [
+        "develop_algorithm_tool",
+        "license_patent_tool",
+        "collaborate_research_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "csi_vendor",
+      "role": "专注于CSI（信道状态信息）感知设备的制造商，产品可用于多人检测和生命体征监测。",
+      "name": "CSI感知设备厂商",
+      "background": "",
+      "core_goal": "在10轮内获得至少1个订单，销售额不低于150万，并争取独家供应资格。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "produce_device",
+        "price_negotiation",
+        "supply_chain_manage"
+      ],
+      "allowed_tools": [
+        "produce_device_tool",
+        "price_negotiation_tool",
+        "supply_chain_manage_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "radar_supplier",
+      "role": "提供毫米波雷达传感器，用于体态识别和距离检测，技术成熟度高。",
+      "name": "雷达传感器供应商",
+      "background": "",
+      "core_goal": "在10轮内与至少2个系统集成商或终端用户签订供货合同，总价值不低于200万。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "produce_device",
+        "price_negotiation",
+        "supply_chain_manage"
+      ],
+      "allowed_tools": [
+        "produce_device_tool",
+        "price_negotiation_tool",
+        "supply_chain_manage_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "ai_algo_service",
+      "role": "提供基于深度学习的感知算法，能够融合CSI和雷达数据，实现高精度检测。",
+      "name": "AI算法服务商",
+      "background": "",
+      "core_goal": "在10轮内获得至少2个算法授权或开发合同，总收入不低于250万。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "develop_algorithm",
+        "license_patent",
+        "collaborate_research"
+      ],
+      "allowed_tools": [
+        "develop_algorithm_tool",
+        "license_patent_tool",
+        "collaborate_research_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "sys_integrator",
+      "role": "负责将CSI设备、雷达传感器和AI算法整合为完整解决方案，并交付给终端用户。",
+      "name": "系统集成商",
+      "background": "",
+      "core_goal": "在10轮内完成至少1个集成项目，利润率不低于20%，且项目总额不低于500万。",
+      "backend": "openclaw",
+      "skill_refs": [
+        "integrate_system",
+        "manage_project",
+        "negotiate_contract"
+      ],
+      "allowed_tools": [
+        "integrate_system_tool",
+        "manage_project_tool",
+        "negotiate_contract_tool"
+      ],
+      "tasks": []
+    },
+    {
+      "agent_id": "regulator",
+      "role": "虚拟角色代表政府或行业标准制定者，监督技术合规性和数据安全。",
+      "name": "行业监管机构",
+      "background": "",
+      "core_goal": "在10轮内确保所有技术方案符合安全标准，并推动至少1项行业规范出台。",
+      "backend": "claude-code",
+      "skill_refs": [
+        "audit_compliance",
+        "set_standard",
+        "approve_solution"
+      ],
+      "allowed_tools": [
+        "audit_compliance_tool",
+        "set_standard_tool",
+        "approve_solution_tool"
+      ],
+      "tasks": []
+    }
+  ]
+}
