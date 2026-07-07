@@ -42,6 +42,23 @@ def replace_legacy_backend_aliases() -> None:
 def patch_backend_validation() -> None:
     path = ROOT / "agent_network" / "api" / "simulations.py"
     text = path.read_text(encoding="utf-8")
+    strict_block = '''    if backend == "brain":
+        raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses removed backend 'brain'.")
+    if backend not in {"openclaw", "claude-code"}:
+        raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses unsupported backend '{backend}'.")
+    return backend
+'''
+    transformed_alias_block = '''    if backend == "brain":
+        raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses removed backend 'brain'.")
+    if backend == "claude-code":
+        raise ValueError(
+            f"Scene '{scene_name}' role '{role_id}' uses removed backend alias 'claude-code'; "
+            "use 'claude-code'."
+        )
+    if backend not in {"openclaw", "claude-code"}:
+        raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses unsupported backend '{backend}'.")
+    return backend
+'''
     duplicate_alias_block = '''    if backend == "claude-code":
         return backend
     if backend == "brain":
@@ -55,15 +72,6 @@ def patch_backend_validation() -> None:
         raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses unsupported backend '{backend}'.")
     return backend
 '''
-    strict_block = '''    if backend == "brain":
-        raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses removed backend 'brain'.")
-    if backend not in {"openclaw", "claude-code"}:
-        raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses unsupported backend '{backend}'.")
-    return backend
-'''
-    if duplicate_alias_block in text:
-        text = text.replace(duplicate_alias_block, strict_block, 1)
-
     pre_replacement_block = '''    if backend == "brain":
         raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses removed backend 'brain'.")
     if backend == "claudecode":
@@ -75,8 +83,9 @@ def patch_backend_validation() -> None:
         raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses unsupported backend '{backend}'.")
     return backend
 '''
-    if pre_replacement_block in text:
-        text = text.replace(pre_replacement_block, strict_block, 1)
+    for old in (transformed_alias_block, duplicate_alias_block, pre_replacement_block):
+        if old in text:
+            text = text.replace(old, strict_block, 1)
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
