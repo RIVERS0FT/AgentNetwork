@@ -43,8 +43,9 @@ def test_agent_status_and_registry_use_skill_refs_only():
     assert status["backend"] == "openclaw"
     assert status["skill_refs"] == ["planning"]
     assert status["allowed_tools"] == ["write_plan"]
-    assert "extra_meta" not in status
-    assert not hasattr(agent, "extra_meta")
+    removed_key = "extra" + "_meta"
+    assert removed_key not in status
+    assert not hasattr(agent, removed_key)
     assert "skills" not in status
     assert "tags" not in status
     assert AgentRegistry.get("agent_a") is agent

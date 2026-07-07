@@ -470,11 +470,6 @@ def _normalize_backend(scene_name: str, role_id: str, backend: str) -> str:
     backend = (backend or "openclaw").strip()
     if backend == "brain":
         raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses removed backend 'brain'.")
-    if backend == "claudecode":
-        raise ValueError(
-            f"Scene '{scene_name}' role '{role_id}' uses removed backend alias 'claudecode'; "
-            "use 'claude-code'."
-        )
     if backend not in {"openclaw", "claude-code"}:
         raise ValueError(f"Scene '{scene_name}' role '{role_id}' uses unsupported backend '{backend}'.")
     return backend

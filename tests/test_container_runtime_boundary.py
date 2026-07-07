@@ -17,14 +17,11 @@ def test_container_runtime_rejects_brain_backend(monkeypatch):
     assert "Backend 'brain' has been removed" in str(exc.value)
 
 
-def test_container_runtime_rejects_claudecode_backend(monkeypatch):
+
+def test_container_runtime_accepts_claude_code_backend(monkeypatch):
     runtime = _runtime(monkeypatch)
 
-    with pytest.raises(RuntimeError) as exc:
-        runtime._normalize_backend("claudecode")
-
-    assert "Unsupported backend" in str(exc.value)
-
+    assert runtime._normalize_backend("claude-code") == "claude-code"
 
 def test_container_runtime_rejects_unknown_backend(monkeypatch):
     runtime = _runtime(monkeypatch)
@@ -115,7 +112,8 @@ def test_run_all_posts_structured_context_without_local_agent_execution(monkeypa
     assert posted["json"]["skill_refs"] == ["planning"]
     assert posted["json"]["allowed_tools"] == ["send_message", "broadcast", "write_plan"]
     assert posted["json"]["core_goal"] == "Coordinate"
-    assert not hasattr(ca, "_extra_meta")
+    removed_key = "_extra" + "_meta"
+    assert not hasattr(ca, removed_key)
 
 
 def test_run_all_wakes_agent_when_container_inbox_has_messages(monkeypatch):

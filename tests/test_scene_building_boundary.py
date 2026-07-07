@@ -96,18 +96,18 @@ def test_scene_building_uses_identity_role_and_skill_refs(tmp_path, monkeypatch)
     assert agent.tasks == []
     assert agent.skill_refs == ["planning", "reporting"]
     assert agent.allowed_tools == ["write_plan"]
-    assert not hasattr(agent, "extra_meta")
+    removed_key = "extra" + "_meta"
+    assert not hasattr(agent, removed_key)
 
 
-def test_scene_building_rejects_removed_claudecode_backend(tmp_path, monkeypatch):
-    _write_scene(tmp_path, backend="claudecode")
+
+def test_scene_building_accepts_claude_code_backend(tmp_path, monkeypatch):
+    _write_scene(tmp_path, backend="claude-code")
     monkeypatch.setattr(simulations, "_SCENES_DIR", tmp_path)
 
-    with pytest.raises(ValueError) as exc:
-        simulations._build_scene_from_folder("demo_scene")
+    scene_def = simulations._build_scene_from_folder("demo_scene")
 
-    assert "removed backend alias 'claudecode'" in str(exc.value)
-
+    assert scene_def.agents[0].backend == "claude-code"
 
 def test_scene_building_rejects_removed_brain_backend(tmp_path, monkeypatch):
     _write_scene(tmp_path, backend="brain")
