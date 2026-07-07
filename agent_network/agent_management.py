@@ -16,7 +16,7 @@ import socket
 import threading
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import requests
 
@@ -68,12 +68,10 @@ class Agent:
         self.container_url = ""
         self.comm = None
         self.task_queue: List[Message] = []
-        self.completed_tasks: List[Dict[str, Any]] = []
         self.pending_task_descs: List[str] = []
 
-    def set_comm(self, comm, registry=None):
+    def set_comm(self, comm):
         self.comm = comm
-        self._registry = registry
 
     def send_task(self, task: str, target: "Agent" = None, **kwargs) -> Message:
         target_id = target.agent_id if target else self.agent_id
@@ -88,32 +86,6 @@ class Agent:
         else:
             self.task_queue.append(message)
         return message
-
-    def send_response(self, target: "Agent", result: Any, **kwargs) -> Message:
-        message = Message(
-            source=self.agent_id,
-            target=target.agent_id,
-            type="response",
-            payload={"result": result, **kwargs},
-        )
-        if self.comm and target:
-            self.comm.send(self.agent_id, self.name, target.agent_id, str(result))
-        return message
-
-    def receive_task(self, message: Message):
-        self.task_queue.append(message)
-
-    def execute_task(self, message: Message) -> Dict[str, Any]:
-        raise RuntimeError(
-            "Agent.execute_task has been removed. "
-            "Single-Agent execution must go through BackendAdapter and /run."
-        )
-
-    def call_tool(self, tool_name: str, **kwargs) -> Any:
-        raise RuntimeError(
-            "Agent.call_tool has been removed. "
-            "Tool execution must go through backend-native MCP tool calling."
-        )
 
     def get_status(self) -> Dict[str, Any]:
         return {
@@ -130,16 +102,12 @@ class Agent:
             "capability_scores": self.capability_scores,
             "pending_tasks": len(self.task_queue),
             "pending_task_descs": self.pending_task_descs,
-            "completed_tasks": len(self.completed_tasks),
         }
 
     def start(self):
         self.status = "idle"
 
     def stop(self):
-        self.status = "error"
-
-    def error(self, reason: str = ""):
         self.status = "error"
 
     def __repr__(self):
@@ -149,14 +117,8 @@ class Agent:
 class AgentRegistry:
     """Thread-safe control-plane Agent registry."""
 
-    _instance: Optional["AgentRegistry"] = None
     _agents: Dict[str, Agent] = {}
     _lock = threading.Lock()
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
 
     @classmethod
     def register(cls, agent: Agent):
@@ -197,7 +159,8 @@ class AgentRegistry:
         candidates = [agent for agent in snapshot if skill_ref in agent.skill_refs]
         if not candidates:
             candidates = [
-                agent for agent in snapshot
+                agent
+                for agent in snapshot
                 if skill_ref in agent.capability_scores
             ]
         if not candidates:
@@ -248,13 +211,9 @@ class ContainerAgent:
     container_name: str = ""
     container_ip: str = ""
     image_id: str = ""
-    port: int = 8000
     status: str = "idle"
     url: str = ""
     assign_error: str = ""
-
-    def to_dict(self):
-        return self.__dict__
 
 
 class ContainerRuntime:
@@ -276,48 +235,25 @@ class ContainerRuntime:
     NETWORK_NAME = "an"
     INTERNAL_PORT = 8000
 
-    def __init__(self, message_bus_url: str = ""):
-        self.message_bus_url = ""
+    def __init__(self):
         self.agents: Dict[str, ContainerAgent] = {}
         self._docker_client = None
         self._used_containers: Set[str] = set()
-        self._status_listener: Optional[
-            Callable[[ContainerAgent, str, Optional[Dict[str, Any]]], None]
-        ] = None
         self._init_docker()
 
-    def set_status_listener(self, callback):
-        self._status_listener = callback
-
-    def _sync_control_plane(self, ca: ContainerAgent, status: str):
-        agent = AgentRegistry.get(ca.agent_id)
+    def _sync_control_plane(self, assignment: ContainerAgent, status: str):
+        agent = AgentRegistry.get(assignment.agent_id)
         if not agent:
             return
         agent.status = status
-        if ca.container_id:
-            agent.container_id = ca.container_id
-        if ca.url:
-            agent.container_url = ca.url
+        if assignment.container_id:
+            agent.container_id = assignment.container_id
+        if assignment.url:
+            agent.container_url = assignment.url
 
-    def _set_status(
-        self,
-        ca: ContainerAgent,
-        status: str,
-        detail: Dict[str, Any] = None,
-    ):
-        ca.status = status
-        self._sync_control_plane(ca, status)
-        if self._status_listener:
-            try:
-                self._status_listener(ca, status, detail)
-            except Exception:
-                pass
-        callback = getattr(self, "on_status_change", None)
-        if callback:
-            try:
-                callback(ca.agent_id, status)
-            except Exception:
-                pass
+    def _set_status(self, assignment: ContainerAgent, status: str):
+        assignment.status = status
+        self._sync_control_plane(assignment, status)
 
     def _normalize_backend(self, backend: str) -> str:
         backend = (backend or self.DEFAULT_BACKEND).strip()
@@ -330,6 +266,7 @@ class ContainerRuntime:
     def _init_docker(self):
         try:
             import docker
+
             self._docker_client = docker.from_env()
             self._docker_client.ping()
             print("[Runtime] Docker OK")
@@ -409,10 +346,13 @@ class ContainerRuntime:
             )
 
         auto_number = (
-            len([
-                name for name in self._used_containers
-                if name.startswith(config["prefix"])
-            ])
+            len(
+                [
+                    name
+                    for name in self._used_containers
+                    if name.startswith(config["prefix"])
+                ]
+            )
             + 10
         )
         auto_name = f"{config['prefix']}{auto_number}"
@@ -447,15 +387,28 @@ class ContainerRuntime:
                 "MOCK_LLM": os.environ.get("MOCK_LLM", "0"),
             }
             for key in (
-                "LLM_API_KEY", "LLM_MODEL", "LLM_API_BASE", "LLM_PROVIDER",
-                "LLM_MAX_TOKENS", "LLM_TEMPERATURE", "LLM_TIMEOUT_SECONDS",
-                "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "OPENAI_API_BASE",
-                "OPENAI_API_KEY", "AGENT_STRICT_BACKEND_SDK",
-                "OPENCLAW_START_GATEWAY", "OPENCLAW_GATEWAY_HOST",
-                "OPENCLAW_GATEWAY_PORT", "OPENCLAW_GATEWAY_WS_URL",
-                "OPENCLAW_GATEWAY_CMD", "OPENCLAW_GATEWAY_READY_TIMEOUT",
-                "OPENCLAW_API_KEY", "OPENCLAW_OPENAI_BASE_URL",
-                "OPENCLAW_DEFAULT_AGENT_ID", "OPENCLAW_SESSION_NAME",
+                "LLM_API_KEY",
+                "LLM_MODEL",
+                "LLM_API_BASE",
+                "LLM_PROVIDER",
+                "LLM_MAX_TOKENS",
+                "LLM_TEMPERATURE",
+                "LLM_TIMEOUT_SECONDS",
+                "ANTHROPIC_API_KEY",
+                "ANTHROPIC_BASE_URL",
+                "OPENAI_API_BASE",
+                "OPENAI_API_KEY",
+                "AGENT_STRICT_BACKEND_SDK",
+                "OPENCLAW_START_GATEWAY",
+                "OPENCLAW_GATEWAY_HOST",
+                "OPENCLAW_GATEWAY_PORT",
+                "OPENCLAW_GATEWAY_WS_URL",
+                "OPENCLAW_GATEWAY_CMD",
+                "OPENCLAW_GATEWAY_READY_TIMEOUT",
+                "OPENCLAW_API_KEY",
+                "OPENCLAW_OPENAI_BASE_URL",
+                "OPENCLAW_DEFAULT_AGENT_ID",
+                "OPENCLAW_SESSION_NAME",
             ):
                 if os.environ.get(key):
                     env[key] = os.environ[key]
@@ -511,9 +464,15 @@ class ContainerRuntime:
             try:
                 container = self._docker_client.containers.get(container_name)
                 container_id = container.id
-                image_id = getattr(getattr(container, "image", None), "id", "") or ""
-                networks = container.attrs.get("NetworkSettings", {}).get("Networks", {})
-                network = networks.get(self.NETWORK_NAME) or next(iter(networks.values()), {})
+                image_id = (
+                    getattr(getattr(container, "image", None), "id", "") or ""
+                )
+                networks = (
+                    container.attrs.get("NetworkSettings", {}).get("Networks", {})
+                )
+                network = networks.get(self.NETWORK_NAME) or next(
+                    iter(networks.values()), {}
+                )
                 container_ip = network.get("IPAddress", "")
             except Exception:
                 pass
@@ -531,42 +490,33 @@ class ContainerRuntime:
             container_name=container_name,
             container_ip=container_ip,
             image_id=image_id,
-            port=self.INTERNAL_PORT,
             url=url,
             status=status,
             assign_error=assign_error,
         )
         self.agents[agent_id] = assignment
-        self._set_status(assignment, status, {"phase": "assign"})
+        self._set_status(assignment, status)
         return assignment
 
     def run_round(self, context: Dict = None) -> Dict:
         return {"results": self.run_all(context)}
 
-    def list_containers(self) -> List[Dict[str, Any]]:
-        return [agent.to_dict() for agent in self.agents.values()]
-
     def run_all(self, context: Dict = None) -> List[Dict]:
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        results = []
         assignments = list(self.agents.values())
         if not assignments:
-            return results
+            return []
 
         def run_agent(assignment: ContainerAgent):
             if not assignment.url or assignment.status == "error":
-                self._set_status(
-                    assignment,
-                    "error",
-                    {"phase": "run", "error": "agent_url_unavailable"},
-                )
+                self._set_status(assignment, "error")
                 return {
                     "agent_id": assignment.agent_id,
                     "error": "agent_url_unavailable",
                 }
 
-            self._set_status(assignment, "acting", {"phase": "run:start"})
+            self._set_status(assignment, "acting")
             try:
                 request_context = dict(context or {})
                 request_context["agent_id"] = assignment.agent_id
@@ -587,7 +537,10 @@ class ContainerRuntime:
                         task for task in tasks if task
                     )
 
-                if not request_context.get("task") and not request_context.get("messages"):
+                if (
+                    not request_context.get("task")
+                    and not request_context.get("messages")
+                ):
                     try:
                         status_response = requests.get(
                             f"{assignment.url}/status", timeout=3
@@ -595,16 +548,13 @@ class ContainerRuntime:
                         status_response.raise_for_status()
                         inbox_size = status_response.json().get("inbox_size", 0)
                     except Exception as exc:
+                        self._set_status(assignment, "error")
                         return {
                             "agent_id": assignment.agent_id,
                             "error": f"inbox_status_unavailable: {exc}",
                         }
                     if inbox_size <= 0:
-                        self._set_status(
-                            assignment,
-                            "idle",
-                            {"phase": "run:skip", "reason": "no_task_or_message"},
-                        )
+                        self._set_status(assignment, "idle")
                         return {
                             "agent_id": assignment.agent_id,
                             "status": "skipped",
@@ -622,26 +572,22 @@ class ContainerRuntime:
                 response.raise_for_status()
                 result = response.json()
                 if result.get("status") == "error" or result.get("error"):
-                    error = result.get("error") or "agent adapter returned status=error"
-                    self._set_status(
-                        assignment,
-                        "error",
-                        {"phase": "run:adapter", "error": error},
+                    error = (
+                        result.get("error")
+                        or "agent adapter returned status=error"
                     )
+                    self._set_status(assignment, "error")
                     result.setdefault("agent_id", assignment.agent_id)
                     result["error"] = error
                     return result
 
-                self._set_status(assignment, "idle", {"phase": "run:done"})
+                self._set_status(assignment, "idle")
                 return result
             except Exception as exc:
-                self._set_status(
-                    assignment,
-                    "error",
-                    {"phase": "run:exception", "error": str(exc)},
-                )
+                self._set_status(assignment, "error")
                 return {"agent_id": assignment.agent_id, "error": str(exc)}
 
+        results = []
         with ThreadPoolExecutor(max_workers=min(10, len(assignments))) as pool:
             futures = {
                 pool.submit(run_agent, assignment): assignment
@@ -655,14 +601,14 @@ class ContainerRuntime:
         assignment = self.agents.pop(agent_id, None)
         if not assignment:
             return False
-        self._set_status(assignment, "error", {"phase": "stop"})
+        self._set_status(assignment, "error")
         self._used_containers.discard(assignment.container_name)
         return True
 
     def stop_all(self):
         for assignment in list(self.agents.values()):
             if assignment.status != "error":
-                self._set_status(assignment, "error", {"phase": "stop"})
+                self._set_status(assignment, "error")
         self.agents.clear()
 
     def reset(self):
@@ -686,7 +632,6 @@ class AgentManagement:
         skill_refs: List[str] = None,
         allowed_tools: List[str] = None,
         capability_scores: Dict[str, float] = None,
-        comm=None,
     ) -> Agent:
         agent = Agent(
             agent_id=agent_id,
@@ -698,8 +643,6 @@ class AgentManagement:
             allowed_tools=allowed_tools,
             capability_scores=capability_scores,
         )
-        if comm is not None:
-            agent.set_comm(comm)
         AgentRegistry.register(agent)
         agent.start()
         return agent

@@ -22,7 +22,7 @@ class CommLayer(ABC):
 
 
 class DirectBus(CommLayer):
-    def __init__(self, agent_directory: Dict[str, str] = None, comm_matrix: Dict[str, Any] = None, **_):
+    def __init__(self, agent_directory: Dict[str, str] = None, comm_matrix: Dict[str, Any] = None):
         self.agent_directory = {str(k).lower(): v for k, v in (agent_directory or {}).items() if v}
         self.comm_matrix = {
             str(k).lower(): {str(item).lower() for item in (v or [])}
@@ -87,6 +87,3 @@ class DirectBus(CommLayer):
                 continue
             ok_all = self.send(source_id, from_name, target_id, content, channel_id, talk) and ok_all
         return ok_all
-
-
-RemoteBus = DirectBus

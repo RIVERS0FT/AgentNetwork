@@ -1,4 +1,5 @@
 from agent_network.agent_management import (
+    Agent,
     AgentManagement,
     AgentRegistry,
     ContainerAgent,
@@ -45,8 +46,38 @@ def test_runtime_status_updates_registered_agent(monkeypatch):
         url="http://planner:8000",
     )
 
-    runtime._set_status(assignment, "acting", {"phase": "test"})
+    runtime._set_status(assignment, "acting")
 
     assert agent.status == "acting"
     assert agent.container_id == "container-1"
     assert agent.container_url == "http://planner:8000"
+
+
+def test_agent_status_and_registry_use_current_fields_only():
+    AgentRegistry.reset()
+    agent = Agent(
+        agent_id="agent_a",
+        role="planner",
+        name="Agent A",
+        core_goal="Plan work",
+        backend="openclaw",
+        skill_refs=["planning"],
+        allowed_tools=["write_plan"],
+    )
+    AgentRegistry.register(agent)
+
+    status = agent.get_status()
+
+    assert status["agent_id"] == "agent_a"
+    assert status["role"] == "planner"
+    assert status["core_goal"] == "Plan work"
+    assert status["backend"] == "openclaw"
+    assert status["skill_refs"] == ["planning"]
+    assert status["allowed_tools"] == ["write_plan"]
+    assert "completed_tasks" not in status
+    assert "skills" not in status
+    assert "tags" not in status
+    assert AgentRegistry.get("agent_a") is agent
+    assert AgentRegistry.find_agent(skill_ref="planning") == [agent]
+
+    AgentRegistry.reset()
