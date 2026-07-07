@@ -6,6 +6,7 @@ on:
       - refactor/topology-link-model
     paths:
       - scripts/migrate_topology_link_model.py
+      - scripts/prepare_topology_link_migration.py
       - .github/workflows/migrate-topology-link-model.yml
 
 permissions:
@@ -29,6 +30,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
 
+      - name: Prepare legacy topology data
+        run: python scripts/prepare_topology_link_migration.py
+
       - name: Apply strict TopologyLink migration
         run: python scripts/migrate_topology_link_model.py
 
@@ -48,7 +52,7 @@ jobs:
             tests/test_scene_building_boundary.py
 
       - name: Remove one-shot migration files
-        run: rm scripts/migrate_topology_link_model.py .github/workflows/migrate-topology-link-model.yml
+        run: rm scripts/migrate_topology_link_model.py scripts/prepare_topology_link_migration.py .github/workflows/migrate-topology-link-model.yml
 
       - uses: EndBug/add-and-commit@v9
         with:
