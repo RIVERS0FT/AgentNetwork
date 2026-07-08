@@ -24,15 +24,15 @@ def mock_logs():
         content={"text": "msg 1"},
     )
     manager.emit_application_event(
-        event="decide",
+        event="reasoning",
         actor={"agent_id": "agent_B"},
-        action={"name": "decide"},
-        decision={"summary": "decide 1"},
+        action={"name": "reasoning"},
+        decision={"summary": "reasoning 1"},
     )
     manager.emit_application_event(
-        event="act",
+        event="acting",
         actor={"agent_id": "agent_B"},
-        action={"name": "act"},
+        action={"name": "acting"},
     )
     manager.emit_application_event(
         event="custom_application_event",
@@ -60,8 +60,8 @@ def test_application_api_view(mock_logs):
     data = response.json()
     assert data["total"] == 4
     events = [entry["event"] for entry in data["entries"]]
-    assert "decide" in events
-    assert "act" in events
+    assert "reasoning" in events
+    assert "acting" in events
     assert "agent_message" in events
 
 
@@ -70,6 +70,15 @@ def test_log_type_query_parameter(mock_logs):
     response = client.get("/api/logs/", params={"log_type": "application"})
     assert response.status_code == 200
     assert response.json()["total"] == 4
+
+
+@pytest.mark.not_llm
+def test_agent_view_returns_acting_events(mock_logs):
+    response = client.get("/api/logs/agent")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["logs"][0]["event"] == "acting"
 
 
 @pytest.mark.not_llm
@@ -100,3 +109,22 @@ def test_agent_log_ingest_always_emits_traceable_tool_event():
     assert record["trace"]["trace_id"] == "trace-1"
     assert record["tool"]["name"] == "write_plan"
     assert record["action"]["duration_ms"] == 12.5
+
+
+@pytest.mark.not_llm
+@pytest.mark.parametrize("event", ["decide", "agent_decide", "act", "agent_action"])
+def test_agent_log_ingest_rejects_removed_behavior_events(event):
+    manager = get_log_manager()
+    manager.reset()
+
+    response = client.post(
+        "/api/logs/agent",
+        json={
+            "agent_id": "planner",
+            "event": event,
+            "action": event,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "has been removed" in response.json()["detail"]
