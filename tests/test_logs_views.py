@@ -35,9 +35,9 @@ def mock_logs():
         action={"name": "acting"},
     )
     manager.emit_application_event(
-        event="custom_application_event",
+        event="policy_check",
         actor={"agent_id": "agent_C"},
-        content={"text": "other 1"},
+        policy={"result": "allowed"},
     )
 
     yield manager
@@ -63,6 +63,7 @@ def test_application_api_view(mock_logs):
     assert "reasoning" in events
     assert "acting" in events
     assert "agent_message" in events
+    assert "policy_check" in events
 
 
 @pytest.mark.not_llm
@@ -112,8 +113,18 @@ def test_agent_log_ingest_always_emits_traceable_tool_event():
 
 
 @pytest.mark.not_llm
-@pytest.mark.parametrize("event", ["decide", "agent_decide", "act", "agent_action"])
-def test_agent_log_ingest_rejects_removed_behavior_events(event):
+@pytest.mark.parametrize(
+    "event",
+    [
+        "decide",
+        "agent_decide",
+        "act",
+        "agent_action",
+        "llm_cli_call",
+        "custom_application_event",
+    ],
+)
+def test_agent_log_ingest_rejects_unknown_application_events(event):
     manager = get_log_manager()
     manager.reset()
 
@@ -127,4 +138,21 @@ def test_agent_log_ingest_rejects_removed_behavior_events(event):
     )
 
     assert response.status_code == 422
-    assert "has been removed" in response.json()["detail"]
+    assert "unknown application event" in response.json()["detail"]
+
+
+@pytest.mark.not_llm
+def test_ingest_rejects_invalid_explicit_log_type():
+    response = client.post(
+        "/api/logs/ingest",
+        json={
+            "log_type": "application.jsonl",
+            "event": "acting",
+            "actor": {"agent_id": "planner"},
+            "action": {"name": "plan"},
+            "trace": {"trace_id": "trace-1"},
+        },
+    )
+
+    assert response.status_code == 422
+    assert "unknown log type" in response.json()["detail"]
