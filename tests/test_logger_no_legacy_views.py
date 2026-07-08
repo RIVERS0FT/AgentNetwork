@@ -37,7 +37,7 @@ def test_only_layered_log_files_are_generated(temp_log_manager):
         "content": {"text": "Hello"},
     }
     behavior_record = {
-        "event": "decide",
+        "event": "reasoning",
         "category": "agent_application",
         "actor": {"id": "agent_B"},
         "action": {},
