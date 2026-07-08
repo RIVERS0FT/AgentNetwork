@@ -2,7 +2,6 @@ import asyncio
 import os
 import tempfile
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -195,19 +194,6 @@ async def download_managed_log(session_id: str, log_type: str):
     return FileResponse(filepath, filename=os.path.basename(filepath))
 
 
-@router.get("/download/{filename:path}")
-async def download_log_file_compat(filename: str):
-    parts = Path(filename).parts
-    if len(parts) != 2:
-        raise HTTPException(400, "Expected '<session>/<log_type or filename>'")
-    session_id, log_type = parts
-    try:
-        filepath = log_manager.get_download_path(session_id, log_type)
-    except (ValueError, FileNotFoundError) as exc:
-        raise _file_error(exc) from exc
-    return FileResponse(filepath, filename=os.path.basename(filepath))
-
-
 @router.post("/files/{session_id}/{log_type}/hide")
 async def hide_log_file(session_id: str, log_type: str):
     try:
@@ -334,15 +320,14 @@ async def log_ingest(req: Request):
     except Exception:
         body = {}
 
-    log_type = infer_log_type(body)
-    if (
-        not state.simulation_active
-        and log_type == "network"
-        and body.get("event") == "llm_api_packet"
-    ):
-        return {"status": "dropped", "reason": "simulation_inactive"}
-
     try:
+        log_type = infer_log_type(body)
+        if (
+            not state.simulation_active
+            and log_type == "network"
+            and body.get("event") == "llm_api_packet"
+        ):
+            return {"status": "dropped", "reason": "simulation_inactive"}
         record = log_manager.ingest(body, log_type=log_type)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
