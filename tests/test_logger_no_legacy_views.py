@@ -24,35 +24,36 @@ def temp_log_manager(tmp_path):
 
 
 @pytest.mark.not_llm
-def test_only_layered_log_files_are_generated(temp_log_manager):
+def test_only_current_log_files_are_generated(temp_log_manager):
     temp_log_manager.start_session("test_scene")
 
-    comm_record = {
+    communication_record = {
         "event": "agent_message",
-        "category": "agent_application",
-        "actor": {"id": "agent_A"},
-        "target": {"id": "agent_B"},
+        "actor": {"agent_id": "agent_A"},
+        "target": {"agent_id": "agent_B"},
         "conversation": {},
         "action": {},
         "content": {"text": "Hello"},
+        "trace": {"trace_id": "trace-message"},
     }
     behavior_record = {
         "event": "reasoning",
-        "category": "agent_application",
-        "actor": {"id": "agent_B"},
+        "actor": {"agent_id": "agent_B"},
         "action": {},
         "decision": {"reasoning": "I decided to wait"},
+        "trace": {"trace_id": "trace-reasoning"},
     }
     network_record = {
         "event": "docker_http_outbound",
-        "category": "agent_network",
+        "actor": {},
         "network": {"direction": "outbound"},
+        "trace": {"trace_id": "trace-network"},
     }
 
-    assert is_agent_message_record(comm_record) is True
+    assert is_agent_message_record(communication_record) is True
     assert is_behavior_record(behavior_record) is True
 
-    temp_log_manager.emit(comm_record)
+    temp_log_manager.emit(communication_record)
     temp_log_manager.emit(behavior_record)
     temp_log_manager.emit(network_record)
     temp_log_manager._close_file_handles()
