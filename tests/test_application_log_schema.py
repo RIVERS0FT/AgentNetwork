@@ -4,6 +4,7 @@ import os
 import pytest
 
 from agent_network.log_manager import (
+    APPLICATION_EVENTS,
     LogManager,
     application_log_schema,
     network_log_schema,
@@ -28,11 +29,13 @@ EVENT_IDENTITY_FIELDS = {
     "actor",
     "trace",
 }
-REMOVED_BEHAVIOR_EVENTS = {
+UNKNOWN_APPLICATION_EVENTS = {
     "decide",
     "agent_decide",
     "act",
     "agent_action",
+    "llm_cli_call",
+    "custom_application_event",
 }
 
 
@@ -66,12 +69,15 @@ def test_each_schema_owns_timestamp_field():
 
 
 @pytest.mark.not_llm
-def test_application_schema_uses_reasoning_and_acting_only():
+def test_application_schema_is_strict_and_uses_one_event_source():
     schemas = application_log_schema["event_schemas"]
 
+    assert application_log_schema["schema_version"] == "application.v8"
+    assert "*" not in schemas
+    assert set(schemas) == set(APPLICATION_EVENTS)
     assert "reasoning" in schemas
     assert "acting" in schemas
-    assert not (REMOVED_BEHAVIOR_EVENTS & set(schemas))
+    assert not (UNKNOWN_APPLICATION_EVENTS & set(schemas))
     assert schemas["reasoning"]["required_fields"] == ["action", "decision"]
     assert schemas["acting"]["required_fields"] == ["action"]
 
@@ -79,11 +85,12 @@ def test_application_schema_uses_reasoning_and_acting_only():
 @pytest.mark.not_llm
 def test_application_schema_field_boundary(manager):
     record = manager.emit_application_event(
-        event="test_event",
+        event="acting",
         actor={"agent_id": "test_agent"},
+        action={"name": "test_action"},
     )
 
-    assert record["event"] == "test_event"
+    assert record["event"] == "acting"
     assert record["actor"]["agent_id"] == "test_agent"
     assert EVENT_IDENTITY_FIELDS <= set(record)
     assert not (REMOVED_FIELDS & set(record))
@@ -108,13 +115,12 @@ def test_network_schema_field_boundary(manager):
 
 
 @pytest.mark.not_llm
-def test_system_schema_and_source_component_merge(manager):
+def test_system_schema_uses_final_source_and_kind(manager):
     record = manager.emit_system_event(
         event="debug_snapshot",
         message="snapshot ready",
-        category="debug",
-        source="backend",
-        component="srv",
+        kind="debug",
+        source="backend.srv",
         debug={"request_id": "r1"},
     )
 
@@ -151,22 +157,18 @@ def test_persisted_jsonl_has_no_removed_fields(manager):
 
 
 @pytest.mark.not_llm
-def test_agent_message_strips_network_and_system_fields(manager):
+def test_agent_message_uses_application_fields_only(manager):
     record = manager.agent_message(
         from_id="a1",
         to="a2",
         content="hello",
         latency_ms=12.5,
-        src_ip="192.168.1.1",
-        tcp_flags="SYN",
         payload_len=100,
     )
 
     assert record["action"]["duration_ms"] == 12.5
     assert record["content"]["size_bytes"] == 100
     assert "network" not in record
-    assert "src_ip" not in record
-    assert "tcp_flags" not in record
     assert not (SYSTEM_ONLY_FIELDS & set(record))
 
 
@@ -184,12 +186,12 @@ def test_reasoning_and_acting_helpers(manager):
 
 
 @pytest.mark.not_llm
-@pytest.mark.parametrize("event", sorted(REMOVED_BEHAVIOR_EVENTS))
-def test_removed_behavior_events_are_rejected(manager, event):
-    with pytest.raises(ValueError, match="has been removed"):
+@pytest.mark.parametrize("event", sorted(UNKNOWN_APPLICATION_EVENTS))
+def test_unknown_application_events_are_rejected(manager, event):
+    with pytest.raises(ValueError, match="unknown application event"):
         manager.emit_application_event(
             event=event,
             actor={"agent_id": "a1"},
             action={"name": event},
-            decision={"summary": "legacy"},
+            decision={"summary": "unknown"},
         )
