@@ -92,7 +92,6 @@ def setup_runtime(
     random.seed(f"{simulation_seed}:{_AGENT_ID}")
 
 
-
 def _tool_allowed(tool_name: str) -> bool:
     return not _ALLOWED_TOOLS or tool_name in _ALLOWED_TOOLS or tool_name in ATOMIC_TOOL_NAMES
 
@@ -151,7 +150,13 @@ def _load_tool_registry():
             _TOOL_REGISTRY = mod.ToolRegistry
     except Exception as e:
         _TOOL_REGISTRY = None
-        _log_agent("tool_registry_load_failed", f"Failed to load tools.py: {e}", status="failed", error=str(e))
+        _log_agent(
+            "application_error",
+            f"Failed to load tools.py: {e}",
+            action_type="tool_registry_load",
+            status="failed",
+            error=str(e),
+        )
 
 
 def _list_scene_tools() -> list[str]:
@@ -160,7 +165,13 @@ def _list_scene_tools() -> list[str]:
     try:
         raw_tools = _TOOL_REGISTRY.list_tools()
     except Exception as e:
-        _log_agent("tool_registry_list_failed", f"ToolRegistry.list_tools failed: {e}", status="failed", error=str(e))
+        _log_agent(
+            "application_error",
+            f"ToolRegistry.list_tools failed: {e}",
+            action_type="tool_registry_list",
+            status="failed",
+            error=str(e),
+        )
         return []
     names = []
     for item in raw_tools or []:
