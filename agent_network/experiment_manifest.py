@@ -20,7 +20,10 @@ def _now_iso() -> str:
 def _atomic_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     temporary.replace(path)
 
 
@@ -36,10 +39,20 @@ def hash_scene(scene_dir: Path) -> dict:
     files = []
     digest = hashlib.sha256()
     if scene_dir.is_dir():
-        for path in sorted(p for p in scene_dir.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
+        for path in sorted(
+            p
+            for p in scene_dir.rglob("*")
+            if p.is_file() and "__pycache__" not in p.parts
+        ):
             relative = path.relative_to(scene_dir).as_posix()
             file_hash = sha256_file(path)
-            files.append({"path": relative, "sha256": file_hash, "bytes": path.stat().st_size})
+            files.append(
+                {
+                    "path": relative,
+                    "sha256": file_hash,
+                    "bytes": path.stat().st_size,
+                }
+            )
             digest.update(relative.encode("utf-8"))
             digest.update(file_hash.encode("ascii"))
     return {"sha256": digest.hexdigest(), "files": files}
@@ -50,7 +63,10 @@ def sanitize_config(value: Any):
         sanitized = {}
         for key, item in value.items():
             lowered = str(key).lower()
-            if any(marker in lowered for marker in ("key", "token", "secret", "password")):
+            if any(
+                marker in lowered
+                for marker in ("key", "token", "secret", "password")
+            ):
                 sanitized[key] = "***REDACTED***"
             else:
                 sanitized[key] = sanitize_config(item)
@@ -72,7 +88,12 @@ def create_manifest(
 ) -> dict:
     sanitized_config = sanitize_config(llm_config)
     config_sha256 = hashlib.sha256(
-        json.dumps(sanitized_config, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(
+            sanitized_config,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
     ).hexdigest()
     manifest = {
         "schema_version": "agent-traffic-experiment.v1",
@@ -97,7 +118,10 @@ def finalize_manifest(session_id: str, **updates) -> dict:
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        manifest = {"schema_version": "agent-traffic-experiment.v1", "session_id": session_id}
+        manifest = {
+            "schema_version": "agent-traffic-experiment.v1",
+            "session_id": session_id,
+        }
     manifest.update(updates)
     manifest["finished_at"] = _now_iso()
     _atomic_json(path, manifest)
@@ -131,13 +155,21 @@ def _application_counts(session_id: str, trace_id: str) -> tuple[int, dict]:
                 record = json.loads(line)
             except ValueError:
                 continue
-            record_trace = record.get("trace_id") or (record.get("trace") or {}).get("trace_id")
+            record_trace = record.get("trace_id") or (
+                record.get("trace") or {}
+            ).get("trace_id")
             if trace_id and record_trace != trace_id:
                 continue
             total += 1
-            actor_id = (record.get("actor") or {}).get("agent_id") or (record.get("actor") or {}).get("id")
-            target_id = (record.get("target") or {}).get("agent_id") or (record.get("target") or {}).get("id")
-            participants = {agent_id for agent_id in (actor_id, target_id) if agent_id} or {"unknown"}
+            actor_id = (record.get("actor") or {}).get("agent_id") or (
+                record.get("actor") or {}
+            ).get("id")
+            target_id = (record.get("target") or {}).get("agent_id") or (
+                record.get("target") or {}
+            ).get("id")
+            participants = {
+                agent_id for agent_id in (actor_id, target_id) if agent_id
+            } or {"unknown"}
             for agent_id in participants:
                 by_agent[agent_id] = by_agent.get(agent_id, 0) + 1
     return total, by_agent
@@ -149,14 +181,28 @@ def audit_session(session_id: str, verify_hashes: bool = True) -> dict:
     try:
         session_dir.relative_to(base)
     except ValueError:
-        return {"status": "failed", "passed": False, "session_id": session_id, "issues": ["invalid session path"]}
+        return {
+            "status": "failed",
+            "passed": False,
+            "session_id": session_id,
+            "issues": ["invalid session path"],
+        }
     experiment = load_manifest(session_id)
     if not experiment:
-        return {"status": "failed", "passed": False, "session_id": session_id, "issues": ["experiment manifest missing or invalid"]}
+        return {
+            "status": "failed",
+            "passed": False,
+            "session_id": session_id,
+            "issues": ["experiment manifest missing or invalid"],
+        }
 
     issues = []
     captures = []
-    expected_agents = {str(item.get("agent_id", "")) for item in experiment.get("agents", []) if item.get("agent_id")}
+    expected_agents = {
+        str(item.get("agent_id", ""))
+        for item in experiment.get("agents", [])
+        if item.get("agent_id")
+    }
     for item in experiment.get("agents", []):
         if item.get("agent_id") and not item.get("image_id"):
             issues.append(f"{item['agent_id']}: container image identity missing")
@@ -171,7 +217,9 @@ def audit_session(session_id: str, verify_hashes: bool = True) -> dict:
         except ValueError as exc:
             issues.append(f"invalid capture manifest {path.name}: {exc}")
             continue
-        agent_id = capture.get("agent_id") or path.name.removesuffix(".manifest.json")
+        agent_id = capture.get("agent_id") or path.name.removesuffix(
+            ".manifest.json"
+        )
         observed_agents.add(agent_id)
         pcap = session_dir / f"{agent_id}.pcap"
         checks = {
@@ -179,7 +227,9 @@ def audit_session(session_id: str, verify_hashes: bool = True) -> dict:
             "pcap_exists": pcap.is_file(),
             "pcap_header_present": pcap.is_file() and pcap.stat().st_size >= 24,
             "pcap_has_packets": pcap.is_file() and pcap.stat().st_size > 24,
-            "runtime_identity": bool(capture.get("runtime_container") and capture.get("runtime_ip")),
+            "runtime_identity": bool(
+                capture.get("runtime_container") and capture.get("runtime_ip")
+            ),
             "sha256_matches": None,
         }
         if verify_hashes and checks["pcap_exists"] and capture.get("sha256"):
@@ -198,14 +248,24 @@ def audit_session(session_id: str, verify_hashes: bool = True) -> dict:
     if unexpected:
         issues.append(f"unexpected Agent captures: {', '.join(unexpected)}")
 
-    event_total, events_by_agent = _application_counts(session_id, experiment.get("trace_id", ""))
+    event_total, events_by_agent = _application_counts(
+        session_id,
+        experiment.get("trace_id", ""),
+    )
     if event_total == 0:
         issues.append("no trace-matched application events were recorded")
-    missing_application_agents = sorted(agent for agent in expected_agents if events_by_agent.get(agent, 0) == 0)
+    missing_application_agents = sorted(
+        agent for agent in expected_agents if events_by_agent.get(agent, 0) == 0
+    )
     if missing_application_agents:
-        issues.append(f"Agents without application events: {', '.join(missing_application_agents)}")
+        issues.append(
+            "Agents without application events: "
+            + ", ".join(missing_application_agents)
+        )
     if experiment.get("status") != "complete":
-        issues.append(f"experiment status is {experiment.get('status', 'unknown')}, not complete")
+        issues.append(
+            f"experiment status is {experiment.get('status', 'unknown')}, not complete"
+        )
 
     return {
         "status": "passed" if not issues else "failed",
@@ -245,14 +305,17 @@ def build_bundle(session_id: str) -> Path:
             continue
         members.append((path, f"pcap/{path.name}"))
     if log_dir and log_dir.is_dir():
-        for name in ("application.jsonl", "network.jsonl", "global.jsonl"):
+        for name in ("application.jsonl", "network.jsonl", "system.jsonl"):
             path = log_dir / name
             if path.is_file():
                 members.append((path, f"logs/{name}"))
 
-    checksums = {archive_name: sha256_file(path) for path, archive_name in members}
+    checksums = {
+        archive_name: sha256_file(path) for path, archive_name in members
+    }
     quality = audit_session(session_id, verify_hashes=True)
     from agent_network.real_packet_store import analyze_packets, query_packets
+
     analysis = analyze_packets(session_id=session_id, max_packets=100_000)
     packet_sample = query_packets(session_id=session_id, limit=100_000)
     quality_bytes = json.dumps(quality, ensure_ascii=False, indent=2).encode("utf-8")
@@ -265,11 +328,31 @@ def build_bundle(session_id: str) -> Path:
     checksums["packets.sample.jsonl"] = hashlib.sha256(packet_sample_bytes).hexdigest()
     with zipfile.ZipFile(temporary, "w") as archive:
         for path, archive_name in members:
-            compression = zipfile.ZIP_STORED if path.suffix == ".pcap" else zipfile.ZIP_DEFLATED
+            compression = (
+                zipfile.ZIP_STORED
+                if path.suffix == ".pcap"
+                else zipfile.ZIP_DEFLATED
+            )
             archive.write(path, archive_name, compress_type=compression)
-        archive.writestr("quality.json", quality_bytes, compress_type=zipfile.ZIP_DEFLATED)
-        archive.writestr("analysis.json", analysis_bytes, compress_type=zipfile.ZIP_DEFLATED)
-        archive.writestr("packets.sample.jsonl", packet_sample_bytes, compress_type=zipfile.ZIP_DEFLATED)
-        archive.writestr("SHA256SUMS.json", json.dumps(checksums, indent=2, sort_keys=True), compress_type=zipfile.ZIP_DEFLATED)
+        archive.writestr(
+            "quality.json",
+            quality_bytes,
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+        archive.writestr(
+            "analysis.json",
+            analysis_bytes,
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+        archive.writestr(
+            "packets.sample.jsonl",
+            packet_sample_bytes,
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+        archive.writestr(
+            "SHA256SUMS.json",
+            json.dumps(checksums, indent=2, sort_keys=True),
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
     temporary.replace(bundle_path)
     return bundle_path
