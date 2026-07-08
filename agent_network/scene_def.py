@@ -245,6 +245,8 @@ def normalize_application_record(record: Dict[str, Any]) -> Dict[str, Any]:
 
     debug = normalized["debug"]
     debug["schema_version"] = schema["schema_version"]
+    if normalized.get("event") == "agent_message":
+        debug.setdefault("legacy_network_fields_dropped", True)
     normalized["debug"] = debug
     return normalized
 
