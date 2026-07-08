@@ -45,6 +45,19 @@ def test_virtual_logger_module_is_removed():
 
 
 @pytest.mark.not_llm
+def test_network_schema_is_integrated_into_log_manager():
+    package = ROOT / "agent_network"
+    log_manager_text = (package / "log_manager.py").read_text(encoding="utf-8")
+    init_text = (package / "__init__.py").read_text(encoding="utf-8")
+
+    assert not (package / "network_log_v4.py").exists()
+    assert '"schema_version": "network.v4"' in log_manager_text
+    assert "NETWORK_CONTEXT_FIELDS" in log_manager_text
+    assert "NETWORK_RAW_FIELDS" in log_manager_text
+    assert "network_log_v4" not in init_text
+
+
+@pytest.mark.not_llm
 def test_repository_uses_log_manager_import_directly():
     paths = (
         ROOT / "services" / "agent_server.py",
