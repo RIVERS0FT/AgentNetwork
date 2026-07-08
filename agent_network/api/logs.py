@@ -1,19 +1,30 @@
-import os
 import asyncio
+import os
+import tempfile
 from datetime import datetime
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 from agent_network import state
-from agent_network.logger import get_logger, normalize_log_timestamp, infer_log_layer, is_agent_message_record, is_agent_network_record, is_behavior_record
-from agent_network.event_bus import PacketRecorder
+from agent_network.log_manager import (
+    AGENT_APPLICATION_LAYER,
+    AGENT_NETWORK_LAYER,
+    SYSTEM_LAYER,
+    get_log_manager,
+    infer_log_layer,
+    normalize_log_timestamp,
+)
 
 router = APIRouter()
-logger = get_logger()
+log_manager = get_log_manager()
+
 
 def _beijing_time(utc_str: str = "") -> str:
     return normalize_log_timestamp(utc_str)
+
 
 async def _ws_broadcast(message: dict):
     if not state.ws_clients:
@@ -24,12 +35,15 @@ async def _ws_broadcast(message: dict):
             await client.send_json(message)
         except Exception:
             dead_clients.add(client)
-    for c in dead_clients:
-        state.ws_clients.remove(c)
+    for client in dead_clients:
+        state.ws_clients.remove(client)
 
-# ═══════════════════════════════════════════════
-# 日志查询 & 导出 API
-# ═══════════════════════════════════════════════
+
+def _file_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    return HTTPException(status_code=400, detail=str(exc))
+
 
 @router.get("/")
 async def query_logs(
@@ -41,19 +55,30 @@ async def query_logs(
     keyword: Optional[str] = Query(None),
     limit: int = Query(default=100, le=1000),
 ):
-    entries = logger.query(
-        agent_id=agent_id, level=level, event=event, layer=layer,
-        category=category, keyword=keyword, limit=limit
+    entries = log_manager.query(
+        agent_id=agent_id,
+        level=level,
+        event=event,
+        layer=layer,
+        category=category,
+        keyword=keyword,
+        limit=limit,
     )
     return {"backend": "memory", "total": len(entries), "entries": entries}
 
+
 @router.get("/stats")
 async def log_stats():
-    return logger.get_index_stats()
+    return log_manager.get_index_stats()
+
 
 @router.get("/agent/{agent_id}")
 async def agent_logs(agent_id: str, limit: int = 50):
-    return {"agent_id": agent_id, "entries": logger.get_agent_timeline(agent_id, limit)}
+    return {
+        "agent_id": agent_id,
+        "entries": log_manager.get_agent_timeline(agent_id, limit),
+    }
+
 
 @router.get("/application")
 async def application_logs(
@@ -61,67 +86,158 @@ async def application_logs(
     agent_id: Optional[str] = Query(None),
     task_id: Optional[str] = Query(None),
     event: Optional[str] = Query(None),
-    limit: int = Query(default=100, le=1000)
+    limit: int = Query(default=100, le=1000),
 ):
-    entries = logger.query(layer="agent_application", trace_id=trace_id, agent_id=agent_id, task_id=task_id, event=event, limit=limit)
+    entries = log_manager.query(
+        layer=AGENT_APPLICATION_LAYER,
+        trace_id=trace_id,
+        agent_id=agent_id,
+        task_id=task_id,
+        event=event,
+        limit=limit,
+    )
     return {"total": len(entries), "entries": entries}
+
 
 @router.get("/network")
 async def network_logs(
     trace_id: Optional[str] = Query(None),
-    limit: int = Query(default=100, le=1000)
+    limit: int = Query(default=100, le=1000),
 ):
-    entries = logger.query(layer="agent_network", trace_id=trace_id, limit=limit)
+    entries = log_manager.query(
+        layer=AGENT_NETWORK_LAYER,
+        trace_id=trace_id,
+        limit=limit,
+    )
     return {"total": len(entries), "entries": entries}
+
+
+@router.get("/system")
+async def system_logs(
+    level: Optional[str] = Query(None),
+    event: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None),
+    limit: int = Query(default=100, le=1000),
+):
+    entries = log_manager.query(
+        layer=SYSTEM_LAYER,
+        level=level,
+        event=event,
+        keyword=keyword,
+        limit=limit,
+    )
+    return {"total": len(entries), "entries": entries}
+
 
 @router.get("/messages")
 async def message_logs(
     trace_id: Optional[str] = Query(None),
     agent_id: Optional[str] = Query(None),
     task_id: Optional[str] = Query(None),
-    limit: int = 50
+    limit: int = 50,
 ):
-    entries = logger.query(
-        layer="agent_application",
+    entries = log_manager.query(
+        layer=AGENT_APPLICATION_LAYER,
         event="agent_message",
         trace_id=trace_id,
         agent_id=agent_id,
         task_id=task_id,
-        limit=limit
+        limit=limit,
     )
     return {"total": len(entries), "entries": entries}
+
 
 @router.get("/token-usage")
 async def token_usage_logs():
     return state.get_token_usage_snapshot()
 
+
 @router.get("/export")
-async def export_logs(fmt: str = Query(default="jsonl", pattern="^(jsonl|json|csv)$"), limit: int = Query(default=0)):
-    content = logger.export(fmt=fmt, limit=limit)
-    media_types = {"jsonl": "application/x-ndjson", "json": "application/json", "csv": "text/csv"}
+async def export_logs(
+    fmt: str = Query(default="jsonl", pattern="^(jsonl|json|csv)$"),
+    limit: int = Query(default=0),
+    layer: Optional[str] = Query(None),
+):
+    content = log_manager.export(fmt=fmt, limit=limit, layer=layer)
+    media_types = {
+        "jsonl": "application/x-ndjson",
+        "json": "application/json",
+        "csv": "text/csv",
+    }
     return PlainTextResponse(content, media_type=media_types.get(fmt, "text/plain"))
 
+
 @router.get("/export/file")
-async def export_logs_file(fmt: str = Query(default="jsonl", pattern="^(jsonl|json|csv)$"), limit: int = Query(default=0)):
-    import tempfile
-    filename = f"agent_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{fmt if fmt != 'jsonl' else 'jsonl'}"
+async def export_logs_file(
+    fmt: str = Query(default="jsonl", pattern="^(jsonl|json|csv)$"),
+    limit: int = Query(default=0),
+    layer: Optional[str] = Query(None),
+):
+    filename = f"agent_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{fmt}"
     filepath = os.path.join(tempfile.gettempdir(), filename)
-    logger.export_file(filepath, fmt=fmt, limit=limit)
+    log_manager.export_file(filepath, fmt=fmt, limit=limit, layer=layer)
     return FileResponse(filepath, filename=filename)
 
+
 @router.get("/files")
-async def list_log_files():
-    return {"files": logger.list_log_files()}
+async def list_log_files(include_hidden: bool = Query(default=False)):
+    return {"files": log_manager.list_log_files(include_hidden=include_hidden)}
+
+
+@router.get("/download/{session_id}/{log_type}")
+async def download_managed_log(session_id: str, log_type: str):
+    try:
+        filepath = log_manager.get_download_path(session_id, log_type)
+    except (ValueError, FileNotFoundError) as exc:
+        raise _file_error(exc) from exc
+    return FileResponse(filepath, filename=os.path.basename(filepath))
+
 
 @router.get("/download/{filename:path}")
-async def download_log_file(filename: str):
-    log_dir = os.path.realpath(logger._log_dir)
-    filepath = os.path.realpath(os.path.join(log_dir, filename))
-    if not filepath.startswith(log_dir + os.sep) and filepath != log_dir:
-        raise HTTPException(403, "Path traversal denied")
-    if not os.path.isfile(filepath):
-        raise HTTPException(404, f"Log file '{filename}' not found")
-    return FileResponse(filepath, filename=os.path.basename(filename))
+async def download_log_file_compat(filename: str):
+    """兼容旧的 session/filename 下载路径，但仍由 LogManager 校验。"""
+    parts = Path(filename).parts
+    if len(parts) != 2:
+        raise HTTPException(400, "Expected '<session>/<log_type or filename>'")
+    session_id, log_type = parts
+    try:
+        filepath = log_manager.get_download_path(session_id, log_type)
+    except (ValueError, FileNotFoundError) as exc:
+        raise _file_error(exc) from exc
+    return FileResponse(filepath, filename=os.path.basename(filepath))
+
+
+@router.post("/files/{session_id}/{log_type}/hide")
+async def hide_log_file(session_id: str, log_type: str):
+    try:
+        return log_manager.hide_log(session_id, log_type)
+    except (ValueError, FileNotFoundError) as exc:
+        raise _file_error(exc) from exc
+
+
+@router.post("/files/{session_id}/{log_type}/show")
+async def show_log_file(session_id: str, log_type: str):
+    try:
+        return log_manager.show_log(session_id, log_type)
+    except (ValueError, FileNotFoundError) as exc:
+        raise _file_error(exc) from exc
+
+
+@router.delete("/files/{session_id}/{log_type}")
+async def delete_log_file(session_id: str, log_type: str):
+    try:
+        return log_manager.delete_log(session_id, log_type)
+    except (ValueError, FileNotFoundError) as exc:
+        raise _file_error(exc) from exc
+
+
+@router.delete("/sessions/{session_id}/logs")
+async def delete_session_logs(session_id: str):
+    try:
+        return log_manager.delete_session_logs(session_id)
+    except (ValueError, FileNotFoundError) as exc:
+        raise _file_error(exc) from exc
+
 
 @router.post("/agent")
 async def agent_log_ingest(req: Request):
@@ -157,12 +273,9 @@ async def agent_log_ingest(req: Request):
     reasoning = body.get("reasoning", details.get("reasoning", ""))
     tool_name = body.get("tool_name", details.get("tool_name", ""))
 
-    logger.emit_application_event(
+    record = log_manager.emit_application_event(
         event=event,
-        actor={
-            "agent_id": from_agent,
-            "name": body.get("agent_name", ""),
-        },
+        actor={"agent_id": from_agent, "name": body.get("agent_name", "")},
         target={"agent_id": to_agent} if to_agent else {},
         action={
             "type": action_name,
@@ -203,14 +316,14 @@ async def agent_log_ingest(req: Request):
         component=agent_id,
         source="agent",
         debug={
-            "schema_version": "application.v1",
             "emitter": "api.logs.agent_log_ingest",
             "legacy_agent_log_ingest": True,
         },
     )
     if state.ws_clients:
         asyncio.create_task(_ws_broadcast({"type": "agent_log", "data": state.agent_logs[-1]}))
-    return {"status": "ok", "total_logs": len(state.agent_logs)}
+    return {"status": "ok", "total_logs": len(state.agent_logs), "record": record}
+
 
 @router.post("/ingest")
 async def log_ingest(req: Request):
@@ -218,37 +331,27 @@ async def log_ingest(req: Request):
         body = await req.json()
     except Exception:
         body = {}
-    if not state.simulation_active and infer_log_layer(body) == "agent_network" and body.get("event") == "llm_api_packet":
+    if (
+        not state.simulation_active
+        and infer_log_layer(body) == AGENT_NETWORK_LAYER
+        and body.get("event") == "llm_api_packet"
+    ):
         return {"status": "dropped", "reason": "simulation_inactive"}
-    
-    record = {
-        "timestamp": body.get("timestamp", ""),
-        "level": body.get("level", "INFO"),
-        "source": body.get("source", "external"),
-        "component": body.get("component", "unknown"),
-        "category": body.get("category", "system"),
-        "layer": body.get("layer", ""),
-        "event": body.get("event", "log"),
-        "actor": body.get("actor", {}),
-        "target": body.get("target", {}),
-        "action": body.get("action", {}),
-        "message": body.get("message", ""),
-        "payload": body.get("payload", {}),
-        "network": body.get("network", {}),
-        "trace": body.get("trace", {}),
-    }
-    if not record["message"] and record["payload"].get("content"):
-        record["message"] = str(record["payload"]["content"])[:120]
-    
-    logger.ingest(record)
+
+    try:
+        record = log_manager.ingest(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     if record.get("event") in {"llm_api_call", "llm_cli_call"}:
         token_updated = state.append_token_usage_record(record)
         await _ws_broadcast({"type": "log_entries", "data": [record]})
         if token_updated:
             await _ws_broadcast({"type": "token_usage", "data": state.get_token_usage_snapshot()})
-    return {"status": "ok"}
+    return {"status": "ok", "layer": record.get("layer"), "record": record}
+
 
 @router.get("/agent")
 async def agent_logs_get(limit: int = Query(default=200)):
-    entries = logger.query(event="agent_action", limit=limit)
+    entries = log_manager.query(event="agent_action", limit=limit)
     return {"logs": entries, "total": len(entries)}
