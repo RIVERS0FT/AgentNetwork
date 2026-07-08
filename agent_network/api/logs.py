@@ -246,16 +246,65 @@ async def agent_log_ingest(req: Request):
         body = await req.json()
     except Exception:
         body = {}
+
     agent_id = body.get("agent_id", "?")
-    event = body.get("event", "act")
+    event = body.get("event", "acting")
     detail = body.get("detail", "")
     details = body.get("details", {})
     action_status = body.get("action_status", "success")
     from_agent = body.get("from_agent", agent_id)
     to_agent = body.get("to_agent", "") or details.get("target", "")
     action_name = body.get("action", event)
+    content_text = body.get("content", details.get("content", ""))
+    reasoning = body.get("reasoning", details.get("reasoning", ""))
+    tool_name = body.get("tool_name", details.get("tool_name", ""))
 
-    state.agent_logs.append({
+    try:
+        record = log_manager.emit_application_event(
+            event=event,
+            actor={"agent_id": from_agent, "name": body.get("agent_name", "")},
+            target={"agent_id": to_agent} if to_agent else {},
+            action={
+                "type": action_name,
+                "name": action_name,
+                "status": action_status,
+                "duration_ms": details.get("duration_ms", 0),
+            },
+            content={
+                "content_type": "agent_log",
+                "text": content_text or detail,
+                "summary": (
+                    detail or content_text or f"[{agent_id}] {action_name}"
+                )[:120],
+                "size_bytes": len((content_text or detail or "").encode("utf-8")),
+            },
+            decision={
+                "decision_summary": reasoning[:200] if reasoning else "",
+                "reasoning_visible": reasoning[:500] if reasoning else "",
+            },
+            skill={
+                "name": body.get("skill_name", details.get("skill_name", "")),
+                "input": body.get("skill_params", details.get("skill_params", {})),
+                "output": body.get("skill_result", details.get("skill_result", {})),
+                "status": action_status,
+            },
+            tool={
+                "name": tool_name,
+                "input": details.get("arguments", {}),
+                "output": details.get("result", {}),
+                "status": action_status,
+            } if tool_name else {},
+            result={
+                "status": action_status,
+                "message": detail or f"[{agent_id}] {action_name}",
+                "error_message": "" if action_status != "failed" else detail,
+            },
+            trace_id=body.get("trace_id", details.get("trace_id", "")),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    state_entry = {
         "timestamp": _beijing_time(body.get("timestamp", "")),
         "level": "ERROR" if action_status == "failed" else "INFO",
         "agent_id": agent_id,
@@ -266,56 +315,14 @@ async def agent_log_ingest(req: Request):
         "to_agent": to_agent,
         "action": action_name,
         "action_status": action_status,
-    })
+    }
+    state.agent_logs.append(state_entry)
     if len(state.agent_logs) > 500:
         state.agent_logs.pop(0)
 
-    content_text = body.get("content", details.get("content", ""))
-    reasoning = body.get("reasoning", details.get("reasoning", ""))
-    tool_name = body.get("tool_name", details.get("tool_name", ""))
-
-    record = log_manager.emit_application_event(
-        event=event,
-        actor={"agent_id": from_agent, "name": body.get("agent_name", "")},
-        target={"agent_id": to_agent} if to_agent else {},
-        action={
-            "type": action_name,
-            "name": action_name,
-            "status": action_status,
-            "duration_ms": details.get("duration_ms", 0),
-        },
-        content={
-            "content_type": "agent_log",
-            "text": content_text or detail,
-            "summary": (detail or content_text or f"[{agent_id}] {action_name}")[:120],
-            "size_bytes": len((content_text or detail or "").encode("utf-8")),
-        },
-        decision={
-            "decision_summary": reasoning[:200] if reasoning else "",
-            "reasoning_visible": reasoning[:500] if reasoning else "",
-        },
-        skill={
-            "name": body.get("skill_name", details.get("skill_name", "")),
-            "input": body.get("skill_params", details.get("skill_params", {})),
-            "output": body.get("skill_result", details.get("skill_result", {})),
-            "status": action_status,
-        },
-        tool={
-            "name": tool_name,
-            "input": details.get("arguments", {}),
-            "output": details.get("result", {}),
-            "status": action_status,
-        } if tool_name else {},
-        result={
-            "status": action_status,
-            "message": detail or f"[{agent_id}] {action_name}",
-            "error_message": "" if action_status != "failed" else detail,
-        },
-        trace_id=body.get("trace_id", details.get("trace_id", "")),
-    )
     if state.ws_clients:
         asyncio.create_task(
-            _ws_broadcast({"type": "agent_log", "data": state.agent_logs[-1]})
+            _ws_broadcast({"type": "agent_log", "data": state_entry})
         )
     return {"status": "ok", "total_logs": len(state.agent_logs), "record": record}
 
@@ -355,7 +362,7 @@ async def log_ingest(req: Request):
 async def agent_logs_get(limit: int = Query(default=200)):
     entries = log_manager.query(
         log_type="application",
-        event="agent_action",
+        event="acting",
         limit=limit,
     )
     return {"logs": entries, "total": len(entries)}
