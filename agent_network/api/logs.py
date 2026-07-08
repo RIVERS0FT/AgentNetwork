@@ -242,7 +242,6 @@ async def agent_log_ingest(req: Request):
     to_agent = body.get("to_agent", "") or details.get("target", "")
     action_name = body.get("action", event)
     content_text = body.get("content", details.get("content", ""))
-    reasoning = body.get("reasoning", details.get("reasoning", ""))
     tool_name = body.get("tool_name", details.get("tool_name", ""))
 
     try:
@@ -263,10 +262,6 @@ async def agent_log_ingest(req: Request):
                     detail or content_text or f"[{agent_id}] {action_name}"
                 )[:120],
                 "size_bytes": len((content_text or detail or "").encode("utf-8")),
-            },
-            decision={
-                "decision_summary": reasoning[:200] if reasoning else "",
-                "reasoning_visible": reasoning[:500] if reasoning else "",
             },
             skill={
                 "name": body.get("skill_name", details.get("skill_name", "")),
