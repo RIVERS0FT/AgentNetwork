@@ -9,14 +9,14 @@ from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 
 from agent_network import state
-from agent_network.logger import get_logger
+from agent_network.log_manager import get_log_manager
 from agent_network.agent_management import AgentRegistry
 from agent_network.event_bus import PacketRecorder
 
 # 导入路由模块
 from agent_network.api import system, agents, simulations, logs, packets
 
-logger = get_logger()
+log_manager = get_log_manager()
 
 
 @asynccontextmanager
@@ -24,10 +24,6 @@ async def lifespan(app: FastAPI):
     state.server_loop = asyncio.get_running_loop()
     yield
 
-
-# ═══════════════════════════════════════════════
-# FastAPI 应用初始化
-# ═══════════════════════════════════════════════
 
 app = FastAPI(
     title="AI Agent 仿真运行平台",
@@ -46,12 +42,11 @@ app.add_middleware(
 
 from agent_network.traffic_log import TrafficMiddleware, traffic_enabled
 if traffic_enabled():
-    app.add_middleware(TrafficMiddleware, component="srv", server_url="http://localhost:8000")
-
-
-# ═══════════════════════════════════════════════
-# 挂载 API 路由模块
-# ═══════════════════════════════════════════════
+    app.add_middleware(
+        TrafficMiddleware,
+        component="srv",
+        server_url="http://localhost:8000",
+    )
 
 app.include_router(system.router, prefix="/api", tags=["System"])
 app.include_router(agents.router, prefix="/api/agents", tags=["Agents"])
@@ -59,10 +54,6 @@ app.include_router(simulations.router, prefix="/api", tags=["Simulations & Scene
 app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])
 app.include_router(packets.router, prefix="/api/packets", tags=["Packets"])
 
-
-# ═══════════════════════════════════════════════
-# WebSocket & 前端页面
-# ═══════════════════════════════════════════════
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -82,7 +73,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "agents": agents_data,
                             "stats": AgentRegistry.get_stats(),
                             "agent_logs": state.agent_logs[-50:],
-                            "log_entries": logger.get_entries(50),
+                            "log_entries": log_manager.get_entries(50),
                             "topology": state.current_topology,
                         },
                     })
@@ -98,8 +89,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json({
                         "type": "logs",
                         "data": {
-                            "entries": logger.get_entries(50),
-                            "stats": logger.get_index_stats(),
+                            "entries": log_manager.get_entries(50),
+                            "stats": log_manager.get_index_stats(),
                         },
                     })
                 elif data == "all":
@@ -110,8 +101,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             "agents": agents_data,
                             "agent_stats": AgentRegistry.get_stats(),
                             "agent_logs": state.agent_logs[-50:],
-                            "log_entries": logger.get_entries(50),
-                            "log_stats": logger.get_index_stats(),
+                            "log_entries": log_manager.get_entries(50),
+                            "log_stats": log_manager.get_index_stats(),
                             "packet_stats": PacketRecorder.get_stats(),
                             "topology": state.current_topology,
                         },
@@ -125,7 +116,6 @@ async def websocket_endpoint(websocket: WebSocket):
         state.ws_clients.discard(websocket)
 
 
-# 静态文件挂载
 if os.path.isdir("web/public"):
     app.mount("/static", StaticFiles(directory="web/public"), name="static")
 if os.path.isdir("web/src"):
