@@ -2,6 +2,7 @@ import os
 import math
 import threading
 import asyncio
+import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Set
 
@@ -176,27 +177,22 @@ def append_token_usage_record(record: Dict[str, Any]) -> bool:
     if not delta:
         return False
 
-    session_id = record.get("session_id") or ""
-    seq = record.get("seq")
-    if session_id and seq is not None:
-        key = f"{session_id}|{seq}"
-    else:
-        actor = (record.get("actor") or {}).get("id", "")
-        target = record.get("target") or {}
-        key = "|".join([
-            record.get("timestamp") or "",
-            record.get("event") or "",
-            actor,
-            str(target.get("provider") or ""),
-            str(target.get("model") or ""),
-            str(record.get("message") or "")[:80],
-        ])
+    event_id = str(record.get("event_id") or "")
+    actor = (record.get("actor") or {}).get("agent_id") or (record.get("actor") or {}).get("id", "")
+    target = record.get("target") or {}
+    payload = record.get("payload") or {}
+    key = event_id or "|".join([
+        record.get("timestamp") or "",
+        record.get("event") or "",
+        actor,
+        str(target.get("provider") or ""),
+        str(target.get("model") or ""),
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+    ])
 
     with token_usage_lock:
         if key in token_usage_state["seen_keys"]:
             return False
-        if session_id and token_usage_state.get("session_id") != session_id:
-            token_usage_state["session_id"] = session_id
         token_usage_state["seen_keys"].add(key)
         # 防止 seen_keys 无限增长（长时间仿真内存泄漏）
         if len(token_usage_state["seen_keys"]) > 5000:
@@ -219,12 +215,9 @@ def append_token_usage_record(record: Dict[str, Any]) -> bool:
         else:
             totals["exact_events"] += 1
 
-        actor = (record.get("actor") or {}).get("id", "")
-        target = record.get("target") or {}
         point = {
             "key": key,
-            "session_id": session_id,
-            "seq": seq,
+            "event_id": event_id,
             "timestamp": record.get("timestamp") or datetime.now().isoformat(timespec="milliseconds"),
             "hit": totals["hit"],
             "miss": totals["miss"],
