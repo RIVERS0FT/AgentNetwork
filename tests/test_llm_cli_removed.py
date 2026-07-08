@@ -30,6 +30,16 @@ def test_llm_cli_event_and_logger_are_removed(tmp_path):
 
 
 @pytest.mark.not_llm
+def test_llm_api_logging_requires_current_explicit_flag(monkeypatch):
+    monkeypatch.delenv("LOG_LLM_API", raising=False)
+    monkeypatch.setenv("LOG_TRAFFIC", "1")
+    assert llm_metrics.llm_api_enabled() is False
+
+    monkeypatch.setenv("LOG_LLM_API", "1")
+    assert llm_metrics.llm_api_enabled() is True
+
+
+@pytest.mark.not_llm
 def test_token_usage_ignores_non_api_llm_events():
     from agent_network import state
 
