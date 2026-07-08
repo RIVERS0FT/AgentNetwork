@@ -1,5 +1,6 @@
 import importlib
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -7,6 +8,7 @@ import agent_network.log_manager as log_manager_module
 from agent_network.log_manager import LogManager, infer_log_type, normalize_log_type
 
 
+ROOT = Path(__file__).resolve().parents[1]
 REMOVED_NAMES = {
     "AGENT_APPLICATION_LAYER",
     "AGENT_NETWORK_LAYER",
@@ -43,7 +45,42 @@ def test_virtual_logger_module_is_removed():
 
 
 @pytest.mark.not_llm
-def test_log_manager_interfaces_only_accept_log_type():
+def test_repository_uses_log_manager_import_directly():
+    paths = (
+        ROOT / "services" / "agent_server.py",
+        ROOT / "agent_network" / "api" / "packets.py",
+        ROOT / "agent_network" / "api" / "simulations.py",
+    )
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        assert "from agent_network.logger import" not in text
+        assert "from agent_network.log_manager import get_log_manager" in text
+
+
+@pytest.mark.not_llm
+def test_log_manager_interfaces_have_no_ignored_parameters():
+    application_parameters = inspect.signature(
+        LogManager.emit_application_event
+    ).parameters
+    network_parameters = inspect.signature(
+        LogManager.emit_network_event
+    ).parameters
+    system_parameters = inspect.signature(
+        LogManager.emit_system_event
+    ).parameters
+
+    for name in ("tick", "level", "component", "source", "debug"):
+        assert name not in application_parameters
+    for name in ("tick", "level", "component", "source", "debug"):
+        assert name not in network_parameters
+    for name in ("category", "parent_event_id", "tick", "component"):
+        assert name not in system_parameters
+    assert "kind" in system_parameters
+    assert "source" in system_parameters
+
+
+@pytest.mark.not_llm
+def test_log_manager_query_interfaces_only_accept_log_type():
     query_parameters = inspect.signature(LogManager.query).parameters
     export_parameters = inspect.signature(LogManager.export).parameters
     export_file_parameters = inspect.signature(LogManager.export_file).parameters
