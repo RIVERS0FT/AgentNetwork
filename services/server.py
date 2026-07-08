@@ -40,13 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from agent_network.traffic_log import TrafficMiddleware, traffic_enabled
-if traffic_enabled():
-    app.add_middleware(
-        TrafficMiddleware,
-        component="srv",
-        server_url="http://localhost:8000",
-    )
+# network.jsonl is packet-oriented. HTTP middleware logging is intentionally
+# not installed; network records are produced from captured PCAP packets.
 
 app.include_router(system.router, prefix="/api", tags=["System"])
 app.include_router(agents.router, prefix="/api/agents", tags=["Agents"])
