@@ -12,14 +12,14 @@ from agent_network.log_manager import (
 def test_llm_cli_event_and_logger_are_removed(tmp_path):
     assert "llm_cli_call" not in APPLICATION_EVENTS
     assert "llm_cli_call" not in application_log_schema["event_schemas"]
-    assert application_log_schema["schema_version"] == "application.v7"
+    assert application_log_schema["schema_version"] == "application.v8"
     assert not hasattr(llm_metrics, "log_llm_cli")
 
     manager = LogManager(log_dir=str(tmp_path))
     manager.reset()
     manager._log_dir = str(tmp_path)
 
-    with pytest.raises(ValueError, match="has been removed"):
+    with pytest.raises(ValueError, match="unknown application event"):
         manager.emit_application_event(
             event="llm_cli_call",
             actor={"agent_id": "a1"},
