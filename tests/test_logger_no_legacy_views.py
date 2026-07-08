@@ -44,10 +44,31 @@ def test_only_current_log_files_are_generated(temp_log_manager):
         "trace": {"trace_id": "trace-reasoning"},
     }
     network_record = {
-        "event": "docker_http_outbound",
-        "actor": {},
-        "network": {"direction": "outbound"},
-        "trace": {"trace_id": "trace-network"},
+        "timestamp": "2026-07-08T12:30:15.123456Z",
+        "log_id": "net_01JZ123456",
+        "context": {
+            "trace_id": "trace-network",
+            "capture_id": "capture-agent-a-001",
+            "packet_index": 1,
+            "observer_agent_id": "agent_A",
+            "runtime_container": "agent-a",
+            "interface": "any",
+            "captured_length": 64,
+            "original_length": 64,
+            "truncated": False,
+        },
+        "network": {
+            "ip": {"ip.version": "4", "ip.proto": "6"},
+            "tcp": {"tcp.srcport": "49152", "tcp.dstport": "8000"},
+        },
+        "raw": {
+            "format": "pcap",
+            "encoding": "base64",
+            "data": "AAAA",
+            "byte_length": 3,
+            "packet_count": 1,
+            "sha256": "test",
+        },
     }
 
     assert is_agent_message_record(communication_record) is True

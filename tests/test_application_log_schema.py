@@ -31,6 +31,13 @@ EVENT_IDENTITY_FIELDS = {
     "actor",
     "trace",
 }
+NETWORK_TOP_LEVEL_FIELDS = {
+    "timestamp",
+    "log_id",
+    "context",
+    "network",
+    "raw",
+}
 UNKNOWN_APPLICATION_EVENTS = {
     "decide",
     "agent_decide",
@@ -38,6 +45,43 @@ UNKNOWN_APPLICATION_EVENTS = {
     "agent_action",
     "llm_cli_call",
     "custom_application_event",
+}
+NETWORK_CONTEXT = {
+    "trace_id": "trace-network",
+    "capture_id": "capture-dev-fe-001",
+    "packet_index": 42,
+    "observer_agent_id": "dev_fe",
+    "runtime_container": "agent-dev-fe",
+    "interface": "any",
+    "captured_length": 128,
+    "original_length": 128,
+    "truncated": False,
+}
+NETWORK_LAYERS = {
+    "ip": {
+        "ip.version": "4",
+        "ip.hdr_len": "20",
+        "ip.len": "128",
+        "ip.ttl": "64",
+        "ip.proto": "6",
+        "ip.src": "172.18.0.2",
+        "ip.dst": "172.18.0.3",
+    },
+    "tcp": {
+        "tcp.srcport": "49152",
+        "tcp.dstport": "8000",
+        "tcp.seq": "10001",
+        "tcp.ack": "20001",
+        "tcp.flags": "0x0018",
+    },
+}
+NETWORK_RAW = {
+    "format": "pcap",
+    "encoding": "base64",
+    "data": "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA...",
+    "byte_length": 168,
+    "packet_count": 1,
+    "sha256": "9d41c7...",
 }
 
 
@@ -109,15 +153,24 @@ def test_application_schema_field_boundary(manager):
 
 @pytest.mark.not_llm
 def test_network_schema_field_boundary(manager):
+    assert network_log_schema["schema_version"] == "network.v4"
+    assert set(network_log_schema["type_fields"]) == NETWORK_TOP_LEVEL_FIELDS
+
     record = manager.emit_network_event(
-        event="docker_http_outbound",
-        actor={"agent_id": "agent_a"},
-        network={"direction": "outbound"},
+        context=NETWORK_CONTEXT,
+        network=NETWORK_LAYERS,
+        raw=NETWORK_RAW,
+        timestamp="2026-07-08T12:30:15.123456Z",
+        log_id="net_01JZ123456",
     )
 
-    assert EVENT_IDENTITY_FIELDS <= set(record)
-    assert record["network"]["direction"] == "outbound"
-    assert not (REMOVED_FIELDS & set(record))
+    assert set(record) == NETWORK_TOP_LEVEL_FIELDS
+    assert record["timestamp"] == "2026-07-08T12:30:15.123456Z"
+    assert record["log_id"] == "net_01JZ123456"
+    assert record["context"] == NETWORK_CONTEXT
+    assert record["network"] == NETWORK_LAYERS
+    assert record["raw"] == NETWORK_RAW
+    assert not (EVENT_IDENTITY_FIELDS & set(record))
     assert not (SYSTEM_ONLY_FIELDS & set(record))
 
 
@@ -149,8 +202,9 @@ def test_persisted_jsonl_has_no_removed_fields(manager):
         action={"name": "move"},
     )
     manager.emit_network_event(
-        event="docker_http_outbound",
-        network={"direction": "outbound"},
+        context=NETWORK_CONTEXT,
+        network=NETWORK_LAYERS,
+        raw=NETWORK_RAW,
     )
     manager._close_file_handles()
 
@@ -161,6 +215,8 @@ def test_persisted_jsonl_has_no_removed_fields(manager):
                 record = json.loads(line)
                 assert not (REMOVED_FIELDS & set(record))
                 assert "timestamp" in record
+                if filename == "network.jsonl":
+                    assert set(record) == NETWORK_TOP_LEVEL_FIELDS
 
 
 @pytest.mark.not_llm

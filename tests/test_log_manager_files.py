@@ -5,6 +5,31 @@ import pytest
 from agent_network.log_manager import LogManager
 
 
+NETWORK_CONTEXT = {
+    "trace_id": "trace_test",
+    "capture_id": "capture_test",
+    "packet_index": 1,
+    "observer_agent_id": "a1",
+    "runtime_container": "agent-a1",
+    "interface": "any",
+    "captured_length": 64,
+    "original_length": 64,
+    "truncated": False,
+}
+NETWORK_LAYERS = {
+    "ip": {"ip.version": "4", "ip.proto": "6"},
+    "tcp": {"tcp.srcport": "49152", "tcp.dstport": "8000"},
+}
+NETWORK_RAW = {
+    "format": "pcap",
+    "encoding": "base64",
+    "data": "AAAA",
+    "byte_length": 3,
+    "packet_count": 1,
+    "sha256": "test",
+}
+
+
 @pytest.fixture
 def manager(tmp_path):
     instance = LogManager(log_dir=str(tmp_path))
@@ -24,9 +49,9 @@ def test_layered_recording_without_global_log(manager):
         action={"name": "move"},
     )
     manager.emit_network_event(
-        event="docker_http_outbound",
-        actor={"agent_id": "a1"},
-        network={"direction": "outbound"},
+        context=NETWORK_CONTEXT,
+        network=NETWORK_LAYERS,
+        raw=NETWORK_RAW,
     )
     manager.emit_system_event(event="debug_snapshot", payload={"ready": True})
     manager._close_file_handles()
@@ -42,8 +67,9 @@ def test_layered_recording_without_global_log(manager):
 def test_hide_show_download_and_delete(manager):
     session_id = manager.start_session("test_scene")
     manager.emit_network_event(
-        event="docker_http_outbound",
-        network={"direction": "outbound"},
+        context=NETWORK_CONTEXT,
+        network=NETWORK_LAYERS,
+        raw=NETWORK_RAW,
     )
 
     download_path = manager.get_download_path(session_id, "network")
