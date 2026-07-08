@@ -11,18 +11,22 @@ except ImportError:
 
 from agent_network import state
 from agent_network.agent_management import AgentRegistry
-from agent_network.logger import get_logger
+from agent_network.log_manager import get_log_manager
 from agent_network.real_packet_store import packet_stats
 
 router = APIRouter()
-logger = get_logger()
+log_manager = get_log_manager()
 
 
 @router.get("/stats")
 async def system_stats():
     if psutil:
         mem = psutil.virtual_memory()
-        mem_stats = {"total_mb": mem.total // (1024 * 1024), "used_mb": mem.used // (1024 * 1024), "percent": mem.percent}
+        mem_stats = {
+            "total_mb": mem.total // (1024 * 1024),
+            "used_mb": mem.used // (1024 * 1024),
+            "percent": mem.percent,
+        }
     else:
         mem_stats = {"total_mb": 0, "used_mb": 0, "percent": 0}
 
@@ -32,17 +36,29 @@ async def system_stats():
         "memory": mem_stats,
         "simulation": {
             "started_at": state.service_state["started_at"],
-            "uptime_seconds": (datetime.now() - datetime.fromisoformat(state.service_state["started_at"])).total_seconds() if "started_at" in state.service_state else 0,
+            "uptime_seconds": (
+                datetime.now()
+                - datetime.fromisoformat(state.service_state["started_at"])
+            ).total_seconds()
+            if "started_at" in state.service_state
+            else 0,
             "simulations_run": state.service_state["simulations_run"],
         },
         "agents": AgentRegistry.get_stats(),
         "tools": {
-            "registered": len(state.active_tools_module.ToolRegistry.list_tools()) if state.active_tools_module and hasattr(state.active_tools_module, "ToolRegistry") else 0,
+            "registered": len(state.active_tools_module.ToolRegistry.list_tools())
+            if state.active_tools_module
+            and hasattr(state.active_tools_module, "ToolRegistry")
+            else 0,
             "stats": {"total_calls": 0},
         },
         "packets": packet_stats(),
-        "logs": logger.get_index_stats(),
-        "tokens": {"total_calls": totals.get("events", 0), "total_tokens": totals.get("total", 0), "provider_total": totals.get("provider_total", 0)},
+        "logs": log_manager.get_index_stats(),
+        "tokens": {
+            "total_calls": totals.get("events", 0),
+            "total_tokens": totals.get("total", 0),
+            "provider_total": totals.get("provider_total", 0),
+        },
         "network_mode": "direct",
     }
 
@@ -82,7 +98,10 @@ async def execute_tool(req: Request):
     if os.environ.get("ENABLE_DEBUG_TOOL_EXECUTE") != "1":
         raise HTTPException(
             status_code=403,
-            detail="Direct server-side tool execution is disabled; use backend-native MCP tool calling.",
+            detail=(
+                "Direct server-side tool execution is disabled; "
+                "use backend-native MCP tool calling."
+            ),
         )
     data = await req.json()
     tool_name = data.get("tool_name")
@@ -95,7 +114,10 @@ async def execute_tool(req: Request):
             raise HTTPException(status_code=404, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
-    raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found. Active scene has no tools.")
+    raise HTTPException(
+        status_code=404,
+        detail=f"Tool '{tool_name}' not found. Active scene has no tools.",
+    )
 
 
 @router.get("/tools/stats")
