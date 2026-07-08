@@ -17,7 +17,7 @@ from typing import List, Dict, Any
 import uvicorn
 import requests
 
-from agent_network.logger import get_logger
+from agent_network.log_manager import get_log_manager
 from agent_network.comm import DirectBus
 from agent_network.full_packet_capture import capture_status, start_full_capture, stop_full_capture
 from agent_network.network_emulation import clear_network_emulation, configure_network_emulation
@@ -49,7 +49,7 @@ API_KEY = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("LLM_API_KEY", "
 MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 
 comm = DirectBus()
-logger = get_logger()
+logger = get_log_manager()
 backend_label = {"openclaw": "OpenCLAW", "claude-code": "Claude Code", "direct_llm": "Direct LLM"}.get(BACKEND, BACKEND)
 app = FastAPI(title=f"Agent {AGENT_NAME} ({backend_label})")
 
@@ -132,7 +132,6 @@ def _log_agent(event: str, detail: str, **kw):
     }, timeout=2)
 
 
-
 class MessageIn(BaseModel):
     from_id: str
     from_name: str = ""
@@ -206,7 +205,7 @@ async def run_agent(req: RunRequest):
 
     for event in getattr(result, "application_events", []) or []:
         record = logger.emit_application_event(
-            event=event.get("event", "agent_event"),
+            event=event["event"],
             actor=event.get("actor", {"agent_id": context.agent_id}),
             target=event.get("target", {}),
             task=event.get("task", {"goal": context.task}),
@@ -220,12 +219,10 @@ async def run_agent(req: RunRequest):
             policy=event.get("policy", {}),
             result=event.get("result", {}),
             metrics=event.get("metrics", {}),
+            payload=event.get("payload", {}),
             links=event.get("links", {}),
             trace_id=event.get("trace_id", context.trace_id),
-            tick=context.tick,
-            component=context.agent_id,
-            source="agent",
-            debug={"schema_version": "application.v1", "emitter": "agent_server.run_agent"},
+            parent_event_id=event.get("parent_event_id", ""),
         )
         _safe_post_json(f"{SERVER_URL}/api/logs/ingest", record, timeout=2)
 
@@ -237,11 +234,6 @@ async def run_agent(req: RunRequest):
             action={"type": "agent_run", "name": f"{BACKEND}_run", "status": "failed"},
             result={"status": "failed", "error_message": result.error or "agent runtime failed"},
             trace_id=context.trace_id,
-            tick=context.tick,
-            level="ERROR",
-            component=context.agent_id,
-            source="agent",
-            debug={"schema_version": "application.v1", "emitter": "agent_server.run_agent"},
         )
         _safe_post_json(f"{SERVER_URL}/api/logs/ingest", record, timeout=2)
 
@@ -293,7 +285,14 @@ async def receive_event(event: Dict[str, Any]):
     t = event.get("turn", 0)
     _append_inbox("系统", f"⚠️ 事件 [{event_name}]: {impact}", "system")
     _event_queue.append({"event_name": event_name, "impact": impact, "turn": t})
-    _log_agent("event_received", f"事件: {event_name} — {impact}", event_name=event_name, impact=impact, turn=t)
+    _log_agent(
+        "acting",
+        f"事件: {event_name} — {impact}",
+        action_type="event_received",
+        event_name=event_name,
+        impact=impact,
+        turn=t,
+    )
     return {"received": True, "event": event_name}
 
 
