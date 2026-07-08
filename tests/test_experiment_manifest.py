@@ -76,6 +76,28 @@ def test_experiment_manifest_redacts_secrets_and_quality_verifies_hashes(tmp_pat
         assert "SHA256SUMS.json" in names
 
 
+def test_application_audit_ignores_legacy_trace_and_actor_fields(tmp_path, monkeypatch):
+    log_root = tmp_path / "logs"
+    application_dir = log_root / "session-legacy"
+    application_dir.mkdir(parents=True)
+    (application_dir / "application.jsonl").write_text(
+        json.dumps({
+            "trace_id": "trace-legacy",
+            "actor": {"id": "planner"},
+        }) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(experiment_manifest, "LOG_ROOT", log_root)
+
+    total, by_agent = experiment_manifest._application_counts(
+        "session-legacy",
+        "trace-legacy",
+    )
+
+    assert total == 0
+    assert by_agent == {}
+
+
 def test_audit_rejects_session_path_traversal(tmp_path, monkeypatch):
     monkeypatch.setattr(experiment_manifest, "PCAP_ROOT", tmp_path / "pcap")
 
