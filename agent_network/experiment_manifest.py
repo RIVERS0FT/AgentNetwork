@@ -40,9 +40,9 @@ def hash_scene(scene_dir: Path) -> dict:
     digest = hashlib.sha256()
     if scene_dir.is_dir():
         for path in sorted(
-            p
-            for p in scene_dir.rglob("*")
-            if p.is_file() and "__pycache__" not in p.parts
+            item
+            for item in scene_dir.rglob("*")
+            if item.is_file() and "__pycache__" not in item.parts
         ):
             relative = path.relative_to(scene_dir).as_posix()
             file_hash = sha256_file(path)
@@ -149,24 +149,19 @@ def _application_counts(session_id: str, trace_id: str) -> tuple[int, dict]:
         return total, by_agent
     if not path.is_file():
         return total, by_agent
+
     with path.open("r", encoding="utf-8") as stream:
         for line in stream:
             try:
                 record = json.loads(line)
             except ValueError:
                 continue
-            record_trace = record.get("trace_id") or (
-                record.get("trace") or {}
-            ).get("trace_id")
+            record_trace = (record.get("trace") or {}).get("trace_id")
             if trace_id and record_trace != trace_id:
                 continue
             total += 1
-            actor_id = (record.get("actor") or {}).get("agent_id") or (
-                record.get("actor") or {}
-            ).get("id")
-            target_id = (record.get("target") or {}).get("agent_id") or (
-                record.get("target") or {}
-            ).get("id")
+            actor_id = (record.get("actor") or {}).get("agent_id")
+            target_id = (record.get("target") or {}).get("agent_id")
             participants = {
                 agent_id for agent_id in (actor_id, target_id) if agent_id
             } or {"unknown"}
@@ -187,6 +182,7 @@ def audit_session(session_id: str, verify_hashes: bool = True) -> dict:
             "session_id": session_id,
             "issues": ["invalid session path"],
         }
+
     experiment = load_manifest(session_id)
     if not experiment:
         return {
@@ -208,6 +204,7 @@ def audit_session(session_id: str, verify_hashes: bool = True) -> dict:
             issues.append(f"{item['agent_id']}: container image identity missing")
     if not (experiment.get("scene") or {}).get("files"):
         issues.append("scene provenance is empty")
+
     observed_agents = set()
     for path in sorted(session_dir.glob("*.manifest.json")):
         if path.name == "experiment.manifest.json":
@@ -255,7 +252,9 @@ def audit_session(session_id: str, verify_hashes: bool = True) -> dict:
     if event_total == 0:
         issues.append("no trace-matched application events were recorded")
     missing_application_agents = sorted(
-        agent for agent in expected_agents if events_by_agent.get(agent, 0) == 0
+        agent
+        for agent in expected_agents
+        if events_by_agent.get(agent, 0) == 0
     )
     if missing_application_agents:
         issues.append(
@@ -275,7 +274,10 @@ def audit_session(session_id: str, verify_hashes: bool = True) -> dict:
         "expected_agents": sorted(expected_agents),
         "observed_agents": sorted(observed_agents),
         "captures": captures,
-        "application_events": {"total": event_total, "by_agent": events_by_agent},
+        "application_events": {
+            "total": event_total,
+            "by_agent": events_by_agent,
+        },
         "issues": issues,
     }
 
@@ -311,21 +313,34 @@ def build_bundle(session_id: str) -> Path:
                 members.append((path, f"logs/{name}"))
 
     checksums = {
-        archive_name: sha256_file(path) for path, archive_name in members
+        archive_name: sha256_file(path)
+        for path, archive_name in members
     }
     quality = audit_session(session_id, verify_hashes=True)
     from agent_network.real_packet_store import analyze_packets, query_packets
 
     analysis = analyze_packets(session_id=session_id, max_packets=100_000)
     packet_sample = query_packets(session_id=session_id, limit=100_000)
-    quality_bytes = json.dumps(quality, ensure_ascii=False, indent=2).encode("utf-8")
-    analysis_bytes = json.dumps(analysis, ensure_ascii=False, indent=2).encode("utf-8")
+    quality_bytes = json.dumps(
+        quality,
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+    analysis_bytes = json.dumps(
+        analysis,
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
     packet_sample_bytes = "".join(
-        json.dumps(packet, ensure_ascii=False) + "\n" for packet in packet_sample
+        json.dumps(packet, ensure_ascii=False) + "\n"
+        for packet in packet_sample
     ).encode("utf-8")
     checksums["quality.json"] = hashlib.sha256(quality_bytes).hexdigest()
     checksums["analysis.json"] = hashlib.sha256(analysis_bytes).hexdigest()
-    checksums["packets.sample.jsonl"] = hashlib.sha256(packet_sample_bytes).hexdigest()
+    checksums["packets.sample.jsonl"] = hashlib.sha256(
+        packet_sample_bytes
+    ).hexdigest()
+
     with zipfile.ZipFile(temporary, "w") as archive:
         for path, archive_name in members:
             compression = (
