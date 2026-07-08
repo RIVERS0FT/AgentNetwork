@@ -27,7 +27,7 @@ def mock_logs():
         event="reasoning",
         actor={"agent_id": "agent_B"},
         action={"name": "reasoning"},
-        decision={"summary": "reasoning 1"},
+        content={"summary": "reasoning 1"},
     )
     manager.emit_application_event(
         event="acting",
@@ -37,7 +37,7 @@ def mock_logs():
     manager.emit_application_event(
         event="policy_check",
         actor={"agent_id": "agent_C"},
-        policy={"result": "allowed"},
+        result={"status": "allowed"},
     )
 
     yield manager
@@ -110,6 +110,8 @@ def test_agent_log_ingest_always_emits_traceable_tool_event():
     assert record["trace"]["trace_id"] == "trace-1"
     assert record["tool"]["name"] == "write_plan"
     assert record["action"]["duration_ms"] == 12.5
+    assert "policy" not in record
+    assert "decision" not in record
 
 
 @pytest.mark.not_llm
