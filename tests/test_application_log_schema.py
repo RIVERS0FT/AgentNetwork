@@ -20,6 +20,8 @@ REMOVED_FIELDS = {
     "message",
     "category",
     "component",
+    "policy",
+    "decision",
 }
 SYSTEM_ONLY_FIELDS = {"level", "source", "debug"}
 EVENT_IDENTITY_FIELDS = {
@@ -72,14 +74,19 @@ def test_each_schema_owns_timestamp_field():
 def test_application_schema_is_strict_and_uses_one_event_source():
     schemas = application_log_schema["event_schemas"]
 
-    assert application_log_schema["schema_version"] == "application.v8"
+    assert application_log_schema["schema_version"] == "application.v9"
     assert "*" not in schemas
     assert set(schemas) == set(APPLICATION_EVENTS)
     assert "reasoning" in schemas
     assert "acting" in schemas
     assert not (UNKNOWN_APPLICATION_EVENTS & set(schemas))
-    assert schemas["reasoning"]["required_fields"] == ["action", "decision"]
+    assert schemas["reasoning"]["required_fields"] == ["action"]
+    assert schemas["policy_check"]["required_fields"] == ["result"]
     assert schemas["acting"]["required_fields"] == ["action"]
+
+    for event_schema in schemas.values():
+        assert "policy" not in event_schema["fields"]
+        assert "decision" not in event_schema["fields"]
 
 
 @pytest.mark.not_llm
@@ -169,6 +176,8 @@ def test_agent_message_uses_application_fields_only(manager):
     assert record["action"]["duration_ms"] == 12.5
     assert record["content"]["size_bytes"] == 100
     assert "network" not in record
+    assert "policy" not in record
+    assert "decision" not in record
     assert not (SYSTEM_ONLY_FIELDS & set(record))
 
 
@@ -180,9 +189,25 @@ def test_reasoning_and_acting_helpers(manager):
     assert action["event"] == "acting"
     assert action["content"]["kw"] == {"extra": "data"}
     assert reasoning["event"] == "reasoning"
-    assert reasoning["decision"]["raw_model_output_ref"] == "prompt"
+    assert reasoning["content"]["text"] == "prompt"
+    assert reasoning["result"] == {"choice": "A"}
+    assert "decision" not in reasoning
     assert not hasattr(manager, "agent_action")
     assert not hasattr(manager, "agent_decide")
+
+
+@pytest.mark.not_llm
+def test_policy_check_uses_result_field(manager):
+    record = manager.emit_application_event(
+        event="policy_check",
+        actor={"agent_id": "a1"},
+        action={"name": "communication_check"},
+        result={"status": "allowed", "rule": "communication_matrix"},
+    )
+
+    assert record["event"] == "policy_check"
+    assert record["result"]["status"] == "allowed"
+    assert "policy" not in record
 
 
 @pytest.mark.not_llm
@@ -193,5 +218,4 @@ def test_unknown_application_events_are_rejected(manager, event):
             event=event,
             actor={"agent_id": "a1"},
             action={"name": event},
-            decision={"summary": "unknown"},
         )
