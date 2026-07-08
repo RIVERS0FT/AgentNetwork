@@ -5,6 +5,7 @@ x-common-llm-env: &common-llm-env
   MOCK_LLM: ${MOCK_LLM:-0}
   SIMULATION_SEED: ${SIMULATION_SEED:-}
   LOG_FULL_PCAP: ${LOG_FULL_PCAP:-1}
+  LOG_LLM_API: ${LOG_LLM_API:-0}
   # Default captures Agent runtime traffic only. Set to 1 for debugging srv
   # orchestration, capture-control, and log-ingest traffic as well.
   AGENT_CAPTURE_INCLUDE_CONTROL_PLANE: ${AGENT_CAPTURE_INCLUDE_CONTROL_PLANE:-0}
@@ -37,7 +38,6 @@ x-claude-env: &claude-env
   SERVER_URL: http://srv:8000
   AGENT_COMM_MODE: direct
   LOG_DOCKER_HTTP: "0"
-  LOG_TRAFFIC: "0"
 
 x-openclaw-env: &openclaw-env
   <<: *common-llm-env
@@ -47,7 +47,6 @@ x-openclaw-env: &openclaw-env
   SERVER_URL: http://srv:8000
   AGENT_COMM_MODE: direct
   LOG_DOCKER_HTTP: "0"
-  LOG_TRAFFIC: "0"
   OPENCLAW_START_GATEWAY: ${OPENCLAW_START_GATEWAY:-1}
   OPENCLAW_GATEWAY_HOST: ${OPENCLAW_GATEWAY_HOST:-127.0.0.1}
   OPENCLAW_GATEWAY_PORT: ${OPENCLAW_GATEWAY_PORT:-18789}
@@ -109,7 +108,6 @@ services:
       SERVER_PORT: "8000"
       AGENT_COMM_MODE: direct
       LOG_DOCKER_HTTP: "0"
-      LOG_TRAFFIC: "0"
       AGENT_PCAP_HOST_PATH: /app/data/pcap
     restart: unless-stopped
     networks: [an]
