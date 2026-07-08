@@ -50,10 +50,12 @@ def test_network_schema_is_integrated_into_log_manager():
     log_manager_text = (package / "log_manager.py").read_text(encoding="utf-8")
     init_text = (package / "__init__.py").read_text(encoding="utf-8")
 
+    assert not (package / "_log_manager_core.py").exists()
     assert not (package / "network_log_v4.py").exists()
     assert '"schema_version": "network.v4"' in log_manager_text
     assert "NETWORK_CONTEXT_FIELDS" in log_manager_text
     assert "NETWORK_RAW_FIELDS" in log_manager_text
+    assert "_log_manager_core" not in log_manager_text
     assert "network_log_v4" not in init_text
 
 
