@@ -347,7 +347,7 @@ async def log_ingest(req: Request):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    if record.get("event") in {"llm_api_call", "llm_cli_call"}:
+    if record.get("event") == "llm_api_call":
         token_updated = state.append_token_usage_record(record)
         await _ws_broadcast({"type": "log_entries", "data": [record]})
         if token_updated:
