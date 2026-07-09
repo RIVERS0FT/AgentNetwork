@@ -105,7 +105,10 @@ def test_claude_tool_blocks_become_traceable_application_events():
     assert use_event["trace_id"] == "trace-test"
     assert use_event["tool"]["tool_call_id"] == "tool-1"
     assert result_event["event"] == "tool_result_received"
-    assert result_event["links"]["tool_call_id"] == "tool-1"
+    assert result_event["trace_id"] == "trace-test"
+    assert result_event["tool"]["tool_call_id"] == "tool-1"
+    assert "links" not in use_event
+    assert "links" not in result_event
 
 
 def test_claude_result_message_becomes_llm_runtime_event():
