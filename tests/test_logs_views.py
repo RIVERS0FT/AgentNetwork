@@ -107,11 +107,11 @@ def test_agent_log_ingest_always_emits_traceable_tool_event():
     assert response.status_code == 200
     record = manager.get_entries(1)[0]
     assert record["event"] == "tool_result"
-    assert record["trace"]["trace_id"] == "trace-1"
+    assert record["trace_id"] == "trace-1"
     assert record["tool"]["name"] == "write_plan"
     assert record["action"]["duration_ms"] == 12.5
-    assert "policy" not in record
-    assert "decision" not in record
+    for removed in ("trace", "links", "event_id", "parent_event_id", "policy", "decision"):
+        assert removed not in record
 
 
 @pytest.mark.not_llm
@@ -152,7 +152,7 @@ def test_ingest_rejects_invalid_explicit_log_type():
             "event": "acting",
             "actor": {"agent_id": "planner"},
             "action": {"name": "plan"},
-            "trace": {"trace_id": "trace-1"},
+            "trace_id": "trace-1",
         },
     )
 
