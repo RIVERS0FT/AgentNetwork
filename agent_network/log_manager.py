@@ -75,16 +75,6 @@ FIELD_LIBRARY: Dict[str, Dict[str, Any]] = {
     "result": _object(),
     "metrics": _object(),
     "payload": _object(),
-    "links": _object(
-        default={
-            "network_event_ids": [],
-            "audit_event_ids": [],
-            "tool_event_ids": [],
-            "state_event_ids": [],
-            "related_trace_ids": [],
-        }
-    ),
-    "trace": _object(required_properties=["trace_id"]),
 }
 
 
@@ -111,89 +101,83 @@ def _application_fields() -> Dict[str, Any]:
     return {
         "timestamp": {"type": "string", "required": True},
         "event": {"type": "string", "required": True},
-        "event_id": {
+        "trace_id": {
             "type": "string",
             "required": True,
-            "generator": "event_id",
-        },
-        "parent_event_id": {
-            "type": "string",
-            "required": True,
-            "default": "",
+            "generator": "trace_id",
         },
         "actor": copy.deepcopy(FIELD_LIBRARY["actor"]),
-        "trace": copy.deepcopy(FIELD_LIBRARY["trace"]),
     }
 
 
 APP_LAYOUTS = {
     "agent_run_started": (
         ("task", "action"),
-        ("task", "action", "links"),
+        ("task", "action"),
     ),
     "agent_run_completed": (
         ("task", "action", "result"),
-        ("task", "action", "content", "result", "metrics", "links"),
+        ("task", "action", "content", "result", "metrics"),
     ),
     "agent_run_failed": (
         ("task", "action", "result"),
-        ("task", "action", "result", "links"),
+        ("task", "action", "result"),
     ),
     "agent_message": (
         ("target", "conversation", "action", "content"),
-        ("target", "conversation", "action", "content", "result", "links"),
+        ("target", "conversation", "action", "content", "result"),
     ),
     "agent_message_received": (
         ("target", "conversation", "action", "content"),
-        ("target", "conversation", "action", "content", "result", "links"),
+        ("target", "conversation", "action", "content", "result"),
     ),
     "reasoning": (
         ("action",),
-        ("task", "action", "content", "result", "metrics", "links"),
+        ("task", "action", "content", "result", "metrics"),
     ),
     "acting": (
         ("action",),
-        ("target", "task", "action", "content", "result", "metrics", "links"),
+        ("target", "task", "action", "content", "result", "metrics"),
     ),
     "skill_use": (
         ("action", "skill"),
-        ("target", "task", "action", "skill", "result", "metrics", "links"),
+        ("target", "task", "action", "skill", "result", "metrics"),
     ),
     "tool_call": (
         ("action", "tool"),
-        ("target", "task", "action", "tool", "result", "links"),
+        ("target", "task", "action", "tool", "result"),
     ),
     "tool_call_requested": (
         ("action", "tool"),
-        ("target", "task", "action", "tool", "result", "links"),
+        ("target", "task", "action", "tool", "result"),
     ),
     "tool_result": (
         ("action", "tool", "result"),
-        ("target", "task", "action", "tool", "result", "metrics", "links"),
+        ("target", "task", "action", "tool", "result", "metrics"),
     ),
     "tool_result_received": (
         ("action", "tool", "result"),
-        ("target", "task", "action", "tool", "result", "metrics", "links"),
+        ("target", "task", "action", "tool", "result", "metrics"),
     ),
     "state_change": (
         ("state_change",),
-        ("target", "task", "action", "state_change", "result", "links"),
+        ("target", "task", "action", "state_change", "result"),
     ),
     "policy_check": (
         ("result",),
-        ("target", "task", "action", "result", "links"),
+        ("target", "task", "action", "result"),
     ),
     "application_error": (
         ("result",),
-        ("target", "task", "action", "content", "result", "metrics", "links"),
+        ("target", "task", "action", "content", "result", "metrics"),
     ),
     "llm_api_call": (
         ("action",),
-        ("target", "task", "action", "content", "payload", "result", "metrics", "links"),
+        ("target", "task", "action", "content", "payload", "result", "metrics"),
     ),
     "llm_runtime_completed": (
         ("action", "result", "metrics"),
-        ("task", "action", "payload", "result", "metrics", "links"),
+        ("task", "action", "payload", "result", "metrics"),
     ),
 }
 APPLICATION_EVENTS = frozenset(APP_LAYOUTS)
@@ -202,7 +186,7 @@ application_log_schema: Dict[str, Any] = {
     "name": "application.jsonl",
     "format": "jsonl",
     "log_type": "application",
-    "schema_version": "application.v9",
+    "schema_version": "application.v10",
     "additional_properties": False,
     "type_fields": _application_fields(),
     "event_schemas": {
@@ -373,7 +357,11 @@ def _is_type(value: Any, expected: str) -> bool:
     return True
 
 
-def _normalize_object(value: Any, spec: Dict[str, Any], field_name: str) -> Dict[str, Any]:
+def _normalize_object(
+    value: Any,
+    spec: Dict[str, Any],
+    field_name: str,
+) -> Dict[str, Any]:
     if not isinstance(value, dict):
         if "default" in spec:
             value = copy.deepcopy(spec["default"])
@@ -387,7 +375,8 @@ def _normalize_object(value: Any, spec: Dict[str, Any], field_name: str) -> Dict
         value = {
             name: value[name]
             for name, property_spec in properties.items()
-            if name in value and _is_type(value[name], property_spec.get("type", ""))
+            if name in value
+            and _is_type(value[name], property_spec.get("type", ""))
         }
     else:
         value = dict(value)
@@ -417,11 +406,6 @@ def _normalize_record_with_schema(
     fields = {**schema["type_fields"], **event_schema.get("fields", {})}
     required_fields = set(event_schema.get("required_fields", []))
 
-    if "trace" in fields:
-        trace = dict(source.get("trace") or {}) if isinstance(source.get("trace"), dict) else {}
-        trace["trace_id"] = str(trace.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}")
-        source["trace"] = trace
-
     normalized: Dict[str, Any] = {}
     for name, raw_spec in fields.items():
         spec = copy.deepcopy(raw_spec)
@@ -433,8 +417,8 @@ def _normalize_record_with_schema(
                 )
 
         value = source.get(name)
-        if spec.get("generator") == "event_id" and not value:
-            value = f"{schema['log_type']}_{uuid.uuid4().hex[:12]}"
+        if spec.get("generator") == "trace_id" and not value:
+            value = f"trace_{uuid.uuid4().hex[:12]}"
         if value is None and "default" in spec:
             value = copy.deepcopy(spec["default"])
 
@@ -473,7 +457,10 @@ def current_log_timestamp(timespec: str = "milliseconds") -> str:
     return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}"
 
 
-def normalize_log_timestamp(value: Any = "", timespec: str = "milliseconds") -> str:
+def normalize_log_timestamp(
+    value: Any = "",
+    timespec: str = "milliseconds",
+) -> str:
     if not value:
         return current_log_timestamp(timespec)
     if isinstance(value, datetime):
@@ -506,10 +493,6 @@ def normalize_packet_timestamp(value: Any = "") -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="microseconds").replace(
         "+00:00", "Z"
     )
-
-
-def _trace(trace_id: str = "") -> Dict[str, str]:
-    return {"trace_id": str(trace_id or f"trace_{uuid.uuid4().hex[:12]}")}
 
 
 def _public_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
@@ -569,7 +552,9 @@ class LogManager:
     def start_session(self, scene_name: str) -> str:
         self._close_file_handles()
         safe = scene_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
-        self._session_id = f"{safe}_{datetime.now(_LOG_TZ).strftime('%Y%m%d_%H%M%S_%f')}"
+        self._session_id = (
+            f"{safe}_{datetime.now(_LOG_TZ).strftime('%Y%m%d_%H%M%S_%f')}"
+        )
         self._session_dir = os.path.join(self._log_dir, self._session_id)
         os.makedirs(self._session_dir, exist_ok=True)
         self._set_session_paths()
@@ -594,7 +579,9 @@ class LogManager:
         self._session_active = True
 
     def _set_session_paths(self):
-        self._session_application_path = os.path.join(self._session_dir, "application.jsonl")
+        self._session_application_path = os.path.join(
+            self._session_dir, "application.jsonl"
+        )
         self._session_network_path = os.path.join(self._session_dir, "network.jsonl")
         self._session_system_path = os.path.join(self._session_dir, "system.jsonl")
 
@@ -644,7 +631,11 @@ class LogManager:
         log_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         source_record = dict(record)
-        resolved_type = normalize_log_type(log_type) if log_type else infer_log_type(source_record)
+        resolved_type = (
+            normalize_log_type(log_type)
+            if log_type
+            else infer_log_type(source_record)
+        )
         event = str(source_record.get("event") or f"{resolved_type}_event")
 
         if resolved_type == "network":
@@ -675,7 +666,11 @@ class LogManager:
         log_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         source_record = dict(record)
-        resolved_type = normalize_log_type(log_type) if log_type else infer_log_type(source_record)
+        resolved_type = (
+            normalize_log_type(log_type)
+            if log_type
+            else infer_log_type(source_record)
+        )
         if resolved_type == "network":
             source_record.setdefault("event", "packet")
         else:
@@ -698,18 +693,26 @@ class LogManager:
         self._stats["total"] += 1
         log_type = entry.get(_INTERNAL_LOG_TYPE, "system")
         event = entry.get("event") or entry.get(_INTERNAL_EVENT, "")
-        self._stats["by_log_type"][log_type] = self._stats["by_log_type"].get(log_type, 0) + 1
+        self._stats["by_log_type"][log_type] = (
+            self._stats["by_log_type"].get(log_type, 0) + 1
+        )
         if event:
-            self._stats["by_event"][event] = self._stats["by_event"].get(event, 0) + 1
+            self._stats["by_event"][event] = (
+                self._stats["by_event"].get(event, 0) + 1
+            )
         level = entry.get("level")
         if level:
-            self._stats["by_level"][level] = self._stats["by_level"].get(level, 0) + 1
+            self._stats["by_level"][level] = (
+                self._stats["by_level"].get(level, 0) + 1
+            )
         agent = (
             (entry.get("actor") or {}).get("agent_id")
             or (entry.get("context") or {}).get("observer_agent_id")
         )
         if agent:
-            self._stats["by_agent"][agent] = self._stats["by_agent"].get(agent, 0) + 1
+            self._stats["by_agent"][agent] = (
+                self._stats["by_agent"].get(agent, 0) + 1
+            )
 
     def emit_application_event(
         self,
@@ -726,13 +729,12 @@ class LogManager:
         result=None,
         metrics=None,
         payload=None,
-        links=None,
         trace_id="",
-        parent_event_id="",
     ):
         return self.emit(
             {
                 "event": event,
+                "trace_id": str(trace_id or f"trace_{uuid.uuid4().hex[:12]}"),
                 "actor": actor,
                 "target": target or {},
                 "task": task or {},
@@ -745,9 +747,6 @@ class LogManager:
                 "result": result or {},
                 "metrics": metrics or {},
                 "payload": payload or {},
-                "links": links or {},
-                "trace": _trace(trace_id),
-                "parent_event_id": parent_event_id,
             },
             log_type="application",
         )
@@ -819,7 +818,15 @@ class LogManager:
             log_type="system",
         )
 
-    def system(self, event, message="", level="INFO", agent_id="", details=None, **kwargs):
+    def system(
+        self,
+        event,
+        message="",
+        level="INFO",
+        agent_id="",
+        details=None,
+        **kwargs,
+    ):
         return self.emit_system_event(
             event,
             message,
@@ -864,7 +871,8 @@ class LogManager:
     ):
         normalized_status = (
             "failed"
-            if status and any(marker in status.lower() for marker in ("failed", "error"))
+            if status
+            and any(marker in status.lower() for marker in ("failed", "error"))
             else "success"
         )
         return self.emit_application_event(
@@ -888,14 +896,17 @@ class LogManager:
                 "content_type": "message",
                 "text": content,
                 "summary": content[:120],
-                "size_bytes": payload_len or len((content or "").encode("utf-8")),
+                "size_bytes": payload_len
+                or len((content or "").encode("utf-8")),
                 "redacted": False,
             },
             result={
                 "status": normalized_status,
                 "message": status,
                 "error_code": "",
-                "error_message": "" if normalized_status == "success" else status,
+                "error_message": (
+                    "" if normalized_status == "success" else status
+                ),
                 "retryable": False,
             },
             trace_id=talk,
@@ -917,10 +928,18 @@ class LogManager:
             payload={"turn": turn, "event_name": event_name, "impact": impact},
         )
 
-    def dag_step(self, step_id, agent_id, action, round_num, status="started"):
+    def dag_step(
+        self,
+        step_id,
+        agent_id,
+        action,
+        round_num,
+        status="started",
+    ):
         return self.emit_system_event(
             "dag_step",
-            f"Round {round_num}, Step {step_id}: [{agent_id}] {action} ({status})",
+            f"Round {round_num}, Step {step_id}: "
+            f"[{agent_id}] {action} ({status})",
             kind="debug",
             actor={"agent_id": agent_id},
             action={"name": action, "status": status},
@@ -959,13 +978,16 @@ class LogManager:
 
         if normalized_type:
             results = [
-                entry for entry in results
+                entry
+                for entry in results
                 if entry.get(_INTERNAL_LOG_TYPE) == normalized_type
             ]
         if agent_id:
             results = [
-                entry for entry in results
-                if agent_id in {
+                entry
+                for entry in results
+                if agent_id
+                in {
                     (entry.get("actor") or {}).get("agent_id"),
                     (entry.get("target") or {}).get("agent_id"),
                     (entry.get("context") or {}).get("observer_agent_id"),
@@ -973,30 +995,45 @@ class LogManager:
             ]
         if event:
             results = [
-                entry for entry in results
+                entry
+                for entry in results
                 if (entry.get("event") or entry.get(_INTERNAL_EVENT)) == event
             ]
         if trace_id:
             results = [
-                entry for entry in results
-                if trace_id in {
-                    (entry.get("trace") or {}).get("trace_id"),
-                    ((entry.get("debug") or {}).get("context") or {}).get("trace_id"),
+                entry
+                for entry in results
+                if trace_id
+                in {
+                    entry.get("trace_id"),
+                    ((entry.get("debug") or {}).get("context") or {}).get(
+                        "trace_id"
+                    ),
                     (entry.get("context") or {}).get("trace_id"),
                 }
             ]
         if task_id:
             results = [
-                entry for entry in results
+                entry
+                for entry in results
                 if (entry.get("task") or {}).get("task_id") == task_id
             ]
         if level:
-            results = [entry for entry in results if entry.get("level") == str(level).upper()]
+            results = [
+                entry
+                for entry in results
+                if entry.get("level") == str(level).upper()
+            ]
         if keyword:
             word = keyword.lower()
             results = [
-                entry for entry in results
-                if word in json.dumps(_public_entry(entry), ensure_ascii=False).lower()
+                entry
+                for entry in results
+                if word
+                in json.dumps(
+                    _public_entry(entry),
+                    ensure_ascii=False,
+                ).lower()
             ]
         return [_public_entry(entry) for entry in results[-limit:]]
 
@@ -1008,11 +1045,18 @@ class LogManager:
         return self.query(agent_id=agent_id, limit=limit)
 
     def get_message_log(self, limit=50):
-        return self.query(log_type="application", event="agent_message", limit=limit)
+        return self.query(
+            log_type="application",
+            event="agent_message",
+            limit=limit,
+        )
 
     def export(self, fmt="jsonl", limit=0, log_type=None):
         entries = (
-            self.query(log_type=log_type, limit=limit or self._max)
+            self.query(
+                log_type=log_type,
+                limit=limit or self._max,
+            )
             if log_type
             else self.get_entries(limit or self._max)
         )
@@ -1025,28 +1069,52 @@ class LogManager:
                 for name in entry:
                     if name not in fieldnames:
                         fieldnames.append(name)
-            writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+            writer = csv.DictWriter(
+                output,
+                fieldnames=fieldnames,
+                extrasaction="ignore",
+            )
             writer.writeheader()
             for entry in entries:
                 writer.writerow(
                     {
-                        name: json.dumps(value, ensure_ascii=False)
-                        if isinstance(value, (dict, list))
-                        else value
+                        name: (
+                            json.dumps(value, ensure_ascii=False)
+                            if isinstance(value, (dict, list))
+                            else value
+                        )
                         for name, value in entry.items()
                     }
                 )
             return output.getvalue()
-        return "\n".join(json.dumps(entry, ensure_ascii=False) for entry in entries)
+        return "\n".join(
+            json.dumps(entry, ensure_ascii=False) for entry in entries
+        )
 
-    def export_file(self, filepath, fmt="jsonl", limit=0, log_type=None):
+    def export_file(
+        self,
+        filepath,
+        fmt="jsonl",
+        limit=0,
+        log_type=None,
+    ):
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as stream:
-            stream.write(self.export(fmt, limit, log_type=log_type))
+            stream.write(
+                self.export(
+                    fmt,
+                    limit,
+                    log_type=log_type,
+                )
+            )
         return filepath
 
     def _resolve_session_dir(self, session_id, require_exists=True):
-        if not session_id or session_id in {".", ".."} or Path(session_id).name != session_id:
+        if (
+            not session_id
+            or session_id in {".", ".."}
+            or Path(session_id).name != session_id
+        ):
             raise ValueError("invalid session_id")
         root = Path(self._log_dir).resolve()
         session = (Path(self._log_dir) / session_id).resolve()
@@ -1056,12 +1124,19 @@ class LogManager:
             raise FileNotFoundError(f"log session '{session_id}' not found")
         return session
 
-    def resolve_log_path(self, session_id, log_type, require_exists=True):
+    def resolve_log_path(
+        self,
+        session_id,
+        log_type,
+        require_exists=True,
+    ):
         normalized_type = normalize_log_type(log_type)
         session = self._resolve_session_dir(session_id, require_exists)
         path = session / LOG_TYPE_TO_FILENAME[normalized_type]
         if require_exists and not path.is_file():
-            raise FileNotFoundError(f"{path.name} not found in session '{session_id}'")
+            raise FileNotFoundError(
+                f"{path.name} not found in session '{session_id}'"
+            )
         return str(path)
 
     def get_download_path(self, session_id, log_type):
@@ -1092,7 +1167,10 @@ class LogManager:
         temp = path.with_suffix(".json.tmp")
         temp.write_text(
             json.dumps(
-                {name: bool(values.get(name, True)) for name in sorted(MANAGED_LOG_FILENAMES)},
+                {
+                    name: bool(values.get(name, True))
+                    for name in sorted(MANAGED_LOG_FILENAMES)
+                },
                 indent=2,
             ),
             encoding="utf-8",
@@ -1144,13 +1222,22 @@ class LogManager:
                         "type": log_type,
                         "name": filename,
                         "size_bytes": stat.st_size,
-                        "updated_at": datetime.fromtimestamp(stat.st_mtime, _LOG_TZ).isoformat(),
+                        "updated_at": datetime.fromtimestamp(
+                            stat.st_mtime,
+                            _LOG_TZ,
+                        ).isoformat(),
                         "visible": visible,
                         "path": str(path),
                     }
                 )
             if files:
-                sessions.append({"session": session.name, "path": str(session), "files": files})
+                sessions.append(
+                    {
+                        "session": session.name,
+                        "path": str(session),
+                        "files": files,
+                    }
+                )
         return sessions
 
     def delete_log(self, session_id, log_type):
@@ -1169,7 +1256,8 @@ class LogManager:
             with self._entry_lock:
                 self._entries = deque(
                     (
-                        entry for entry in self._entries
+                        entry
+                        for entry in self._entries
                         if entry.get(_INTERNAL_LOG_TYPE) != normalized_type
                     ),
                     maxlen=self._max,
