@@ -190,7 +190,6 @@ def log_llm_call(
             "duration_ms": round(latency_ms, 1),
             "external": True,
         },
-        "trace": {},
     }
     threading.Thread(
         target=_send,
