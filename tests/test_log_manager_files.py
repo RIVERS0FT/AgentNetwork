@@ -1,3 +1,4 @@
+import json
 import os
 
 import pytest
@@ -45,7 +46,7 @@ def test_layered_recording_without_global_log(manager):
     session_id = manager.start_session("test_scene")
     manager.emit_application_event(
         event="acting",
-        actor={"agent_id": "a1"},
+        agent_id="a1",
         action={"name": "move"},
     )
     manager.emit_network_event(
@@ -57,10 +58,16 @@ def test_layered_recording_without_global_log(manager):
     manager._close_file_handles()
 
     session_dir = os.path.join(manager._log_dir, session_id)
-    assert os.path.isfile(os.path.join(session_dir, "application.jsonl"))
+    application_path = os.path.join(session_dir, "application.jsonl")
+    assert os.path.isfile(application_path)
     assert os.path.isfile(os.path.join(session_dir, "network.jsonl"))
     assert os.path.isfile(os.path.join(session_dir, "system.jsonl"))
     assert not os.path.exists(os.path.join(session_dir, "global.jsonl"))
+
+    with open(application_path, "r", encoding="utf-8") as stream:
+        application_record = json.loads(next(stream))
+    assert application_record["agent_id"] == "a1"
+    assert "actor" not in application_record
 
 
 @pytest.mark.not_llm
