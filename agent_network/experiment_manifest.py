@@ -156,7 +156,7 @@ def _application_counts(session_id: str, trace_id: str) -> tuple[int, dict]:
                 record = json.loads(line)
             except ValueError:
                 continue
-            record_trace = (record.get("trace") or {}).get("trace_id")
+            record_trace = record.get("trace_id")
             if trace_id and record_trace != trace_id:
                 continue
             total += 1
