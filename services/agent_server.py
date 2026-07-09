@@ -206,7 +206,7 @@ async def run_agent(req: RunRequest):
     for event in getattr(result, "application_events", []) or []:
         record = logger.emit_application_event(
             event=event["event"],
-            actor=event.get("actor", {"agent_id": context.agent_id}),
+            agent_id=event.get("agent_id", context.agent_id),
             target=event.get("target", {}),
             task=event.get("task", {"goal": context.task}),
             conversation=event.get("conversation", {}),
@@ -225,7 +225,7 @@ async def run_agent(req: RunRequest):
     if result.status == "error" or result.error:
         record = logger.emit_application_event(
             event="agent_run_failed",
-            actor={"agent_id": context.agent_id, "name": context.agent_name, "backend": BACKEND},
+            agent_id=context.agent_id,
             task={"goal": context.task, "status": "failed"},
             action={"type": "agent_run", "name": f"{BACKEND}_run", "status": "failed"},
             result={"status": "failed", "error_message": result.error or "agent runtime failed"},
