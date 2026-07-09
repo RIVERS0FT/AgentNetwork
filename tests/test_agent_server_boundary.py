@@ -57,24 +57,28 @@ def test_agent_server_uploads_backend_application_events_to_srv():
     assert "_ack_inbox(pending_ids)" in text
 
 
-def test_agent_server_uses_strict_log_manager_interface():
+def test_agent_server_forwards_top_level_application_agent_id():
     text = _text()
 
     assert "from agent_network.log_manager import get_log_manager" in text
     assert "from agent_network.logger import" not in text
     assert "logger = get_log_manager()" in text
-    assert "tick=context.tick" not in text
-    assert "component=context.agent_id" not in text
-    assert 'source="agent"' not in text
-    assert 'debug={"schema_version": "application.v1"' not in text
     assert 'event=event["event"]' in text
+    assert 'agent_id=event.get("agent_id", context.agent_id)' in text
+    assert "agent_id=context.agent_id" in text
     assert 'trace_id=event.get("trace_id", context.trace_id)' in text
     for removed in (
+        'actor=event.get("actor"',
+        'actor={"agent_id": context.agent_id',
         'decision=event.get("decision"',
         'policy=event.get("policy"',
         'links=event.get("links"',
         'parent_event_id=event.get("parent_event_id"',
         'event_id=event.get("event_id"',
+        "tick=context.tick",
+        "component=context.agent_id",
+        'source="agent"',
+        'debug={"schema_version": "application.v1"',
     ):
         assert removed not in text
 
