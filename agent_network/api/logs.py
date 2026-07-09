@@ -247,7 +247,7 @@ async def agent_log_ingest(req: Request):
     try:
         record = log_manager.emit_application_event(
             event=event,
-            actor={"agent_id": from_agent, "name": body.get("agent_name", "")},
+            agent_id=from_agent,
             target={"agent_id": to_agent} if to_agent else {},
             action={
                 "type": action_name,
