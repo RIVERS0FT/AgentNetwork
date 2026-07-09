@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 
@@ -30,7 +31,7 @@ def test_only_current_log_files_are_generated(temp_log_manager):
     communication_record = {
         "event": "agent_message",
         "trace_id": "trace-message",
-        "actor": {"agent_id": "agent_A"},
+        "agent_id": "agent_A",
         "target": {"agent_id": "agent_B"},
         "conversation": {},
         "action": {},
@@ -39,7 +40,7 @@ def test_only_current_log_files_are_generated(temp_log_manager):
     behavior_record = {
         "event": "reasoning",
         "trace_id": "trace-reasoning",
-        "actor": {"agent_id": "agent_B"},
+        "agent_id": "agent_B",
         "action": {},
         "content": {"text": "I decided to wait"},
     }
@@ -74,10 +75,15 @@ def test_only_current_log_files_are_generated(temp_log_manager):
     assert is_agent_message_record(communication_record) is True
     assert is_behavior_record(behavior_record) is True
 
-    temp_log_manager.emit(communication_record)
-    temp_log_manager.emit(behavior_record)
+    application_records = [
+        temp_log_manager.emit(communication_record),
+        temp_log_manager.emit(behavior_record),
+    ]
     temp_log_manager.emit(network_record)
     temp_log_manager._close_file_handles()
+
+    assert all("agent_id" in record for record in application_records)
+    assert all("actor" not in record for record in application_records)
 
     session_dir = temp_log_manager._session_dir
     assert os.path.exists(os.path.join(session_dir, "application.jsonl"))
@@ -86,3 +92,8 @@ def test_only_current_log_files_are_generated(temp_log_manager):
     assert not os.path.exists(os.path.join(session_dir, "global.jsonl"))
     assert not os.path.exists(os.path.join(session_dir, "communication.jsonl"))
     assert not os.path.exists(os.path.join(session_dir, "behavior.jsonl"))
+
+    with open(os.path.join(session_dir, "application.jsonl"), "r", encoding="utf-8") as stream:
+        persisted = [json.loads(line) for line in stream]
+    assert {record["agent_id"] for record in persisted} == {"agent_A", "agent_B"}
+    assert all("actor" not in record for record in persisted)
