@@ -28,6 +28,7 @@ REMOVED_NAMES = {
     "normalize_application_record",
     "normalize_network_record",
     "normalize_system_record",
+    "_trace",
 }
 
 
@@ -73,7 +74,7 @@ def test_repository_uses_log_manager_import_directly():
 
 
 @pytest.mark.not_llm
-def test_log_manager_interfaces_have_no_ignored_parameters():
+def test_log_manager_interfaces_have_no_removed_application_parameters():
     application_parameters = inspect.signature(
         LogManager.emit_application_event
     ).parameters
@@ -92,8 +93,12 @@ def test_log_manager_interfaces_have_no_ignored_parameters():
         "debug",
         "policy",
         "decision",
+        "links",
+        "parent_event_id",
+        "event_id",
     ):
         assert name not in application_parameters
+    assert "trace_id" in application_parameters
 
     assert set(network_parameters) == {
         "self",
