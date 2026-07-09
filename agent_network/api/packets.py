@@ -39,7 +39,7 @@ def _application_events(session_id: str, trace_id: str, agent_id: Optional[str])
                         event = json.loads(line)
                     except ValueError:
                         continue
-                    event_trace = (event.get("trace") or {}).get("trace_id")
+                    event_trace = event.get("trace_id")
                     event_agent = (event.get("actor") or {}).get("agent_id")
                     if event_trace == trace_id and (not agent_id or event_agent == agent_id):
                         events.append(event)
@@ -151,8 +151,8 @@ async def correlate(
         protocols = Counter(packet["protocol"] for packet in matched)
         directions = Counter(packet["direction"] for packet in matched)
         correlations.append({
-            "event_id": event.get("event_id", ""),
             "event": event.get("event", ""),
+            "timestamp": event.get("timestamp", ""),
             "agent_id": event_agent_id,
             "started_at_epoch": started_at,
             "ended_at_epoch": ended_at,
