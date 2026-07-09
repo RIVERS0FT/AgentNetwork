@@ -35,6 +35,7 @@ x-claude-env: &claude-env
   <<: *common-llm-env
   TZ: Asia/Shanghai
   AGENT_BACKEND: claude-code
+  AGENT_STRICT_BACKEND_SDK: ${AGENT_STRICT_BACKEND_SDK:-1}
   SERVER_URL: http://srv:8000
   AGENT_COMM_MODE: direct
   LOG_DOCKER_HTTP: "0"
@@ -56,7 +57,7 @@ x-openclaw-env: &openclaw-env
   OPENCLAW_API_KEY: ${OPENCLAW_API_KEY:-}
   OPENCLAW_OPENAI_BASE_URL: ${OPENCLAW_OPENAI_BASE_URL:-}
   OPENCLAW_DEFAULT_AGENT_ID: ${OPENCLAW_DEFAULT_AGENT_ID:-}
-  OPENCLAW_SESSION_NAME: ${OPENCLAW_SESSION_NAME:-}
+  OPENCLAW_SESSION_PREFIX: ${OPENCLAW_SESSION_PREFIX:-}
 
 x-claude: &claude
   build: { context: ., dockerfile: docker/Dockerfile.claude }
