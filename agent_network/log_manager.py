@@ -49,14 +49,6 @@ def _object(
 
 
 FIELD_LIBRARY: Dict[str, Dict[str, Any]] = {
-    "actor": _object(
-        properties={
-            "agent_id": {"type": "string"},
-            "name": {"type": "string"},
-            "role": {"type": "string"},
-            "backend": {"type": "string"},
-        }
-    ),
     "target": _object(
         properties={
             "agent_id": {"type": "string"},
@@ -106,7 +98,7 @@ def _application_fields() -> Dict[str, Any]:
             "required": True,
             "generator": "trace_id",
         },
-        "actor": copy.deepcopy(FIELD_LIBRARY["actor"]),
+        "agent_id": {"type": "string", "required": True},
     }
 
 
@@ -186,7 +178,7 @@ application_log_schema: Dict[str, Any] = {
     "name": "application.jsonl",
     "format": "jsonl",
     "log_type": "application",
-    "schema_version": "application.v10",
+    "schema_version": "application.v11",
     "additional_properties": False,
     "type_fields": _application_fields(),
     "event_schemas": {
@@ -226,7 +218,6 @@ def _network_fields() -> Dict[str, Any]:
             properties=NETWORK_CONTEXT_FIELDS,
             required_properties=list(NETWORK_CONTEXT_FIELDS),
         ),
-        # TShark packet["_source"]["layers"] is stored verbatim.
         "network": _object(),
         "raw": _object(
             properties=NETWORK_RAW_FIELDS,
@@ -357,11 +348,7 @@ def _is_type(value: Any, expected: str) -> bool:
     return True
 
 
-def _normalize_object(
-    value: Any,
-    spec: Dict[str, Any],
-    field_name: str,
-) -> Dict[str, Any]:
+def _normalize_object(value: Any, spec: Dict[str, Any], field_name: str) -> Dict[str, Any]:
     if not isinstance(value, dict):
         if "default" in spec:
             value = copy.deepcopy(spec["default"])
@@ -375,8 +362,7 @@ def _normalize_object(
         value = {
             name: value[name]
             for name, property_spec in properties.items()
-            if name in value
-            and _is_type(value[name], property_spec.get("type", ""))
+            if name in value and _is_type(value[name], property_spec.get("type", ""))
         }
     else:
         value = dict(value)
@@ -405,8 +391,8 @@ def _normalize_record_with_schema(
 
     fields = {**schema["type_fields"], **event_schema.get("fields", {})}
     required_fields = set(event_schema.get("required_fields", []))
-
     normalized: Dict[str, Any] = {}
+
     for name, raw_spec in fields.items():
         spec = copy.deepcopy(raw_spec)
         if name in required_fields:
@@ -457,10 +443,7 @@ def current_log_timestamp(timespec: str = "milliseconds") -> str:
     return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}"
 
 
-def normalize_log_timestamp(
-    value: Any = "",
-    timespec: str = "milliseconds",
-) -> str:
+def normalize_log_timestamp(value: Any = "", timespec: str = "milliseconds") -> str:
     if not value:
         return current_log_timestamp(timespec)
     if isinstance(value, datetime):
@@ -705,9 +688,12 @@ class LogManager:
             self._stats["by_level"][level] = (
                 self._stats["by_level"].get(level, 0) + 1
             )
+        debug_context = (entry.get("debug") or {}).get("context") or {}
+        system_actor = debug_context.get("actor") or {}
         agent = (
-            (entry.get("actor") or {}).get("agent_id")
+            entry.get("agent_id")
             or (entry.get("context") or {}).get("observer_agent_id")
+            or system_actor.get("agent_id")
         )
         if agent:
             self._stats["by_agent"][agent] = (
@@ -717,7 +703,7 @@ class LogManager:
     def emit_application_event(
         self,
         event,
-        actor,
+        agent_id,
         target=None,
         task=None,
         conversation=None,
@@ -735,7 +721,7 @@ class LogManager:
             {
                 "event": event,
                 "trace_id": str(trace_id or f"trace_{uuid.uuid4().hex[:12]}"),
-                "actor": actor,
+                "agent_id": str(agent_id),
                 "target": target or {},
                 "task": task or {},
                 "conversation": conversation or {},
@@ -838,7 +824,7 @@ class LogManager:
     def acting(self, agent_id, action, result=None, **kwargs):
         return self.emit_application_event(
             "acting",
-            {"agent_id": agent_id},
+            agent_id,
             action={"name": action, "status": "success"},
             content={"kw": kwargs},
             result=result or {},
@@ -847,7 +833,7 @@ class LogManager:
     def reasoning(self, agent_id, prompt_snippet, result=None):
         return self.emit_application_event(
             "reasoning",
-            {"agent_id": agent_id},
+            agent_id,
             action={"name": "reasoning", "status": "completed"},
             content={
                 "content_type": "reasoning",
@@ -877,7 +863,7 @@ class LogManager:
         )
         return self.emit_application_event(
             "agent_message",
-            {"agent_id": from_id},
+            from_id,
             target={"agent_id": to},
             conversation={
                 "conversation_id": talk,
@@ -896,17 +882,14 @@ class LogManager:
                 "content_type": "message",
                 "text": content,
                 "summary": content[:120],
-                "size_bytes": payload_len
-                or len((content or "").encode("utf-8")),
+                "size_bytes": payload_len or len((content or "").encode("utf-8")),
                 "redacted": False,
             },
             result={
                 "status": normalized_status,
                 "message": status,
                 "error_code": "",
-                "error_message": (
-                    "" if normalized_status == "success" else status
-                ),
+                "error_message": "" if normalized_status == "success" else status,
                 "retryable": False,
             },
             trace_id=talk,
@@ -928,18 +911,10 @@ class LogManager:
             payload={"turn": turn, "event_name": event_name, "impact": impact},
         )
 
-    def dag_step(
-        self,
-        step_id,
-        agent_id,
-        action,
-        round_num,
-        status="started",
-    ):
+    def dag_step(self, step_id, agent_id, action, round_num, status="started"):
         return self.emit_system_event(
             "dag_step",
-            f"Round {round_num}, Step {step_id}: "
-            f"[{agent_id}] {action} ({status})",
+            f"Round {round_num}, Step {step_id}: [{agent_id}] {action} ({status})",
             kind="debug",
             actor={"agent_id": agent_id},
             action={"name": action, "status": status},
@@ -988,9 +963,13 @@ class LogManager:
                 for entry in results
                 if agent_id
                 in {
-                    (entry.get("actor") or {}).get("agent_id"),
+                    entry.get("agent_id"),
                     (entry.get("target") or {}).get("agent_id"),
                     (entry.get("context") or {}).get("observer_agent_id"),
+                    (
+                        ((entry.get("debug") or {}).get("context") or {}).get("actor")
+                        or {}
+                    ).get("agent_id"),
                 }
             ]
         if event:
@@ -1006,9 +985,7 @@ class LogManager:
                 if trace_id
                 in {
                     entry.get("trace_id"),
-                    ((entry.get("debug") or {}).get("context") or {}).get(
-                        "trace_id"
-                    ),
+                    ((entry.get("debug") or {}).get("context") or {}).get("trace_id"),
                     (entry.get("context") or {}).get("trace_id"),
                 }
             ]
@@ -1029,11 +1006,7 @@ class LogManager:
             results = [
                 entry
                 for entry in results
-                if word
-                in json.dumps(
-                    _public_entry(entry),
-                    ensure_ascii=False,
-                ).lower()
+                if word in json.dumps(_public_entry(entry), ensure_ascii=False).lower()
             ]
         return [_public_entry(entry) for entry in results[-limit:]]
 
@@ -1053,10 +1026,7 @@ class LogManager:
 
     def export(self, fmt="jsonl", limit=0, log_type=None):
         entries = (
-            self.query(
-                log_type=log_type,
-                limit=limit or self._max,
-            )
+            self.query(log_type=log_type, limit=limit or self._max)
             if log_type
             else self.get_entries(limit or self._max)
         )
@@ -1069,11 +1039,7 @@ class LogManager:
                 for name in entry:
                     if name not in fieldnames:
                         fieldnames.append(name)
-            writer = csv.DictWriter(
-                output,
-                fieldnames=fieldnames,
-                extrasaction="ignore",
-            )
+            writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
             for entry in entries:
                 writer.writerow(
@@ -1087,26 +1053,12 @@ class LogManager:
                     }
                 )
             return output.getvalue()
-        return "\n".join(
-            json.dumps(entry, ensure_ascii=False) for entry in entries
-        )
+        return "\n".join(json.dumps(entry, ensure_ascii=False) for entry in entries)
 
-    def export_file(
-        self,
-        filepath,
-        fmt="jsonl",
-        limit=0,
-        log_type=None,
-    ):
+    def export_file(self, filepath, fmt="jsonl", limit=0, log_type=None):
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as stream:
-            stream.write(
-                self.export(
-                    fmt,
-                    limit,
-                    log_type=log_type,
-                )
-            )
+            stream.write(self.export(fmt, limit, log_type=log_type))
         return filepath
 
     def _resolve_session_dir(self, session_id, require_exists=True):
@@ -1124,12 +1076,7 @@ class LogManager:
             raise FileNotFoundError(f"log session '{session_id}' not found")
         return session
 
-    def resolve_log_path(
-        self,
-        session_id,
-        log_type,
-        require_exists=True,
-    ):
+    def resolve_log_path(self, session_id, log_type, require_exists=True):
         normalized_type = normalize_log_type(log_type)
         session = self._resolve_session_dir(session_id, require_exists)
         path = session / LOG_TYPE_TO_FILENAME[normalized_type]
