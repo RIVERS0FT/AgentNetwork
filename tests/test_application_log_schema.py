@@ -24,6 +24,7 @@ REMOVED_FIELDS = {
     "decision",
     "links",
     "trace",
+    "actor",
     "event_id",
     "parent_event_id",
 }
@@ -31,7 +32,7 @@ APPLICATION_IDENTITY_FIELDS = {
     "timestamp",
     "event",
     "trace_id",
-    "actor",
+    "agent_id",
 }
 SYSTEM_ONLY_FIELDS = {"level", "source", "debug"}
 NETWORK_TOP_LEVEL_FIELDS = {
@@ -121,9 +122,15 @@ def test_each_schema_owns_timestamp_field():
 def test_application_schema_is_strict_and_uses_one_event_source():
     schemas = application_log_schema["event_schemas"]
 
-    assert application_log_schema["schema_version"] == "application.v10"
+    assert application_log_schema["schema_version"] == "application.v11"
     assert set(application_log_schema["type_fields"]) == APPLICATION_IDENTITY_FIELDS
     assert application_log_schema["type_fields"]["trace_id"]["generator"] == "trace_id"
+    assert application_log_schema["type_fields"]["agent_id"] == {
+        "type": "string",
+        "required": True,
+    }
+    assert "actor" not in application_log_schema["type_fields"]
+    assert "actor" not in application_log_schema.get("field_library", {})
     assert "*" not in schemas
     assert set(schemas) == set(APPLICATION_EVENTS)
     assert "reasoning" in schemas
@@ -137,19 +144,20 @@ def test_application_schema_is_strict_and_uses_one_event_source():
         assert "policy" not in event_schema["fields"]
         assert "decision" not in event_schema["fields"]
         assert "links" not in event_schema["fields"]
+        assert "actor" not in event_schema["fields"]
 
 
 @pytest.mark.not_llm
 def test_application_schema_field_boundary(manager):
     record = manager.emit_application_event(
         event="acting",
-        actor={"agent_id": "test_agent"},
+        agent_id="test_agent",
         action={"name": "test_action"},
         trace_id="trace-test",
     )
 
     assert record["event"] == "acting"
-    assert record["actor"]["agent_id"] == "test_agent"
+    assert record["agent_id"] == "test_agent"
     assert record["trace_id"] == "trace-test"
     assert APPLICATION_IDENTITY_FIELDS <= set(record)
     assert not (REMOVED_FIELDS & set(record))
@@ -157,15 +165,35 @@ def test_application_schema_field_boundary(manager):
 
 
 @pytest.mark.not_llm
+def test_application_agent_id_is_required(manager):
+    with pytest.raises(TypeError):
+        manager.emit_application_event(
+            event="acting",
+            action={"name": "test_action"},
+        )
+
+    with pytest.raises(ValueError, match="agent_id"):
+        manager.ingest(
+            {
+                "event": "acting",
+                "trace_id": "trace-test",
+                "action": {"name": "test_action"},
+            },
+            log_type="application",
+        )
+
+
+@pytest.mark.not_llm
 def test_application_trace_id_is_generated(manager):
     record = manager.emit_application_event(
         event="acting",
-        actor={"agent_id": "test_agent"},
+        agent_id="test_agent",
         action={"name": "test_action"},
     )
 
     assert record["trace_id"].startswith("trace_")
     assert "trace" not in record
+    assert "actor" not in record
 
 
 @pytest.mark.not_llm
@@ -187,7 +215,7 @@ def test_network_schema_field_boundary(manager):
     assert record["context"] == NETWORK_CONTEXT
     assert record["network"] == NETWORK_LAYERS
     assert record["raw"] == NETWORK_RAW
-    assert not ({"event", "actor", "trace_id"} & set(record))
+    assert not ({"event", "actor", "agent_id", "trace_id"} & set(record))
     assert not (SYSTEM_ONLY_FIELDS & set(record))
 
 
@@ -206,7 +234,7 @@ def test_system_schema_uses_final_source_and_kind(manager):
     assert record["debug"]["event"] == "debug_snapshot"
     assert record["debug"]["kind"] == "debug"
     assert record["payload"]["message"] == "snapshot ready"
-    assert not ({"event_id", "parent_event_id", "actor", "trace", "trace_id"} & set(record))
+    assert not ({"event_id", "parent_event_id", "actor", "agent_id", "trace", "trace_id"} & set(record))
     assert not (REMOVED_FIELDS & set(record))
 
 
@@ -215,7 +243,7 @@ def test_persisted_jsonl_has_no_removed_application_fields(manager):
     session_id = manager.start_session("schema_test")
     manager.emit_application_event(
         event="acting",
-        actor={"agent_id": "a1"},
+        agent_id="a1",
         action={"name": "move"},
         trace_id="trace-application",
     )
@@ -230,6 +258,7 @@ def test_persisted_jsonl_has_no_removed_application_fields(manager):
     with open(application_path, "r", encoding="utf-8") as stream:
         record = json.loads(next(stream))
     assert record["trace_id"] == "trace-application"
+    assert record["agent_id"] == "a1"
     assert not (REMOVED_FIELDS & set(record))
 
     network_path = os.path.join(manager._log_dir, session_id, "network.jsonl")
@@ -249,6 +278,7 @@ def test_agent_message_uses_application_fields_only(manager):
         talk="trace-message",
     )
 
+    assert record["agent_id"] == "a1"
     assert record["action"]["duration_ms"] == 12.5
     assert record["content"]["size_bytes"] == 100
     assert record["trace_id"] == "trace-message"
@@ -263,11 +293,14 @@ def test_reasoning_and_acting_helpers(manager):
     reasoning = manager.reasoning("a1", "prompt", {"choice": "A"})
 
     assert action["event"] == "acting"
+    assert action["agent_id"] == "a1"
     assert action["content"]["kw"] == {"extra": "data"}
     assert reasoning["event"] == "reasoning"
+    assert reasoning["agent_id"] == "a1"
     assert reasoning["content"]["text"] == "prompt"
     assert reasoning["result"] == {"choice": "A"}
     assert "decision" not in reasoning
+    assert "actor" not in reasoning
     assert not hasattr(manager, "agent_action")
     assert not hasattr(manager, "agent_decide")
 
@@ -276,14 +309,16 @@ def test_reasoning_and_acting_helpers(manager):
 def test_policy_check_uses_result_field(manager):
     record = manager.emit_application_event(
         event="policy_check",
-        actor={"agent_id": "a1"},
+        agent_id="a1",
         action={"name": "communication_check"},
         result={"status": "allowed", "rule": "communication_matrix"},
     )
 
     assert record["event"] == "policy_check"
+    assert record["agent_id"] == "a1"
     assert record["result"]["status"] == "allowed"
     assert "policy" not in record
+    assert "actor" not in record
 
 
 @pytest.mark.not_llm
@@ -292,6 +327,6 @@ def test_unknown_application_events_are_rejected(manager, event):
     with pytest.raises(ValueError, match="unknown application event"):
         manager.emit_application_event(
             event=event,
-            actor={"agent_id": "a1"},
+            agent_id="a1",
             action={"name": event},
         )
