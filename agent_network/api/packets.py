@@ -40,7 +40,7 @@ def _application_events(session_id: str, trace_id: str, agent_id: Optional[str])
                     except ValueError:
                         continue
                     event_trace = event.get("trace_id")
-                    event_agent = (event.get("actor") or {}).get("agent_id")
+                    event_agent = event.get("agent_id")
                     if event_trace == trace_id and (not agent_id or event_agent == agent_id):
                         events.append(event)
     except (OSError, ValueError):
@@ -139,7 +139,7 @@ async def correlate(
     correlations = []
     margin = window_ms / 1000
     for event in events:
-        event_agent_id = (event.get("actor") or {}).get("agent_id", "")
+        event_agent_id = event.get("agent_id", "")
         ended_at = _event_epoch(event.get("timestamp", ""))
         duration_ms = (event.get("action") or {}).get("duration_ms") or (event.get("metrics") or {}).get("duration_ms") or 0
         started_at = ended_at - (float(duration_ms) / 1000)
