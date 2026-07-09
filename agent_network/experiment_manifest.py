@@ -160,10 +160,10 @@ def _application_counts(session_id: str, trace_id: str) -> tuple[int, dict]:
             if trace_id and record_trace != trace_id:
                 continue
             total += 1
-            actor_id = (record.get("actor") or {}).get("agent_id")
+            source_id = record.get("agent_id")
             target_id = (record.get("target") or {}).get("agent_id")
             participants = {
-                agent_id for agent_id in (actor_id, target_id) if agent_id
+                agent_id for agent_id in (source_id, target_id) if agent_id
             } or {"unknown"}
             for agent_id in participants:
                 by_agent[agent_id] = by_agent.get(agent_id, 0) + 1
