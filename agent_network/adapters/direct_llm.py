@@ -124,12 +124,7 @@ def _completed_event(agent_context: AgentContext, output_text: str, backend_name
     return {
         "event": "agent_run_completed",
         "trace_id": agent_context.trace_id,
-        "actor": {
-            "agent_id": agent_context.agent_id,
-            "name": agent_context.agent_name,
-            "role": agent_context.role,
-            "backend": backend_name,
-        },
+        "agent_id": agent_context.agent_id,
         "task": {"goal": agent_context.task, "status": "completed"},
         "action": {"type": "agent_run", "name": f"{backend_name}_run", "status": "success"},
         "content": {
@@ -160,7 +155,7 @@ def run_direct_llm(agent_context: AgentContext, backend_name: str, system_prompt
         llm_event = {
             "event": "llm_runtime_completed",
             "trace_id": agent_context.trace_id,
-            "actor": {"agent_id": agent_context.agent_id, "backend": backend_name},
+            "agent_id": agent_context.agent_id,
             "action": {
                 "type": "llm_call",
                 "name": "direct_llm_request",
@@ -196,8 +191,6 @@ def run_direct_llm(agent_context: AgentContext, backend_name: str, system_prompt
             final_message="",
             error=f"{backend_name} direct LLM error: {exc}",
         )
-
-
 
 
 def _skill_context(agent_context: AgentContext) -> list[dict]:
