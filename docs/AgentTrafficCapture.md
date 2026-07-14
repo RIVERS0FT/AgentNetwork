@@ -21,24 +21,27 @@ data/pcap/<session_id>/
 
 capture manifest 映射逻辑 Agent 与容器 ID、容器 IP、后端、trace、过滤器、网络 profile、时间、状态、文件大小和 SHA-256。
 
-experiment manifest 记录 seed、scene 文件哈希、Agent 镜像身份、脱敏 LLM 配置、scheduler、网络配置、抓包生命周期和停止原因。
+目标 experiment manifest 记录 seed、scene 文件哈希、Agent 镜像身份、脱敏 LLM 配置、`event_driven` 调度模式、持续时间、资源限制、事件统计、网络配置、抓包生命周期和停止原因。
 
 ## 3. 抓包生命周期
 
-1. `srv` 完成容器分配和网络 profile 配置；
+1. `srv` 完成容器分配、资源限制和网络 profile 配置；
 2. 调用每个 Agent `/capture/start`；
-3. 所有 Agent 抓包成功后才进入轮次执行；
-4. 每轮后检查 `/capture/status`；
-5. 结束时调用 `/capture/stop`，写入最终 manifest 和 SHA-256；
-6. 执行 session quality audit。
+3. 所有 Agent 抓包成功后才启动事件调度器；
+4. 每次事件处理完成后以及健康检查周期内检查 `/capture/status`；
+5. 仿真达到持续时间、空闲完成、任务完成、用户停止或异常终止时调用 `/capture/stop`；
+6. 写入最终 manifest 和 SHA-256；
+7. 执行 session quality audit。
 
 `PCAP_MAX_BYTES` 默认每 Agent 1 GiB。tcpdump 异常退出或超过限制时，抓包健康失败，仿真以 `capture_incomplete` 或启动失败结束。
 
 ## 4. 消息与应用证据
 
-初始任务只在第一轮投递。后续轮次只唤醒有 inbox 消息的 Agent；成功处理的 inbox snapshot 按内部消息 ID 确认，执行期间新到消息继续留在队列。
+初始任务在仿真启动时转换为调度事件。Agent 收到消息后，消息作为新的事件进入目标 Agent 的队列；同一逻辑 Agent 默认单任务串行，执行期间新到消息继续保留等待处理。
 
 Agent 直连消息保留 source、target、channel 和 trace。发送端 MCP Tool 事件与接收端 `agent_message_received` 都写入 application 日志，并使用同一 trace。
+
+应用证据应使用事件 ID、消息 ID、Tool call ID 和 trace 表达关联，不得使用固定执行批次编号或 tick 作为权威因果标识。
 
 ## 5. 可选网络条件
 
@@ -93,7 +96,9 @@ Docker 服务运行后执行：
 python scripts/verify_agent_traffic.py --scene ap_deployment --seed 1234
 ```
 
-命令只有在仿真完成，且 Agent 覆盖、运行身份、非空 PCAP、application event 和 SHA-256 检查通过时才返回成功。
+命令只有在仿真完成，且 Agent 覆盖、运行身份、非空 PCAP、application event、事件统计和 SHA-256 检查通过时才返回成功。
+
+事件驱动迁移完成后，验收脚本必须支持持续时间和资源限制参数，并拒绝仍包含旧调度计数字段的目标 manifest。
 
 ## 9. 设计约束
 
@@ -101,4 +106,6 @@ python scripts/verify_agent_traffic.py --scene ap_deployment --seed 1234
 - 禁止把合成流量字段计入真实 packet 总量；
 - 抓包不完整的 session 不得报告为完整实验；
 - 网络统计必须注明观察口径；
-- 跨层关联必须保留“时间窗口推断”说明。
+- 跨层关联必须保留“时间窗口推断”说明；
+- 抓包健康检查不得依赖固定执行批次边界；
+- 达到仿真持续时间后必须停止继续派发事件并进入抓包收尾。
