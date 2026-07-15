@@ -16,6 +16,8 @@
 | [ADR-019-持续时间约束的事件驱动仿真.md](ADR-019-持续时间约束的事件驱动仿真.md) | 禁止恢复固定执行计数调度的权威设计决策 |
 | [统一文件管理设计.md](统一文件管理设计.md) | 剧本、日志、PCAP、manifest 和归档共用的文件写入、读取、压缩、解压、下载与可见性基础设施 |
 | [ADR-020-统一文件管理入口.md](ADR-020-统一文件管理入口.md) | 禁止业务模块新增直接文件操作和独立可见性机制的权威设计决策 |
+| [统一抓包模块设计.md](统一抓包模块设计.md) | 抓包会话、Agent 本地 tcpdump、失败回滚、健康检查、PCAP 投影、分析与下载统一入口 |
+| [ADR-021-统一抓包生命周期入口.md](ADR-021-统一抓包生命周期入口.md) | 禁止恢复分散抓包控制、模拟网络事实和非幂等网络日志投影的权威决策 |
 | [通信与网络仿真设计.md](通信与网络仿真设计.md) | DirectBus、通信矩阵、Linux `tc`、真实抓包 |
 | [日志与实验数据设计.md](日志与实验数据设计.md) | `application.jsonl`、`network.jsonl`、`system.jsonl`、PCAP、实验清单与质量审计 |
 | [AgentTrafficCapture.md](AgentTrafficCapture.md) | Agent runtime 真实抓包、分析 API 与端到端验收 |
@@ -27,16 +29,17 @@
 ## 当前权威实现入口
 
 - 控制面：`services/server.py`
-- 仿真编排：`agent_network/api/simulations.py`
+- 仿真编排：`agent_network/api/managed_simulations.py`
 - Agent 容器运行时：`services/agent_server.py`
 - 容器分配与 Agent 执行：`agent_network/agent_management.py`
 - Agent 直连通信：`agent_network/comm.py`
 - Tool MCP：`agent_network/mcp_server.py`
 - Skill 源文件 MCP：`agent_network/skill_mcp_server.py`
 - 统一文件管理基础设施：`agent_network/file_management/`
+- 统一抓包管理：`agent_network/capture_management/`
+- 抓包外部 API：`agent_network/api/captures.py`
 - 日志模式与持久化：`agent_network/log_manager.py`
-- 真实抓包：`agent_network/full_packet_capture.py`
-- PCAP 查询分析：`agent_network/real_packet_store.py`
+- PCAP 内部解码分析：`agent_network/real_packet_store.py`
 - 网络仿真：`agent_network/network_emulation.py`
 - 实验可追溯性与质量审计：`agent_network/experiment_manifest.py`
 
