@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+from typing import List
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -33,7 +33,7 @@ class CaptureConfigRequest(BaseModel):
     projection_mode: str = "finalize"
 
     def to_domain(self) -> CaptureConfig:
-        return CaptureConfig(**self.model_dump())
+        return CaptureConfig(**self.dict())
 
 
 class CaptureCreateRequest(BaseModel):
@@ -42,7 +42,7 @@ class CaptureCreateRequest(BaseModel):
     trace_id: str = ""
     capture_id: str = ""
     targets: List[CaptureTargetRequest]
-    config: CaptureConfigRequest = CaptureConfigRequest()
+    config: CaptureConfigRequest = Field(default_factory=CaptureConfigRequest)
 
 
 class CaptureStopRequest(BaseModel):
@@ -60,7 +60,7 @@ async def create_capture(req: CaptureCreateRequest):
             simulation_id=req.simulation_id,
             session_id=req.session_id,
             trace_id=req.trace_id,
-            targets=[target.model_dump() for target in req.targets],
+            targets=[target.dict() for target in req.targets],
             config=req.config.to_domain(),
             capture_id=req.capture_id,
         )
@@ -82,16 +82,23 @@ async def start_capture(capture_id: str):
 @router.get("/{capture_id}")
 async def capture_status(capture_id: str, refresh: bool = Query(default=False)):
     try:
-        session = await asyncio.to_thread(manager.check_health, capture_id) if refresh else manager.get_session(capture_id)
+        session = (
+            await asyncio.to_thread(manager.check_health, capture_id)
+            if refresh
+            else manager.get_session(capture_id)
+        )
     except KeyError as exc:
         raise _not_found(exc) from exc
     return session.to_dict()
 
 
 @router.post("/{capture_id}/stop")
-async def stop_capture(capture_id: str, req: CaptureStopRequest = CaptureStopRequest()):
+async def stop_capture(capture_id: str, req: CaptureStopRequest = None):
+    req = req or CaptureStopRequest()
     try:
-        return (await asyncio.to_thread(manager.stop_session, capture_id, req.reason)).to_dict()
+        return (
+            await asyncio.to_thread(manager.stop_session, capture_id, req.reason)
+        ).to_dict()
     except KeyError as exc:
         raise _not_found(exc) from exc
 
@@ -99,7 +106,10 @@ async def stop_capture(capture_id: str, req: CaptureStopRequest = CaptureStopReq
 @router.get("/{capture_id}/artifacts")
 async def capture_artifacts(capture_id: str):
     try:
-        return {"capture_id": capture_id, "artifacts": manager.list_artifacts(capture_id)}
+        return {
+            "capture_id": capture_id,
+            "artifacts": manager.list_artifacts(capture_id),
+        }
     except KeyError as exc:
         raise _not_found(exc) from exc
 
@@ -111,7 +121,9 @@ async def capture_packets(
     limit: int = Query(default=100, ge=1, le=100_000),
 ):
     try:
-        packets = await asyncio.to_thread(manager.query_packets, capture_id, agent_id, limit)
+        packets = await asyncio.to_thread(
+            manager.query_packets, capture_id, agent_id, limit
+        )
     except KeyError as exc:
         raise _not_found(exc) from exc
     return {"capture_id": capture_id, "total": len(packets), "packets": packets}
@@ -132,13 +144,18 @@ async def capture_analysis(
     max_packets: int = Query(default=100_000, ge=1, le=1_000_000),
 ):
     try:
-        return await asyncio.to_thread(manager.analyze, capture_id, agent_id, max_packets)
+        return await asyncio.to_thread(
+            manager.analyze, capture_id, agent_id, max_packets
+        )
     except KeyError as exc:
         raise _not_found(exc) from exc
 
 
 @router.get("/{capture_id}/quality")
-async def capture_quality(capture_id: str, verify_hashes: bool = Query(default=True)):
+async def capture_quality(
+    capture_id: str,
+    verify_hashes: bool = Query(default=True),
+):
     try:
         return await asyncio.to_thread(manager.audit, capture_id, verify_hashes)
     except KeyError as exc:
