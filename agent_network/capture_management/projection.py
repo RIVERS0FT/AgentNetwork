@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 from typing import Optional
 
 from agent_network.file_management import FileManager, get_file_manager, stable_resource_id
@@ -42,6 +41,18 @@ class PacketProjectionService:
             digest.update(refreshed.sha256.encode("ascii"))
         return digest.hexdigest(), sources
 
+    @staticmethod
+    def _existing_log_ids(logger, session_id: str) -> set[str]:
+        try:
+            records = logger.read_session_records(session_id, "network")
+        except Exception:
+            return set()
+        return {
+            str(record.get("log_id"))
+            for record in records
+            if record.get("log_id")
+        }
+
     def project(self, session: CaptureSession, *, force: bool = False) -> dict:
         fingerprint, sources = self._source_fingerprint(session)
         projection_id = self.projection_resource_id(session.capture_id)
@@ -56,7 +67,10 @@ class PacketProjectionService:
                 value = self.files.read_json(existing.resource_id, allow_hidden=True)
             except (OSError, ValueError):
                 value = {}
-            if value.get("source_fingerprint") == fingerprint and value.get("status") == "complete":
+            if (
+                value.get("source_fingerprint") == fingerprint
+                and value.get("status") == "complete"
+            ):
                 return {**value, "skipped": True}
 
         from agent_network.real_packet_store import query_packets
@@ -64,17 +78,24 @@ class PacketProjectionService:
         packets = query_packets(session_id=session.session_id, limit=1_000_000)
         logger = get_log_manager()
         try:
-            logger.set_session_dir(str(self.files.resolve_path("logs", session.session_id)))
+            logger.set_session_dir(
+                str(self.files.resolve_path("logs", session.session_id))
+            )
         except Exception:
             pass
 
+        existing_log_ids = self._existing_log_ids(logger, session.session_id)
         written = 0
+        already_present = 0
         errors = []
         per_agent_index: dict[str, int] = {}
         source_by_name = {item["logical_name"]: item for item in sources}
         for packet in packets:
             if not packet.get("parsed"):
-                errors.append(packet.get("error") or f"unparsed packet in {packet.get('pcap_name', '')}")
+                errors.append(
+                    packet.get("error")
+                    or f"unparsed packet in {packet.get('pcap_name', '')}"
+                )
                 continue
             agent_id = str(packet.get("agent_id") or "unknown")
             packet_index = per_agent_index.get(agent_id, 0)
@@ -88,6 +109,9 @@ class PacketProjectionService:
                 source.get("sha256", ""),
                 str(packet_index),
             )
+            if log_id in existing_log_ids:
+                already_present += 1
+                continue
             logger.emit_network_event(
                 timestamp=packet.get("timestamp", ""),
                 log_id=log_id,
@@ -98,8 +122,16 @@ class PacketProjectionService:
                     "observer_agent_id": agent_id,
                     "runtime_container": packet.get("runtime_container", ""),
                     "interface": packet.get("interface", "any"),
-                    "captured_length": int(packet.get("captured_length") or packet.get("ip_payload_bytes") or 0),
-                    "original_length": int(packet.get("original_length") or packet.get("ip_payload_bytes") or 0),
+                    "captured_length": int(
+                        packet.get("captured_length")
+                        or packet.get("ip_payload_bytes")
+                        or 0
+                    ),
+                    "original_length": int(
+                        packet.get("original_length")
+                        or packet.get("ip_payload_bytes")
+                        or 0
+                    ),
                     "truncated": bool(packet.get("truncated", False)),
                 },
                 network={
@@ -114,7 +146,9 @@ class PacketProjectionService:
                     "src_agent": packet.get("src_agent", ""),
                     "dst_agent": packet.get("dst_agent", ""),
                     "tcp_flags": packet.get("tcp_flags", ""),
-                    "ip_payload_bytes": int(packet.get("ip_payload_bytes") or 0),
+                    "ip_payload_bytes": int(
+                        packet.get("ip_payload_bytes") or 0
+                    ),
                     "pcap_resource_id": packet.get("pcap_resource_id", ""),
                 },
                 raw={
@@ -126,6 +160,7 @@ class PacketProjectionService:
                     "sha256": hashlib.sha256(raw_bytes).hexdigest(),
                 },
             )
+            existing_log_ids.add(log_id)
             written += 1
 
         result = {
@@ -136,6 +171,7 @@ class PacketProjectionService:
             "source_fingerprint": fingerprint,
             "sources": sources,
             "packets_written": written,
+            "packets_already_present": already_present,
             "errors": errors,
             "skipped": False,
         }
