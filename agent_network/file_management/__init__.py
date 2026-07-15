@@ -10,6 +10,7 @@ from .file_manager import (
     ResourceNotFoundError,
     ResourceNotReadyError,
     UnsafePathError,
+    stable_resource_id,
 )
 from .models import DownloadDescriptor, FileResource
 
@@ -25,4 +26,5 @@ __all__ = [
     "create_project_file_manager",
     "get_file_manager",
     "reset_file_manager",
+    "stable_resource_id",
 ]
