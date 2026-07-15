@@ -14,6 +14,8 @@
 | [剧本管理类操作设计.md](剧本管理类操作设计.md) | 剧本资源、批量处理任务和归档资源类的领域函数、状态迁移与带函数类图 |
 | [仿真编排与容器运行时设计.md](仿真编排与容器运行时设计.md) | setup/launch、事件驱动调度、持续时间控制、容器池、资源限制、终止与失败处理 |
 | [ADR-019-持续时间约束的事件驱动仿真.md](ADR-019-持续时间约束的事件驱动仿真.md) | 禁止恢复固定执行计数调度的权威设计决策 |
+| [统一文件管理设计.md](统一文件管理设计.md) | 剧本、日志、PCAP、manifest 和归档共用的文件写入、读取、压缩、解压、下载与可见性基础设施 |
+| [ADR-020-统一文件管理入口.md](ADR-020-统一文件管理入口.md) | 禁止业务模块新增直接文件操作和独立可见性机制的权威设计决策 |
 | [通信与网络仿真设计.md](通信与网络仿真设计.md) | DirectBus、通信矩阵、Linux `tc`、真实抓包 |
 | [日志与实验数据设计.md](日志与实验数据设计.md) | `application.jsonl`、`network.jsonl`、`system.jsonl`、PCAP、实验清单与质量审计 |
 | [AgentTrafficCapture.md](AgentTrafficCapture.md) | Agent runtime 真实抓包、分析 API 与端到端验收 |
@@ -31,6 +33,7 @@
 - Agent 直连通信：`agent_network/comm.py`
 - Tool MCP：`agent_network/mcp_server.py`
 - Skill 源文件 MCP：`agent_network/skill_mcp_server.py`
+- 统一文件管理基础设施：`agent_network/file_management/`
 - 日志模式与持久化：`agent_network/log_manager.py`
 - 真实抓包：`agent_network/full_packet_capture.py`
 - PCAP 查询分析：`agent_network/real_packet_store.py`
