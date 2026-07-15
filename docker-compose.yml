@@ -6,11 +6,15 @@ x-common-llm-env: &common-llm-env
   SIMULATION_SEED: ${SIMULATION_SEED:-}
   LOG_FULL_PCAP: ${LOG_FULL_PCAP:-1}
   LOG_LLM_API: ${LOG_LLM_API:-0}
-  # Default captures Agent runtime traffic only. Set to 1 for debugging srv
-  # orchestration, capture-control, and log-ingest traffic as well.
   AGENT_CAPTURE_INCLUDE_CONTROL_PLANE: ${AGENT_CAPTURE_INCLUDE_CONTROL_PLANE:-0}
   AGENT_NETWORK_EMULATION: ${AGENT_NETWORK_EMULATION:-1}
+  DATA_DIR: /app/data
+  SCENE_DIR: /app/scenes
+  LOG_DIR: /app/data/logs
   PCAP_DIR: /app/data/pcap
+  ARCHIVE_DIR: /app/data/archives
+  FILE_TEMP_DIR: /app/data/tmp
+  FILE_REGISTRY_PATH: /app/data/pcap/.file_registry.json
   PCAP_MAX_BYTES: ${PCAP_MAX_BYTES:-1073741824}
   PCAP_SHA256: ${PCAP_SHA256:-1}
   LLM_API_KEY: ${LLM_API_KEY:-}
@@ -96,8 +100,7 @@ services:
     command: ["python", "services/server.py", "--host", "0.0.0.0"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./data/logs:/app/data/logs
-      - ./data/pcap:/app/data/pcap
+      - ./data:/app/data
       - ./web/public:/app/web/public
       - ./scenes:/app/scenes
       - ./services/server.py:/app/services/server.py
