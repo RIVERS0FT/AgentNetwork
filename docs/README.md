@@ -19,6 +19,8 @@
 | [ADR-020-统一文件管理入口.md](ADR-020-统一文件管理入口.md) | 禁止业务模块新增直接文件操作和独立可见性机制的权威设计决策 |
 | [统一抓包模块设计.md](统一抓包模块设计.md) | 抓包会话、Agent 本地 tcpdump、失败回滚、健康检查、PCAP 投影、分析与下载统一入口 |
 | [ADR-021-统一抓包生命周期入口.md](ADR-021-统一抓包生命周期入口.md) | 禁止恢复分散抓包控制、模拟网络事实和非幂等网络日志投影的权威决策 |
+| [统一日志管理设计.md](统一日志管理设计.md) | LogManager 批量下载、删除、解析、文件可见性和会话可见性统一设计 |
+| [ADR-023-LogManager统一批量管理与会话可见性.md](ADR-023-LogManager统一批量管理与会话可见性.md) | 固定唯一 LogManager、批量结果和父子可见性门控规则 |
 | [通信与网络仿真设计.md](通信与网络仿真设计.md) | DirectBus、通信矩阵、Linux `tc`、真实抓包 |
 | [日志与实验数据设计.md](日志与实验数据设计.md) | `application.jsonl`、`network.jsonl`、`system.jsonl`、PCAP、实验清单与质量审计 |
 | [AgentTrafficCapture.md](AgentTrafficCapture.md) | Agent runtime 真实抓包、分析 API 与端到端验收 |
@@ -41,7 +43,9 @@
 - 统一文件管理基础设施：`agent_network/file_management/`
 - 统一抓包管理：`agent_network/capture_management/`
 - 抓包外部 API：`agent_network/api/captures.py`
-- 日志模式与持久化：`agent_network/log_manager.py`
+- 日志模式、写入与实时索引：`agent_network/log_manager.py`
+- 日志批量管理与会话可见性：`agent_network/log_batch.py`
+- 日志批量外部 API：`agent_network/api/log_batches.py`
 - PCAP 内部解码分析：`agent_network/real_packet_store.py`
 - 网络仿真：`agent_network/network_emulation.py`
 - 实验可追溯性与质量审计：`agent_network/experiment_manifest.py`
