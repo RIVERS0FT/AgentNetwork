@@ -13,12 +13,17 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from agent_network import state
-from agent_network.agent_management import AgentRegistry
+from agent_network.agent_management import AgentRegistry, get_runtime
 from agent_network.api import simulations as orchestration
 from agent_network.capture_management import CaptureConfig, CaptureState, get_capture_coordinator
 from agent_network.comm_management import A2A_MEDIA_TYPE, CommManager
 from agent_network.file_management import FileManagerError, ResourceNotFoundError, ResourceNotReadyError
 from agent_network.scene_management import SceneManager, get_scene_storage
+from agent_network.simulation_management import (
+    SimulationManager,
+    SimulationManagerError,
+    SimulationRuntimeConfig,
+)
 from agent_network.task_management import TaskManager, TaskManagerError
 
 router = APIRouter()
@@ -44,9 +49,27 @@ simulation_comm = CommManager(
 )
 
 
+class AgentResourceRequest(BaseModel):
+    cpu_cores: float = Field(default=1.0, ge=0.1, le=64)
+    memory_mb: int = Field(default=1024, ge=128, le=1048576)
+    pids_limit: int = Field(default=128, ge=16, le=65536)
+
+
+class SimulationResourceRequest(BaseModel):
+    default_agent: AgentResourceRequest = Field(default_factory=AgentResourceRequest)
+    agent_overrides: dict[str, AgentResourceRequest] = Field(default_factory=dict)
+    max_parallel_agents: int = Field(default=4, ge=1, le=256)
+
+
 class SimulationRunRequest(BaseModel):
     scene: str = ""
     seed: Optional[int] = None
+    duration_seconds: int = Field(default=3600, ge=1, le=604800)
+    agent_timeout_seconds: int = Field(default=300, ge=1, le=86400)
+    graceful_stop_timeout_seconds: int = Field(default=30, ge=0, le=3600)
+    resource_allocation: SimulationResourceRequest = Field(
+        default_factory=SimulationResourceRequest
+    )
 
 
 class SceneBatchUploadItemRequest(BaseModel):
@@ -89,9 +112,10 @@ def _agent_directory() -> dict[str, str]:
 
 
 def _require_simulation(simulation_id: str) -> None:
-    active_id = str(getattr(orchestration.logger, "_session_id", "") or "")
-    if active_id and simulation_id != active_id:
-        raise HTTPException(status_code=404, detail="simulation not found")
+    try:
+        simulation_manager.get_run(simulation_id)
+    except SimulationManagerError as exc:
+        raise _simulation_error(exc) from exc
 
 
 def _require_simulation_task(simulation_id: str, task_id: str) -> dict:
@@ -190,21 +214,13 @@ orchestration._capture = _capture_adapter
 orchestration._capture_health = _capture_health_adapter
 
 
-@router.post("/simulations/setup")
-async def setup_simulation(req: SimulationRunRequest):
-    if not req.scene:
-        raise HTTPException(status_code=400, detail="scene is required")
-    try:
-        scene_def = scene_manager.build_definition(req.scene)
-    except (ValueError, OSError, FileManagerError) as exc:
-        raise _http_error(exc) from exc
-    if req.seed is None:
-        configured_seed = os.environ.get("SIMULATION_SEED", "").strip()
-        pending_seed = int(configured_seed) if configured_seed else random.SystemRandom().randrange(1, 2 ** 31)
-    else:
-        pending_seed = req.seed
-    random.seed(pending_seed)
-    orchestration._pending_seed = pending_seed
+def _model_dict(model: BaseModel) -> dict:
+    return model.model_dump() if hasattr(model, "model_dump") else model.dict()
+
+
+def _setup_managed_run(scene_def, seed: int) -> dict:
+    random.seed(seed)
+    orchestration._pending_seed = seed
     orchestration._pending_config = orchestration._get_effective_llm_config()
     state.current_scene_name = scene_def.scene_key
     state.active_tools_module = None
@@ -213,21 +229,139 @@ async def setup_simulation(req: SimulationRunRequest):
     return result
 
 
-@router.post("/simulations/launch")
-async def launch_simulation():
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(
-        None,
-        orchestration._launch_containers,
+def _run_managed_simulation(run) -> dict:
+    return orchestration._launch_containers(
         orchestration._pending_config,
         orchestration._pending_scene_def,
+        simulation_run=run,
     )
+
+
+simulation_manager = SimulationManager(
+    scene_loader=scene_manager.build_definition,
+    setup_handler=_setup_managed_run,
+    run_handler=_run_managed_simulation,
+    runtime_provider=get_runtime,
+)
+
+
+def _simulation_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, SimulationManagerError):
+        status = 404 if exc.code == "SIMULATION_NOT_FOUND" else 409
+        return HTTPException(status_code=status, detail=str(exc))
+    return _http_error(exc)
+
+
+def _runtime_config(req: SimulationRunRequest) -> SimulationRuntimeConfig:
+    return SimulationRuntimeConfig.from_dict(
+        {
+            "duration_seconds": req.duration_seconds,
+            "agent_timeout_seconds": req.agent_timeout_seconds,
+            "graceful_stop_timeout_seconds": req.graceful_stop_timeout_seconds,
+            "resource_allocation": _model_dict(req.resource_allocation),
+        }
+    )
+
+
+def _configure_run(req: SimulationRunRequest):
+    if not req.scene:
+        raise HTTPException(status_code=400, detail="scene is required")
+    try:
+        seed = req.seed
+        if seed is None:
+            configured_seed = os.environ.get("SIMULATION_SEED", "").strip()
+            seed = int(configured_seed) if configured_seed else None
+        return simulation_manager.configure(
+            req.scene,
+            _runtime_config(req),
+            seed=seed,
+        )
+    except HTTPException:
+        raise
+    except (ValueError, OSError, FileManagerError, RuntimeError) as exc:
+        raise _simulation_error(exc) from exc
+
+
+@router.post("/simulations/setup")
+async def setup_simulation(req: SimulationRunRequest):
+    run = _configure_run(req)
+    return {
+        **run.setup,
+        "simulation_id": run.simulation_id,
+        "simulation": run.to_dict(),
+    }
+
+
+@router.post("/simulations/configure")
+async def configure_simulation(req: SimulationRunRequest):
+    return _configure_run(req).to_dict()
+
+
+@router.post("/simulations/launch")
+async def launch_simulation():
+    current = simulation_manager.current()
+    if not current:
+        raise HTTPException(status_code=409, detail="no configured simulation")
+    try:
+        run = await asyncio.to_thread(
+            simulation_manager.start, current.simulation_id
+        )
+    except SimulationManagerError as exc:
+        raise _simulation_error(exc) from exc
+    return {**run.result, "simulation": run.to_dict()}
+
+
+@router.post("/simulations/{simulation_id}/start")
+async def start_simulation(simulation_id: str):
+    try:
+        return (await asyncio.to_thread(
+            simulation_manager.start, simulation_id
+        )).to_dict()
+    except SimulationManagerError as exc:
+        raise _simulation_error(exc) from exc
 
 
 @router.post("/simulations/stop")
 async def stop_simulation():
-    state.simulation_stop_requested = True
-    return {"status": "stop_requested"}
+    current = simulation_manager.current()
+    if not current:
+        raise HTTPException(status_code=404, detail="simulation not found")
+    return (await asyncio.to_thread(
+        simulation_manager.stop, current.simulation_id
+    )).to_dict()
+
+
+@router.post("/simulations/{simulation_id}/stop")
+async def stop_simulation_by_id(simulation_id: str):
+    try:
+        return (await asyncio.to_thread(
+            simulation_manager.stop, simulation_id
+        )).to_dict()
+    except SimulationManagerError as exc:
+        raise _simulation_error(exc) from exc
+
+
+@router.post("/simulations/{simulation_id}/force-stop")
+async def force_stop_simulation(simulation_id: str):
+    try:
+        return (await asyncio.to_thread(
+            simulation_manager.force_stop, simulation_id
+        )).to_dict()
+    except SimulationManagerError as exc:
+        raise _simulation_error(exc) from exc
+
+
+@router.get("/simulations")
+async def list_simulations():
+    return [run.to_dict() for run in simulation_manager.list_runs()]
+
+
+@router.get("/simulations/{simulation_id}")
+async def get_simulation(simulation_id: str):
+    try:
+        return simulation_manager.get_run(simulation_id).to_dict()
+    except SimulationManagerError as exc:
+        raise _simulation_error(exc) from exc
 
 
 @router.post("/simulations/{simulation_id}/agents/{agent_id}/tasks")

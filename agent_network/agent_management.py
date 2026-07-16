@@ -337,11 +337,41 @@ class ContainerRuntime:
             volumes[source] = {"bind": destination, "mode": mode}
         return volumes
 
-    def _get_or_create_container(self, backend: str) -> str:
+    @staticmethod
+    def _resource_kwargs(resource_limits: Dict[str, Any] = None) -> Dict[str, Any]:
+        limits = resource_limits or {}
+        kwargs: Dict[str, Any] = {}
+        if limits.get("cpu_cores") is not None:
+            kwargs["nano_cpus"] = int(float(limits["cpu_cores"]) * 1_000_000_000)
+        if limits.get("memory_mb") is not None:
+            kwargs["mem_limit"] = f"{int(limits['memory_mb'])}m"
+        if limits.get("pids_limit") is not None:
+            kwargs["pids_limit"] = int(limits["pids_limit"])
+        return kwargs
+
+    def apply_resource_limits(
+        self, container_name: str, resource_limits: Dict[str, Any] = None
+    ) -> None:
+        kwargs = self._resource_kwargs(resource_limits)
+        if not kwargs or not self._docker_client:
+            return
+        try:
+            self._docker_client.containers.get(container_name).update(**kwargs)
+        except Exception as exc:
+            raise RuntimeError(
+                f"could not apply resources to '{container_name}': {exc}"
+            ) from exc
+
+    def _get_or_create_container(
+        self,
+        backend: str,
+        resource_limits: Dict[str, Any] = None,
+    ) -> str:
         backend = self._normalize_backend(backend)
         config = self.BACKEND_CONFIG[backend]
         for name in self._get_running_containers(backend):
             if name not in self._used_containers:
+                self.apply_resource_limits(name, resource_limits)
                 self._used_containers.add(name)
                 return name
 
@@ -427,6 +457,7 @@ class ContainerRuntime:
                 network=self.NETWORK_NAME,
                 cap_add=["NET_RAW", "NET_ADMIN"],
                 volumes=self._dynamic_volumes(),
+                **self._resource_kwargs(resource_limits),
             )
             self._used_containers.add(auto_name)
             print(
@@ -449,10 +480,13 @@ class ContainerRuntime:
         skill_refs: List[str] = None,
         allowed_tools: List[str] = None,
         scene_key: str = "",
+        resource_limits: Dict[str, Any] = None,
     ) -> ContainerAgent:
         try:
             backend = self._normalize_backend(backend)
-            container_name = self._get_or_create_container(backend)
+            container_name = self._get_or_create_container(
+                backend, resource_limits=resource_limits
+            )
             url = f"http://{container_name}:{self.INTERNAL_PORT}"
             status = "idle"
             assign_error = ""
@@ -574,7 +608,9 @@ class ContainerRuntime:
                 response = requests.post(
                     f"{assignment.url}/run",
                     json=request_context,
-                    timeout=300,
+                    timeout=max(
+                        1, int(request_context.get("agent_timeout_seconds", 300))
+                    ),
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -595,7 +631,14 @@ class ContainerRuntime:
                 return {"agent_id": assignment.agent_id, "error": str(exc)}
 
         results = []
-        with ThreadPoolExecutor(max_workers=min(10, len(assignments))) as pool:
+        max_parallel = max(
+            1,
+            min(
+                int((context or {}).get("max_parallel_agents", 10)),
+                len(assignments),
+            ),
+        )
+        with ThreadPoolExecutor(max_workers=max_parallel) as pool:
             futures = {
                 pool.submit(run_agent, assignment): assignment
                 for assignment in assignments
@@ -617,6 +660,86 @@ class ContainerRuntime:
             if assignment.status != "error":
                 self._set_status(assignment, "error")
         self.agents.clear()
+
+    def cancel_agent_tasks(
+        self, states: Set[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Cancel matching A2A tasks so their registered callbacks are emitted."""
+        terminal = {
+            "TASK_STATE_COMPLETED",
+            "TASK_STATE_FAILED",
+            "TASK_STATE_CANCELED",
+            "TASK_STATE_REJECTED",
+        }
+        headers = {"A2A-Version": "1.0", "Accept": "application/a2a+json"}
+        results = []
+        for assignment in list(self.agents.values()):
+            canceled = 0
+            errors = []
+            if assignment.url:
+                try:
+                    response = requests.get(
+                        f"{assignment.url}/a2a/v1/tasks",
+                        headers=headers,
+                        timeout=3,
+                    )
+                    response.raise_for_status()
+                    for task in (response.json().get("tasks") or []):
+                        task_state = (task.get("status") or {}).get("state", "")
+                        if task_state in terminal or (states and task_state not in states):
+                            continue
+                        cancel = requests.post(
+                            f"{assignment.url}/a2a/v1/tasks/{task['id']}:cancel",
+                            headers=headers,
+                            timeout=3,
+                        )
+                        cancel.raise_for_status()
+                        canceled += 1
+                except Exception as exc:
+                    errors.append(str(exc))
+            results.append(
+                {
+                    "agent_id": assignment.agent_id,
+                    "canceled": canceled,
+                    "errors": errors,
+                }
+            )
+        return results
+
+    def force_stop_all(self) -> List[Dict[str, Any]]:
+        """Kill only containers assigned to the active simulation."""
+        cancellation = {
+            item["agent_id"]: item for item in self.cancel_agent_tasks()
+        }
+        results = []
+        assignments = list(self.agents.values())
+        for assignment in assignments:
+            stopped = False
+            error = ""
+            if assignment.container_name and self._docker_client:
+                try:
+                    container = self._docker_client.containers.get(
+                        assignment.container_name
+                    )
+                    container.kill()
+                    stopped = True
+                except Exception as exc:
+                    error = str(exc)
+            self._set_status(assignment, "error")
+            results.append(
+                {
+                    "agent_id": assignment.agent_id,
+                    "container_name": assignment.container_name,
+                    "stopped": stopped,
+                    "error": error,
+                    "task_cancellation": cancellation.get(
+                        assignment.agent_id, {}
+                    ),
+                }
+            )
+        self.agents.clear()
+        self._used_containers.clear()
+        return results
 
     def reset(self):
         self.stop_all()

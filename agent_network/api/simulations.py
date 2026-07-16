@@ -335,6 +335,7 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
 def _launch_containers(
     config: Dict[str, str],
     scene_def: SceneDefinition = None,
+    simulation_run=None,
 ) -> Dict[str, Any]:
     global _comm_matrix
 
@@ -352,6 +353,9 @@ def _launch_containers(
 
     runtime = get_runtime()
     runtime.reset()
+    resource_plan = getattr(simulation_run, "resource_plan", {}) or {}
+    runtime_config = getattr(simulation_run, "runtime_config", None)
+    control = getattr(simulation_run, "control", None)
     created_cas = []
     assign_errors = []
 
@@ -365,6 +369,9 @@ def _launch_containers(
             skill_refs=definition.skill_refs,
             allowed_tools=definition.allowed_tools,
             scene_key=scene_def.scene_key,
+            resource_limits=(resource_plan.get("agents") or {}).get(
+                definition.agent_id.lower(), {}
+            ),
         )
         created_cas.append((assignment, definition.tasks))
         if assignment.status == "error":
@@ -471,15 +478,24 @@ def _launch_containers(
             "stalemate_rounds": state.termination_config.get(
                 "stalemate_rounds", 3
             ),
+            "duration_seconds": getattr(
+                runtime_config, "duration_seconds", 0
+            ),
+            "agent_timeout_seconds": getattr(
+                runtime_config, "agent_timeout_seconds", 300
+            ),
+            "resource_plan": resource_plan,
         },
     )
 
     if assign_errors:
+        rollback = runtime.force_stop_all()
         finalize_manifest(
             session_id,
             status="error",
             stop_reason="assignment_failed",
             assignment_errors=assign_errors,
+            resource_rollback=rollback,
         )
         quality = audit_session(session_id, verify_hashes=True)
         return {
@@ -490,6 +506,7 @@ def _launch_containers(
             ),
             "session_id": session_id,
             "assignment_errors": assign_errors,
+            "resource_rollback": rollback,
             "quality": quality,
         }
 
@@ -602,6 +619,12 @@ def _launch_containers(
 
     try:
         for round_num in range(max_rounds):
+            if control and control.force_stop_event.is_set():
+                stop_reason = control.reason or "forced_stop"
+                break
+            if control and control.stop_event.is_set():
+                stop_reason = control.reason or "user_stopped"
+                break
             if state.simulation_stop_requested:
                 stop_reason = "user_stopped"
                 break
@@ -637,10 +660,23 @@ def _launch_containers(
                 "tick": state.current_turn,
                 "simulation_seed": _pending_seed,
                 "network_mode": "a2a",
+                "max_parallel_agents": int(
+                    resource_plan.get("max_parallel_agents", 10)
+                ),
+                "agent_timeout_seconds": getattr(
+                    runtime_config, "agent_timeout_seconds", 300
+                ),
             }
             round_result = runtime.run_round(context)
             results_log.append(round_result)
             results = round_result.get("results", [])
+
+            if control and control.force_stop_event.is_set():
+                stop_reason = control.reason or "forced_stop"
+                break
+            if control and control.stop_event.is_set():
+                stop_reason = control.reason or "user_stopped"
+                break
 
             capture_health = _capture_health(
                 created_cas,
@@ -713,18 +749,23 @@ def _launch_containers(
             "Agent network profiles cleared",
             details=network_clear,
         )
+        forced = bool(control and control.force_stop_event.is_set())
         for assignment, _ in created_cas:
-            if assignment.status != "error":
+            if forced:
+                runtime._set_status(assignment, "error")
+            elif assignment.status != "error":
                 runtime._set_status(assignment, "idle")
 
+    controlled_stop = bool(control and control.stop_event.is_set())
     experiment_status = (
         "complete"
         if (
             not run_error
+            and not controlled_stop
             and stop_reason != "capture_incomplete"
             and capture_stop["failed"] == 0
         )
-        else "error"
+        else ("stopped" if controlled_stop and not run_error else "error")
     )
     finalize_manifest(
         session_id,
@@ -740,7 +781,9 @@ def _launch_containers(
     quality = audit_session(session_id, verify_hashes=True)
 
     return {
-        "status": "error" if run_error else "completed",
+        "status": (
+            "error" if run_error else ("stopped" if controlled_stop else "completed")
+        ),
         "error": run_error,
         "simulation_name": scene_def.title,
         "scene_key": scene_def.scene_key,

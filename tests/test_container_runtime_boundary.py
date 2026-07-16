@@ -27,6 +27,18 @@ def test_container_runtime_accepts_claude_code_backend(monkeypatch):
     assert runtime._normalize_backend("claude-code") == "claude-code"
 
 
+def test_container_runtime_converts_resource_limits_to_docker_options(monkeypatch):
+    runtime = _runtime(monkeypatch)
+
+    assert runtime._resource_kwargs(
+        {"cpu_cores": 1.5, "memory_mb": 768, "pids_limit": 96}
+    ) == {
+        "nano_cpus": 1_500_000_000,
+        "mem_limit": "768m",
+        "pids_limit": 96,
+    }
+
+
 def test_container_runtime_rejects_unknown_backend(monkeypatch):
     runtime = _runtime(monkeypatch)
 

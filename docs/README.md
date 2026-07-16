@@ -16,6 +16,7 @@
 | [ADR-022-SceneManager统一剧本管理入口.md](ADR-022-SceneManager统一剧本管理入口.md) | 固定 SceneManager 批量编排、占用检查、逐项隔离和 SceneStorage/FileManager 职责边界 |
 | [仿真编排与容器运行时设计.md](仿真编排与容器运行时设计.md) | setup/launch、事件驱动调度、持续时间控制、容器池、资源限制、终止与失败处理 |
 | [ADR-019-持续时间约束的事件驱动仿真.md](ADR-019-持续时间约束的事件驱动仿真.md) | 禁止恢复固定执行计数调度的权威设计决策 |
+| [ADR-026-SimulationManager统一仿真生命周期.md](ADR-026-SimulationManager统一仿真生命周期.md) | 固定统一仿真配置、启动、优雅停止、强制停止、持续时间与资源分配入口 |
 | [统一文件管理设计.md](统一文件管理设计.md) | 剧本、日志、PCAP、manifest 和归档共用的文件写入、读取、压缩、解压、下载与可见性基础设施 |
 | [ADR-020-统一文件管理入口.md](ADR-020-统一文件管理入口.md) | 禁止业务模块新增直接文件操作和独立可见性机制的权威设计决策 |
 | [统一抓包模块设计.md](统一抓包模块设计.md) | 抓包会话、Agent 本地 tcpdump、失败回滚、健康检查、PCAP 投影、分析与下载统一入口 |
@@ -35,7 +36,9 @@
 ## 当前权威实现入口
 
 - 控制面：`services/server.py`
-- 仿真编排：`agent_network/api/managed_simulations.py`
+- 统一仿真管理包：`agent_network/simulation_management/`
+- 仿真生命周期管理：`agent_network/simulation_management/simulation_manager.py`
+- 仿真 HTTP 适配：`agent_network/api/managed_simulations.py`
 - 统一剧本管理包：`agent_network/scene_management/`
 - 统一剧本业务管理：`agent_network/scene_management/scene_manager.py`
 - 单剧本存储与解析：`agent_network/scene_management/scene_storage.py`
