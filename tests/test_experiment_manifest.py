@@ -14,12 +14,12 @@ def test_manifest_audit_and_bundle_use_managed_resources(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(data)); monkeypatch.setenv("SCENE_DIR", str(scenes)); monkeypatch.setenv("LOG_DIR", str(data / "logs")); monkeypatch.setenv("PCAP_DIR", str(data / "pcap")); monkeypatch.setenv("ARCHIVE_DIR", str(data / "archives")); monkeypatch.setenv("FILE_TEMP_DIR", str(data / "tmp")); monkeypatch.setenv("FILE_REGISTRY_PATH", str(data / "pcap/.file_registry.json"))
     from agent_network.file_management import get_file_manager, reset_file_manager, stable_resource_id
     reset_file_manager()
-    from agent_network.scene_storage import SceneStorage
+    from agent_network.scene_management import SceneStorage
     folder = scenes / "demo"; folder.mkdir(parents=True)
     (folder / "meta_and_roles.json").write_text(json.dumps({"scenario_metadata":{"title":"Demo"},"roles":{"a1":{"name":"A1","identity":"worker","model_backbone":"openclaw"}}}))
     (folder / "instances_and_skills.json").write_text(json.dumps({"container_instances":{"a1":{"skill_refs":[],"tool_refs":[],"tasks":[]}}}))
     (folder / "network_topology.json").write_text(json.dumps({"topology":[]})); SceneStorage().get_resource("demo")
-    from agent_network.log_manager import LogManager
+    from agent_network.log_management import LogManager
     logs = LogManager(log_dir=str(data / "logs")); logs.reset(); logs._log_dir=str(data / "logs"); session = logs.start_session("demo")
     from agent_network.experiment_manifest import create_manifest, finalize_manifest, audit_session, build_bundle
     create_manifest(session_id=session, scene_name="demo", scene_dir=folder, trace_id="trace-1", seed=1, agents=[{"agent_id":"a1","image_id":"sha256:image"}], llm_config={}, scheduler={"mode":"event_driven"})

@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from agent_network.file_management import FileManagerError
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 
 
 router = APIRouter()

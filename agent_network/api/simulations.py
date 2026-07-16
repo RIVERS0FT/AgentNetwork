@@ -18,10 +18,10 @@ from agent_network.experiment_manifest import (
     create_manifest,
     finalize_manifest,
 )
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 from agent_network.network_emulation import normalize_profile
 from agent_network.real_packet_store import packet_stats
-from agent_network.scene_def import AgentDef, SceneDefinition, get_api_config
+from agent_network.scene_management import AgentDef, SceneDefinition, get_api_config
 
 
 router = APIRouter()

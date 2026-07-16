@@ -189,7 +189,7 @@ Content-Type: application/a2a+json
 | `agent_network/api/system.py` | 对外报告 `network_mode=a2a` |
 | `docker-compose.yml` | 所有服务环境统一声明 `AGENT_COMM_MODE=a2a` |
 | `services/message_bus.py` | 继续作为 410 废弃桩，不参与数据面 |
-| `agent_network/log_manager.py` | 消息日志默认类型为 `a2a`，不记录广播标志 |
+| `agent_network/log_management/log_manager.py` | 消息日志默认类型为 `a2a`，不记录广播标志 |
 | `web/public/dashboard.js` | 只为成功的点对点 `send_message` 绘制通信轨迹 |
 
 新增通信入口时必须更新此表，不能形成第二套发送实现。

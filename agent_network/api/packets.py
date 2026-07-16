@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from agent_network.experiment_manifest import audit_session, build_bundle, load_manifest, write_analysis_result, write_quality_result
 from agent_network.file_management import FileManagerError, get_file_manager
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 from agent_network.real_packet_store import analyze_packets, packet_stats, pcap_resource, query_packets, wireshark_lines
 router = APIRouter(); logger = get_log_manager(); files = get_file_manager()
 

@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from agent_network.log_manager import LogManager
+from agent_network.log_management import LogManager
 
 
 NETWORK_CONTEXT = {

@@ -19,7 +19,7 @@ from typing import List, Dict, Any
 import uvicorn
 import requests
 
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 from agent_network.comm_management import (
     A2A_PROTOCOL_VERSION,
     CommManager,

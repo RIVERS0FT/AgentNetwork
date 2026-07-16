@@ -34,7 +34,7 @@ def sanitize_config(value: Any):
 
 def _scene_provenance(scene_name: str, scene_dir: Path | None=None) -> dict:
     del scene_dir
-    from agent_network.scene_storage import get_scene_storage
+    from agent_network.scene_management import get_scene_storage
     resource = get_scene_storage().get_resource(scene_name, allow_hidden=True)
     return get_file_manager().tree_manifest(resource.resource_id)
 
@@ -65,7 +65,7 @@ def load_manifest(session_id: str) -> dict:
 def _application_counts(session_id: str, trace_id: str) -> tuple[int, dict]:
     try: session_id = _validate_session_id(session_id)
     except ValueError: return (0, {})
-    from agent_network.log_manager import get_log_manager
+    from agent_network.log_management import get_log_manager
     try: records = get_log_manager().read_session_records(session_id, 'application')
     except (FileNotFoundError, ValueError, FileManagerError): return (0, {})
     total = 0; by_agent: dict[str, int] = {}

@@ -101,7 +101,7 @@ class LogBatchMixin:
 
     @staticmethod
     def _normalize_ref(item: dict[str, Any]) -> tuple[str, str]:
-        from agent_network import log_manager as legacy
+        from agent_network.log_management import log_manager as legacy
 
         session_id = str(item.get("session_id") or "").strip()
         if not session_id:
@@ -153,7 +153,7 @@ class LogBatchMixin:
         """Persist JSONL while inheriting the parent session visibility."""
         if not self._session_active:
             return
-        from agent_network import log_manager as legacy
+        from agent_network.log_management import log_manager as legacy
 
         manager = self._ensure_file_manager()
         filename = legacy.LOG_TYPE_TO_FILENAME[log_type]
@@ -181,7 +181,7 @@ class LogBatchMixin:
             )
 
     def get_download_descriptor(self, session_id: str, log_type: str):
-        from agent_network import log_manager as legacy
+        from agent_network.log_management import log_manager as legacy
 
         normalized_type = legacy.normalize_log_type(log_type)
         resource = self._assert_log_readable(
@@ -192,7 +192,7 @@ class LogBatchMixin:
         )
 
     def list_log_files(self, include_hidden: bool = False):
-        from agent_network import log_manager as legacy
+        from agent_network.log_management import log_manager as legacy
 
         manager = self._ensure_file_manager()
         resources = manager.list_resources(
@@ -391,7 +391,7 @@ class LogBatchMixin:
         allow_hidden: bool = False,
         max_errors_per_file: int = 100,
     ) -> LogBatchResult:
-        from agent_network import log_manager as legacy
+        from agent_network.log_management import log_manager as legacy
 
         batch_id = self._log_batch_id("parse")
         results: list[LogBatchItemResult] = []
@@ -550,7 +550,7 @@ class LogBatchMixin:
         session_id: str,
         visible: bool,
     ) -> dict[str, Any]:
-        from agent_network import log_manager as legacy
+        from agent_network.log_management import log_manager as legacy
 
         session_id = str(session_id or "").strip()
         self._resolve_session_dir(session_id)
@@ -694,7 +694,7 @@ _LOG_BATCH_METHODS = (
 
 def install_log_batch_manager() -> None:
     """Attach batch resource management to the active unified LogManager class."""
-    from agent_network import log_manager as legacy
+    from agent_network.log_management import log_manager as legacy
 
     if getattr(legacy, "_LOG_BATCH_MANAGER_INSTALLED", False):
         return

@@ -4,7 +4,7 @@ import hashlib
 from typing import Optional
 
 from agent_network.file_management import FileManager, get_file_manager, stable_resource_id
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 
 from .models import CaptureSession
 

@@ -10,7 +10,16 @@
 
 ## 决策
 
-新增 `agent_network/scene_manager.py`，由 `SceneManager` 作为剧本业务管理的唯一门面。
+`agent_network/scene_management/scene_manager.py` 中的 `SceneManager` 是剧本业务管理的唯一门面。
+
+剧本领域模块统一收敛到 `agent_network/scene_management/`：
+
+- `scene_def.py`：剧本与 Agent 定义；
+- `scene_storage.py`：单剧本存储、解析与归档；
+- `scene_manager.py`：单项及批量业务管理；
+- `__init__.py`：剧本领域公共导入入口。
+
+不得在 `agent_network/` 顶层恢复同名实现文件；内部调用统一从 `agent_network.scene_management` 或其子模块导入。
 
 职责固定如下：
 

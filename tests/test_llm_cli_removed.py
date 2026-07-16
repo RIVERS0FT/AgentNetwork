@@ -1,7 +1,7 @@
 import pytest
 
-from agent_network import llm_metrics
-from agent_network.log_manager import (
+from agent_network.log_management import llm_metrics
+from agent_network.log_management.log_manager import (
     APPLICATION_EVENTS,
     LogManager,
     application_log_schema,

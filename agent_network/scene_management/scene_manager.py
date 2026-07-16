@@ -10,8 +10,8 @@ from agent_network.file_management import (
     ResourceNotReadyError,
     stable_resource_id,
 )
-from agent_network.scene_def import SceneDefinition
-from agent_network.scene_storage import SceneStorage, get_scene_storage
+from agent_network.scene_management.scene_def import SceneDefinition
+from agent_network.scene_management.scene_storage import SceneStorage, get_scene_storage
 
 
 @dataclass

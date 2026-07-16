@@ -5,7 +5,7 @@
 
 用法::
 
-    from agent_network.llm_metrics import log_llm_call
+    from agent_network.log_management.llm_metrics import log_llm_call
 
     log_llm_call(
         provider="deepseek",

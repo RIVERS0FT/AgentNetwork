@@ -11,7 +11,7 @@ except ImportError:
 
 from agent_network import state
 from agent_network.agent_management import AgentRegistry
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 from agent_network.real_packet_store import packet_stats
 
 router = APIRouter()

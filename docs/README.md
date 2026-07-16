@@ -36,8 +36,9 @@
 
 - 控制面：`services/server.py`
 - 仿真编排：`agent_network/api/managed_simulations.py`
-- 统一剧本业务管理：`agent_network/scene_manager.py`
-- 单剧本存储与解析：`agent_network/scene_storage.py`
+- 统一剧本管理包：`agent_network/scene_management/`
+- 统一剧本业务管理：`agent_network/scene_management/scene_manager.py`
+- 单剧本存储与解析：`agent_network/scene_management/scene_storage.py`
 - Agent 容器运行时：`services/agent_server.py`
 - 容器分配与 Agent 执行：`agent_network/agent_management.py`
 - Agent 统一 A2A 通信：`agent_network/comm_management/comm_manager.py`
@@ -48,9 +49,10 @@
 - 统一文件管理基础设施：`agent_network/file_management/`
 - 统一抓包管理：`agent_network/capture_management/`
 - 抓包外部 API：`agent_network/api/captures.py`
-- 日志模式、写入与实时索引：`agent_network/log_manager.py`
-- 日志批量管理与会话可见性：`agent_network/log_batch.py`
-- 日志批量能力安装适配：`agent_network/log_batch_install.py`
+- 统一日志管理包：`agent_network/log_management/`
+- 日志模式、写入与实时索引：`agent_network/log_management/log_manager.py`
+- 日志批量管理与会话可见性：`agent_network/log_management/log_batch.py`
+- 日志批量能力安装适配：`agent_network/log_management/log_batch_install.py`
 - 日志批量外部 API：`agent_network/api/log_batches.py`
 - PCAP 内部解码分析：`agent_network/real_packet_store.py`
 - 网络仿真：`agent_network/network_emulation.py`

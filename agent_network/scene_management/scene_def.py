@@ -10,7 +10,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-from .config import DEFAULT_LLM_MODEL
+from agent_network.config import DEFAULT_LLM_MODEL
 
 
 @dataclass

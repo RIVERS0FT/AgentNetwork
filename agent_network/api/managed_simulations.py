@@ -18,8 +18,7 @@ from agent_network.api import simulations as orchestration
 from agent_network.capture_management import CaptureConfig, CaptureState, get_capture_coordinator
 from agent_network.comm_management import A2A_MEDIA_TYPE, CommManager
 from agent_network.file_management import FileManagerError, ResourceNotFoundError, ResourceNotReadyError
-from agent_network.scene_manager import SceneManager
-from agent_network.scene_storage import get_scene_storage
+from agent_network.scene_management import SceneManager, get_scene_storage
 from agent_network.task_management import TaskManager, TaskManagerError
 
 router = APIRouter()

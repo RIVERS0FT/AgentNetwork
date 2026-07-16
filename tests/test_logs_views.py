@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent_network.api.logs import router
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 
 app = FastAPI()
 app.include_router(router, prefix="/api/logs")

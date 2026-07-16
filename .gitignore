@@ -75,6 +75,7 @@ lerna-debug.log*
 # App data
 # ============================================
 data/logs/
+data/pcap/.file_registry.json.lock
 
 # ============================================
 # OS generated files

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from agent_network import state
 from agent_network.agent_management import AgentRegistry
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 from agent_network.api import agents, captures, log_batches, logs, managed_simulations, system
 
 log_manager = get_log_manager()

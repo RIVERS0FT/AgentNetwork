@@ -22,7 +22,7 @@ def _build_manager_for_log_dir(log_dir: str) -> FileManager:
 
 def install_log_manager() -> None:
     """Replace the legacy file-owning LogManager with a FileManager-backed class."""
-    from agent_network import log_manager as legacy
+    from agent_network.log_management import log_manager as legacy
     if getattr(legacy, '_UNIFIED_FILE_MANAGER_INSTALLED', False):
         return
     BaseLogManager = legacy.LogManager

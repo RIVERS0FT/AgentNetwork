@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-import agent_network.log_manager as log_manager_module
-from agent_network.log_manager import LogManager, infer_log_type, normalize_log_type
+import agent_network.log_management.log_manager as log_manager_module
+from agent_network.log_management import LogManager, infer_log_type, normalize_log_type
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +48,9 @@ def test_virtual_logger_module_is_removed():
 @pytest.mark.not_llm
 def test_network_schema_is_integrated_into_log_manager():
     package = ROOT / "agent_network"
-    log_manager_text = (package / "log_manager.py").read_text(encoding="utf-8")
+    log_manager_text = (
+        package / "log_management" / "log_manager.py"
+    ).read_text(encoding="utf-8")
     init_text = (package / "__init__.py").read_text(encoding="utf-8")
 
     assert not (package / "_log_manager_core.py").exists()
@@ -71,7 +73,7 @@ def test_repository_uses_log_manager_import_directly():
     for path in paths:
         text = path.read_text(encoding="utf-8")
         assert "from agent_network.logger import" not in text
-        assert "from agent_network.log_manager import get_log_manager" in text
+        assert "from agent_network.log_management import get_log_manager" in text
 
 
 @pytest.mark.not_llm

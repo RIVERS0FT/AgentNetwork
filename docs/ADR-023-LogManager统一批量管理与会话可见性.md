@@ -25,6 +25,16 @@
 11. 批量下载归档必须注册为受管资源；
 12. 批量解析只读原始 JSONL，不修改源文件。
 
+日志领域模块统一收敛到 `agent_network/log_management/`：
+
+- `log_manager.py`：日志 schema、规范化、索引与基础管理；
+- `log_batch.py`：批量操作与会话可见性；
+- `log_batch_install.py`：向当前 UnifiedLogManager 安装批量能力；
+- `llm_metrics.py`：外部模型调用元数据日志；
+- `__init__.py`：日志领域公共导入入口。
+
+不得在 `agent_network/` 顶层恢复同名实现文件；内部调用统一从 `agent_network.log_management` 或其子模块导入。
+
 ## 结果
 
 - `LogManager` 与 `SceneManager` 具有一致的批量任务、逐项错误隔离和结果汇总能力；

@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from agent_network.log_manager import (
+from agent_network.log_management.log_manager import (
     LogManager,
     is_agent_message_record,
     is_behavior_record,

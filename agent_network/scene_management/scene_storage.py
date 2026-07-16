@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from agent_network.file_management import FileManager, ResourceNotFoundError, ResourceNotReadyError, get_file_manager, stable_resource_id
 from agent_network.network_emulation import normalize_profile
-from agent_network.scene_def import AgentDef, SceneDefinition
+from agent_network.scene_management.scene_def import AgentDef, SceneDefinition
 REQUIRED_SCENE_FILES = ('meta_and_roles.json', 'instances_and_skills.json', 'network_topology.json')
 _TOPOLOGY_NETWORK_FIELDS = ('delay_ms', 'jitter_ms', 'loss_pct', 'rate_mbit')
 _TOPOLOGY_LINK_FIELDS = {'endpoint_a', 'endpoint_b', 'channel_id', *_TOPOLOGY_NETWORK_FIELDS}

@@ -60,7 +60,7 @@ def test_agent_server_uploads_backend_application_events_to_srv():
 def test_agent_server_forwards_top_level_application_agent_id():
     text = _text()
 
-    assert "from agent_network.log_manager import get_log_manager" in text
+    assert "from agent_network.log_management import get_log_manager" in text
     assert "from agent_network.logger import" not in text
     assert "logger = get_log_manager()" in text
     assert 'event=event["event"]' in text

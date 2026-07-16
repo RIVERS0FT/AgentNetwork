@@ -3,7 +3,7 @@ import zipfile
 import pytest
 
 from agent_network.file_management import reset_file_manager
-from agent_network.log_manager import get_log_manager
+from agent_network.log_management import get_log_manager
 
 
 @pytest.fixture

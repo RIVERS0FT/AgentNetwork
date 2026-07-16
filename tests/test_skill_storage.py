@@ -1,6 +1,6 @@
 import json
 from agent_network.file_management import FileManager
-from agent_network.scene_storage import SceneStorage
+from agent_network.scene_management import SceneStorage
 from agent_network import skill_source
 
 

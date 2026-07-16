@@ -5,8 +5,7 @@ import zipfile
 import pytest
 
 from agent_network.file_management import FileManager, ResourceNotFoundError
-from agent_network.scene_manager import SceneManager
-from agent_network.scene_storage import SceneStorage
+from agent_network.scene_management import SceneManager, SceneStorage
 
 
 def _scene_zip(title: str, role_id: str = "planner") -> bytes:

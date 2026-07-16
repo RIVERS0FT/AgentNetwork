@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
 from agent_network.file_management import FileManager, get_file_manager
-from agent_network.scene_storage import SceneStorage
+from agent_network.scene_management import SceneStorage
 MAX_SKILL_FILE_BYTES = 512 * 1024
 _TEST_MANAGERS: Dict[str, FileManager] = {}
 
