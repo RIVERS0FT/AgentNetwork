@@ -5,12 +5,16 @@ import time
 import random
 import asyncio
 import importlib.util
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict
 import requests
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from agent_network.comm_management import CommManager
+from agent_network.file_management import FileManager, get_file_manager
+from agent_network.scene_management import SceneStorage
 from agent_network.task_management import TaskManager
 
 mcp = FastMCP("agent-network-mcp")
@@ -26,8 +30,188 @@ _AGENT_DIRECTORY = {}
 _COMM_MATRIX = {}
 _COMM = CommManager()
 _TRACE_ID = ""
+_SKILL_REFS = set()
+_SKILL_SOURCE_MODE = False
+
+MAX_SKILL_FILE_BYTES = 512 * 1024
+_TEST_MANAGERS: Dict[str, FileManager] = {}
 
 ATOMIC_TOOL_NAMES = {"send_message", "delegate_task"}
+
+
+@dataclass(frozen=True)
+class SceneSkillSource:
+    name: str
+    kind: str
+    root: Path
+    entrypoint: Path
+    scene_resource_id: str = ""
+    root_relative: str = ""
+
+    @property
+    def entrypoint_relative(self) -> str:
+        if self.kind == "package":
+            return self.entrypoint.relative_to(self.root).as_posix()
+        return self.entrypoint.name
+
+
+def _validate_skill_name(value: str, field_name: str) -> str:
+    value = str(value or "").strip()
+    if not value:
+        raise ValueError(f"{field_name} is required")
+    path = Path(value)
+    if path.is_absolute() or len(path.parts) != 1 or path.parts[0] in {".", ".."}:
+        raise ValueError(f"Invalid {field_name}: {value}")
+    return value
+
+
+def _manager_for_skill_root(scenes_root: str) -> FileManager:
+    requested = Path(scenes_root).resolve()
+    default = get_file_manager()
+    if requested == default.root_path("scenes"):
+        return default
+    key = str(requested)
+    manager = _TEST_MANAGERS.get(key)
+    if manager is None:
+        manager = FileManager(
+            {"scenes": requested},
+            catalog_path=requested.parent / ".skill_file_registry.json",
+        )
+        _TEST_MANAGERS[key] = manager
+    return manager
+
+
+def resolve_scene_skill(
+    scene_key: str,
+    skill_ref: str,
+    scenes_root: str = "/app/scenes",
+) -> SceneSkillSource:
+    scene_key = _validate_skill_name(scene_key, "scene_key")
+    skill_ref = _validate_skill_name(skill_ref, "skill_ref")
+    manager = _manager_for_skill_root(scenes_root)
+    scene = SceneStorage(manager).get_resource(scene_key, allow_hidden=True)
+    package_relative = f"skills/{skill_ref}"
+    if manager.child_kind(
+        scene.resource_id,
+        package_relative,
+        allow_hidden=True,
+    ) == "directory":
+        entrypoint = manager.resolve_child_path(
+            scene.resource_id,
+            f"{package_relative}/SKILL.md",
+            allow_hidden=True,
+            expected_kind="file",
+        )
+        root = manager.resolve_child_path(
+            scene.resource_id,
+            package_relative,
+            allow_hidden=True,
+            expected_kind="directory",
+        )
+        return SceneSkillSource(
+            name=skill_ref,
+            kind="package",
+            root=root,
+            entrypoint=entrypoint,
+            scene_resource_id=scene.resource_id,
+            root_relative=package_relative,
+        )
+    single_relative = f"skills/{skill_ref}.md"
+    if manager.child_kind(
+        scene.resource_id,
+        single_relative,
+        allow_hidden=True,
+    ) == "file":
+        entrypoint = manager.resolve_child_path(
+            scene.resource_id,
+            single_relative,
+            allow_hidden=True,
+            expected_kind="file",
+        )
+        root = manager.resolve_child_path(
+            scene.resource_id,
+            "skills",
+            allow_hidden=True,
+            expected_kind="directory",
+        )
+        return SceneSkillSource(
+            name=skill_ref,
+            kind="file",
+            root=root,
+            entrypoint=entrypoint,
+            scene_resource_id=scene.resource_id,
+            root_relative="skills",
+        )
+    raise FileNotFoundError(
+        f"Skill '{skill_ref}' was not found in scene '{scene_key}'"
+    )
+
+
+def describe_scene_skill(
+    scene_key: str,
+    skill_ref: str,
+    scenes_root: str = "/app/scenes",
+) -> dict:
+    source = resolve_scene_skill(scene_key, skill_ref, scenes_root)
+    return {
+        "name": source.name,
+        "kind": source.kind,
+        "entrypoint": source.entrypoint_relative,
+    }
+
+
+def list_scene_skill_files(
+    scene_key: str,
+    skill_ref: str,
+    scenes_root: str = "/app/scenes",
+) -> list[str]:
+    manager = _manager_for_skill_root(scenes_root)
+    source = resolve_scene_skill(scene_key, skill_ref, scenes_root)
+    if source.kind == "file":
+        return [source.entrypoint.name]
+    paths = manager.list_children(
+        source.scene_resource_id,
+        source.root_relative,
+        recursive=True,
+        files_only=True,
+        allow_hidden=True,
+    )
+    prefix = source.root_relative.rstrip("/") + "/"
+    relative_paths = [path.removeprefix(prefix) for path in paths]
+    return sorted(relative_paths, key=lambda path: (path != "SKILL.md", path))
+
+
+def read_scene_skill_file(
+    scene_key: str,
+    skill_ref: str,
+    relative_path: str = "SKILL.md",
+    scenes_root: str = "/app/scenes",
+    max_bytes: int = MAX_SKILL_FILE_BYTES,
+) -> str:
+    manager = _manager_for_skill_root(scenes_root)
+    source = resolve_scene_skill(scene_key, skill_ref, scenes_root)
+    requested = str(relative_path or "SKILL.md").strip()
+    requested_path = Path(requested)
+    if requested_path.is_absolute() or ".." in requested_path.parts:
+        raise PermissionError("Skill file path must stay inside the Skill")
+    if source.kind == "file":
+        if requested not in {"SKILL.md", source.entrypoint.name, ""}:
+            raise FileNotFoundError(
+                f"Single-file Skill '{skill_ref}' only exposes its entrypoint"
+            )
+        child = f"skills/{skill_ref}.md"
+    else:
+        child = f"{source.root_relative}/{requested_path.as_posix()}"
+    data = manager.read_child_bytes(
+        source.scene_resource_id,
+        child,
+        allow_hidden=True,
+    )
+    if len(data) > max_bytes:
+        raise ValueError(
+            f"Skill file is too large: {len(data)} bytes (limit {max_bytes})"
+        )
+    return data.decode("utf-8")
 
 
 def _task_db_path(agent_id: str) -> str:
@@ -85,9 +269,12 @@ def setup_runtime(
     comm_matrix: dict = None,
     trace_id: str = "",
     simulation_seed: int = 0,
+    skill_refs: list | None = None,
+    skill_source_mode: bool = False,
 ):
     global _SCENE_KEY, _AGENT_ID, _AGENT_NAME, _ALLOWED_TOOLS
     global _SCENES_ROOT, _TOOL_REGISTRY, _AGENT_DIRECTORY, _COMM_MATRIX, _COMM, _TRACE_ID
+    global _SKILL_REFS, _SKILL_SOURCE_MODE
 
     _SCENE_KEY = scene_key
     _AGENT_ID = agent_id.lower()
@@ -108,6 +295,8 @@ def setup_runtime(
         task_manager=TaskManager(_task_db_path(_AGENT_ID)),
     )
     _TRACE_ID = trace_id
+    _SKILL_REFS = set(skill_refs or [])
+    _SKILL_SOURCE_MODE = bool(skill_source_mode)
     random.seed(f"{simulation_seed}:{_AGENT_ID}")
 
 
@@ -278,10 +467,76 @@ def _register_scene_tools():
         mcp.add_tool(make_tool(tool_name))
 
 
+def _skill_allowed(skill_ref: str) -> bool:
+    return skill_ref in _SKILL_REFS
+
+
+def _register_skill_source_tools():
+    @mcp.tool()
+    def list_available_skills() -> str:
+        """List Skill sources that the current Agent is allowed to read."""
+        items = []
+        for skill_ref in sorted(_SKILL_REFS):
+            try:
+                items.append(
+                    describe_scene_skill(
+                        scene_key=_SCENE_KEY,
+                        skill_ref=skill_ref,
+                        scenes_root=str(_SCENES_ROOT),
+                    )
+                )
+            except Exception as exc:
+                items.append(
+                    {
+                        "name": skill_ref,
+                        "available": False,
+                        "error": str(exc),
+                    }
+                )
+        return json.dumps(items, ensure_ascii=False)
+
+    @mcp.tool()
+    def list_skill_files(
+        skill_ref: str = Field(description="Allowed Skill name"),
+    ) -> str:
+        """List files inside one allowed Skill package."""
+        if not _skill_allowed(skill_ref):
+            raise PermissionError(f"Skill is not allowed: {skill_ref}")
+        files = list_scene_skill_files(
+            scene_key=_SCENE_KEY,
+            skill_ref=skill_ref,
+            scenes_root=str(_SCENES_ROOT),
+        )
+        return json.dumps(
+            {"skill_ref": skill_ref, "files": files},
+            ensure_ascii=False,
+        )
+
+    @mcp.tool()
+    def read_skill_file(
+        skill_ref: str = Field(description="Allowed Skill name"),
+        relative_path: str = Field(
+            default="SKILL.md",
+            description="Path relative to the Skill package root",
+        ),
+    ) -> str:
+        """Read one file from an allowed Skill package."""
+        if not _skill_allowed(skill_ref):
+            raise PermissionError(f"Skill is not allowed: {skill_ref}")
+        return read_scene_skill_file(
+            scene_key=_SCENE_KEY,
+            skill_ref=skill_ref,
+            relative_path=relative_path,
+            scenes_root=str(_SCENES_ROOT),
+        )
+
+
 def load_tools():
     _load_tool_registry()
     _register_atomic_tools()
     _register_scene_tools()
+    if _SKILL_SOURCE_MODE:
+        _register_skill_source_tools()
 
 
 def _json_arg(value: str) -> dict:
@@ -299,6 +554,8 @@ def main():
     parser.add_argument("--agent-id", required=True)
     parser.add_argument("--agent-name", default="")
     parser.add_argument("--allowed-tools", default="")
+    parser.add_argument("--skill-refs", default="")
+    parser.add_argument("--skill-source-mode", action="store_true")
     parser.add_argument("--scenes-root", default="/app/scenes")
     parser.add_argument("--agent-directory-json", default=os.environ.get("AGENT_DIRECTORY_JSON", "{}"))
     parser.add_argument("--comm-matrix-json", default=os.environ.get("COMM_MATRIX_JSON", "{}"))
@@ -316,6 +573,8 @@ def main():
         comm_matrix=_json_arg(args.comm_matrix_json),
         trace_id=args.trace_id,
         simulation_seed=args.simulation_seed,
+        skill_refs=args.skill_refs.split(",") if args.skill_refs else [],
+        skill_source_mode=args.skill_source_mode,
     )
     load_tools()
     mcp.run()

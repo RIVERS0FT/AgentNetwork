@@ -19,7 +19,6 @@ from pathlib import Path
 
 DEFAULT_TEST_TARGETS = [
     "tests/test_mcp_server_boundary.py",
-    "tests/test_skill_md_loader_context_only.py",
     "tests/test_adapter_context_boundary.py",
     "tests/test_scene_building_boundary.py",
     "tests/test_agent_management.py",

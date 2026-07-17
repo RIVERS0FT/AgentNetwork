@@ -1,6 +1,6 @@
 import pytest
 
-from agent_network import network_emulation
+from agent_network.comm_management import network_emulation
 from agent_network.agent_management import ContainerAgent
 from agent_network.api import simulations
 

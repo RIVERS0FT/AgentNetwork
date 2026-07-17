@@ -77,3 +77,29 @@ def test_mcp_server_does_not_cache_or_parse_skill_content(tmp_path):
 
     assert not hasattr(mcp_server, "_SKILLS_CACHE")
     assert not hasattr(mcp_server, "_ALLOWED_SKILLS")
+
+
+def test_skill_source_tools_are_registered_by_unified_mcp_server(monkeypatch):
+    import agent_network.mcp_server as mcp_server
+
+    fake_mcp = FakeMCP()
+    monkeypatch.setattr(mcp_server, "mcp", fake_mcp)
+    monkeypatch.setattr(mcp_server, "_SKILL_REFS", {"planning"})
+    monkeypatch.setattr(
+        mcp_server,
+        "describe_scene_skill",
+        lambda **_kwargs: {
+            "name": "planning",
+            "kind": "file",
+            "entrypoint": "planning.md",
+        },
+    )
+
+    mcp_server._register_skill_source_tools()
+
+    assert set(fake_mcp.tools) == {
+        "list_available_skills",
+        "list_skill_files",
+        "read_skill_file",
+    }
+    assert '"name": "planning"' in fake_mcp.tools["list_available_skills"]()

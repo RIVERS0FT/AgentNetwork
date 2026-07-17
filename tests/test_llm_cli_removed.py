@@ -41,7 +41,7 @@ def test_llm_api_logging_requires_current_explicit_flag(monkeypatch):
 
 @pytest.mark.not_llm
 def test_token_usage_ignores_non_api_llm_events():
-    from agent_network import state
+    from agent_network.simulation_management import state
 
     state.reset_token_usage_state("test")
     assert state.append_token_usage_record({
@@ -55,7 +55,7 @@ def test_token_usage_ignores_non_api_llm_events():
 
 @pytest.mark.not_llm
 def test_token_usage_records_top_level_agent_id():
-    from agent_network import state
+    from agent_network.simulation_management import state
 
     state.reset_token_usage_state("test")
     record = {

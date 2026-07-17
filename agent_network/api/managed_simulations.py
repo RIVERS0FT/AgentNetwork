@@ -12,7 +12,6 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from agent_network import state
 from agent_network.agent_management import AgentRegistry, get_runtime
 from agent_network.api import simulations as orchestration
 from agent_network.capture_management import CaptureConfig, CaptureState, get_capture_coordinator
@@ -23,6 +22,7 @@ from agent_network.simulation_management import (
     SimulationManager,
     SimulationManagerError,
     SimulationRuntimeConfig,
+    state,
     SimulationState,
 )
 from agent_network.task_management import TaskManager, TaskManagerError

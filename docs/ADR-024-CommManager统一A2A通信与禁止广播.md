@@ -177,8 +177,8 @@ Content-Type: application/a2a+json
 | 文件或目录 | 本次确定的职责 |
 |---|---|
 | `agent_network/comm_management/comm_manager.py` | 唯一 A2A 通信管理、发现、权限、顺序发送和 TaskStore |
+| `agent_network/comm_management/network_emulation.py` | 通信延迟、抖动、丢包和带宽配置及 Linux `tc` 生命周期 |
 | `agent_network/comm_management/__init__.py` | 统一导出通信类型 |
-| `agent_network/comm.py` | 兼容转发 `comm_management` 的公共协议常量、结果类型、异常类型和 `CommManager`，不得恢复 `DirectBus` |
 | `agent_network/mcp_server.py` | 暴露 `send_message` 与 `delegate_task`，统一委托 `CommManager` |
 | `agent_network/task_management/` | 按 ADR-025 持久化执行 Task 并投递 Push 回调 |
 | `services/agent_server.py` | A2A 路由、Agent Card、入站投递和控制面通信配置 |
@@ -198,9 +198,9 @@ Content-Type: application/a2a+json
 
 - `/message` 暂时保留给旧调用方，但新的 Agent 间发送不得使用它；
 - `/message` 不接受广播；
-- `agent_network/comm.py` 暂时保留导入兼容，且 `__all__` 必须与 `comm_management` 的公共 API 一致，但不包含旧类；
+- `agent_network/comm.py` 兼容导入已删除，所有调用方必须迁移到 `agent_network.comm_management`；
 - `services/message_bus.py` 保留明确的 410 提示；
-- 兼容入口的最终删除应单独提交，并同步更新本 ADR、开发文档和测试。
+- 不得重新增加通信模块导入兼容层；外部调用方应直接迁移，缺失旧模块必须显式失败。
 
 兼容不允许成为恢复旧数据面的理由。
 

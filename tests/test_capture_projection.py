@@ -71,7 +71,7 @@ def test_projection_is_idempotent_for_same_pcap_fingerprint(tmp_path, monkeypatc
         "ip_payload_bytes": 4,
     }]
     fake_logs = FakeLogManager()
-    monkeypatch.setattr("agent_network.real_packet_store.query_packets", lambda **_kwargs: packets)
+    monkeypatch.setattr("agent_network.capture_management.packet_store.query_packets", lambda **_kwargs: packets)
     monkeypatch.setattr("agent_network.capture_management.projection.get_log_manager", lambda: fake_logs)
 
     service = PacketProjectionService(files)

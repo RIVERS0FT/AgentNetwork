@@ -73,7 +73,7 @@ class PacketProjectionService:
             ):
                 return {**value, "skipped": True}
 
-        from agent_network.real_packet_store import query_packets
+        from .packet_store import query_packets
 
         packets = query_packets(session_id=session.session_id, limit=1_000_000)
         logger = get_log_manager()

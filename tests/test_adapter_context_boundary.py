@@ -52,6 +52,9 @@ def test_claude_task_payload_contains_full_context_not_latest_message_only():
     assert payload["allowed_tools"] == ["send_message", "write_plan"]
 
     server = claude_code._claude_mcp_server(_context())
+    assert server["args"][1] == "agent_network.mcp_server"
+    assert "--skill-source-mode" in server["args"]
+    assert "--skill-refs" in server["args"]
     assert "--simulation-seed" in server["args"]
 
 

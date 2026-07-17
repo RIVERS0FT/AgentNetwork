@@ -1,3 +1,7 @@
+import importlib
+
+import pytest
+
 from agent_network.comm_management import CommManager, CommunicationError, SendResult
 
 
@@ -46,15 +50,11 @@ class FakeSession:
         )
 
 
-def test_legacy_comm_import_reexports_unified_public_api_only():
-    from agent_network import comm as legacy
-    from agent_network import comm_management as unified
+def test_legacy_comm_import_is_removed():
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("agent_network.comm")
 
-    for name in unified.__all__:
-        assert getattr(legacy, name) is getattr(unified, name)
-    assert legacy.__all__ == unified.__all__
-    assert not hasattr(legacy, "DirectBus")
-    assert not hasattr(legacy.CommManager, "broadcast")
+    assert not hasattr(CommManager, "broadcast")
 
 
 def test_send_message_uses_a2a_card_and_rest_binding():

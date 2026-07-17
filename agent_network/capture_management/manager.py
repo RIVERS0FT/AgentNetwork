@@ -248,17 +248,17 @@ class CaptureManager:
 
     def query_packets(self, capture_id: str, agent_id: str = "", limit: int = 100):
         session = self.get_session(capture_id)
-        from agent_network.real_packet_store import query_packets
+        from .packet_store import query_packets
         return query_packets(session_id=session.session_id, agent_id=agent_id or None, limit=limit)
 
     def stats(self, capture_id: str):
         session = self.get_session(capture_id)
-        from agent_network.real_packet_store import packet_stats
+        from .packet_store import packet_stats
         return packet_stats(session_id=session.session_id)
 
     def analyze(self, capture_id: str, agent_id: str = "", max_packets: int = 100_000):
         session = self.get_session(capture_id)
-        from agent_network.real_packet_store import analyze_packets
+        from .packet_store import analyze_packets
         return analyze_packets(session_id=session.session_id, agent_id=agent_id or None, max_packets=max_packets)
 
     def audit(self, capture_id: str, verify_hashes: bool = True):

@@ -1,17 +1,13 @@
-import os
+"""Process-local simulation control-plane and observability state."""
+
 import math
 import threading
-import asyncio
 import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Set
 
-# ── 服务发现 ──
-MESSAGE_BUS_URL = os.environ.get("MESSAGE_BUS_URL", "http://bus:9000")
-
 # ── WebSocket 连接池 ──
 ws_clients: set = set()
-server_loop: Optional[asyncio.AbstractEventLoop] = None
 
 # ── 统一 Agent 日志缓冲区 ──
 agent_logs: List[Dict[str, Any]] = []

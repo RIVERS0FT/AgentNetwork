@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from agent_network.file_management import FileManager, ResourceNotFoundError, ResourceNotReadyError, get_file_manager, stable_resource_id
-from agent_network.network_emulation import normalize_profile
+from agent_network.comm_management import normalize_profile
 from agent_network.scene_management.scene_def import AgentDef, SceneDefinition
 from agent_network.scene_management.models import (
     SceneListItem,

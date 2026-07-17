@@ -55,7 +55,7 @@ def finalize_manifest(session_id: str, **updates) -> dict:
 def load_manifest(session_id: str) -> dict:
     try: session_id = _validate_session_id(session_id)
     except ValueError: return {}
-    manager = get_file_manager(); from agent_network.real_packet_store import sync_capture_session; sync_capture_session(session_id)
+    manager = get_file_manager(); from agent_network.capture_management.packet_store import sync_capture_session; sync_capture_session(session_id)
     resource = manager.find_resource(owner_type='capture_session', owner_id=session_id, resource_type='experiment_manifest')
     if not resource: return {}
     try: value = manager.read_json(resource.resource_id, allow_hidden=True)
@@ -78,7 +78,7 @@ def _application_counts(session_id: str, trace_id: str) -> tuple[int, dict]:
 def audit_session(session_id: str, verify_hashes: bool=True) -> dict:
     try: session_id = _validate_session_id(session_id)
     except ValueError: return {'status': 'failed', 'passed': False, 'session_id': str(session_id or ''), 'issues': ['invalid session path']}
-    from agent_network.real_packet_store import sync_capture_session
+    from agent_network.capture_management.packet_store import sync_capture_session
     sync_capture_session(session_id); manager = get_file_manager(); experiment = load_manifest(session_id)
     if not experiment: return {'status': 'failed', 'passed': False, 'session_id': session_id, 'issues': ['experiment manifest missing or invalid']}
     issues = []; captures = []; expected_agents = {str(item.get('agent_id', '')) for item in experiment.get('agents', []) if item.get('agent_id')}
@@ -115,7 +115,7 @@ def write_packet_sample(session_id: str, packets: list[dict]):
     return get_file_manager().write_text(content, owner_type='capture_session', owner_id=session_id, resource_type='packet_sample', root_name='pcap', relative_path=f'{session_id}/packets.sample.jsonl', logical_name='packets.sample.jsonl', media_type='application/x-ndjson', resource_id=_sample_id(session_id), overwrite=True)
 
 def build_bundle(session_id: str):
-    session_id = _validate_session_id(session_id); from agent_network.real_packet_store import analyze_packets, query_packets, sync_capture_session; sync_capture_session(session_id); manager = get_file_manager(); experiment = load_manifest(session_id)
+    session_id = _validate_session_id(session_id); from agent_network.capture_management.packet_store import analyze_packets, query_packets, sync_capture_session; sync_capture_session(session_id); manager = get_file_manager(); experiment = load_manifest(session_id)
     if not experiment: raise FileNotFoundError('experiment session not found')
     quality = audit_session(session_id, verify_hashes=True); analysis = analyze_packets(session_id=session_id, max_packets=100000); packet_sample = query_packets(session_id=session_id, limit=100000)
     quality_resource = write_quality_result(session_id, quality); analysis_resource = write_analysis_result(session_id, analysis); sample_resource = write_packet_sample(session_id, packet_sample)

@@ -9,10 +9,10 @@ try:
 except ImportError:
     psutil = None
 
-from agent_network import state
 from agent_network.agent_management import AgentRegistry
+from agent_network.capture_management import packet_stats
 from agent_network.log_management import get_log_manager
-from agent_network.real_packet_store import packet_stats
+from agent_network.simulation_management import state
 
 router = APIRouter()
 log_manager = get_log_manager()

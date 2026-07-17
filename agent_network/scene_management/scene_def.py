@@ -10,13 +10,14 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-from agent_network.config import DEFAULT_LLM_MODEL
 from agent_network.scene_management.models import (
     SkillDefinition,
     TaskDefinition,
     ToolDefinition,
     ValidationResult,
 )
+
+DEFAULT_LLM_MODEL = "claude-sonnet-4-6"
 
 
 @dataclass

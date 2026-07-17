@@ -115,7 +115,8 @@ def _claude_mcp_server(agent_context: AgentContext) -> dict:
         "command": "python",
         "args": [
             "-m",
-            "agent_network.skill_mcp_server",
+            "agent_network.mcp_server",
+            "--skill-source-mode",
             "--scene",
             scene_key,
             "--agent-id",

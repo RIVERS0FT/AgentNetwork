@@ -44,3 +44,25 @@ def test_management_packages_export_domain_entry_points():
 
     assert isinstance(get_log_manager(), LogManager)
     assert SceneDefinition and SceneManager and SceneStorage
+
+
+def test_removed_legacy_entry_points_stay_removed():
+    removed = {
+        "comm.py",
+        "config.py",
+        "event_bus.py",
+        "full_packet_capture.py",
+        "network_emulation.py",
+        "real_packet_store.py",
+        "skill_mcp_server.py",
+        "skill_md_loader.py",
+        "skill_source.py",
+        "state.py",
+        "tool_runtime.py",
+    }
+    assert not any((PACKAGE / name).exists() for name in removed)
+
+    assert (PACKAGE / "capture_management/http_adapter.py").is_file()
+    assert (PACKAGE / "capture_management/packet_store.py").is_file()
+    assert (PACKAGE / "comm_management/network_emulation.py").is_file()
+    assert (PACKAGE / "simulation_management/state.py").is_file()

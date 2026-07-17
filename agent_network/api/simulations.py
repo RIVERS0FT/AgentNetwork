@@ -11,23 +11,22 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from agent_network import state
 from agent_network.agent_management import Agent, AgentRegistry, get_runtime
+from agent_network.capture_management import packet_stats
+from agent_network.comm_management import normalize_profile
 from agent_network.experiment_manifest import (
     audit_session,
     create_manifest,
     finalize_manifest,
 )
 from agent_network.log_management import get_log_manager
-from agent_network.network_emulation import normalize_profile
-from agent_network.real_packet_store import packet_stats
 from agent_network.scene_management import (
     AgentDef,
     SceneDefinition,
     get_api_config,
     get_scene_storage,
 )
-from agent_network.simulation_management import SimulationEventScheduler
+from agent_network.simulation_management import SimulationEventScheduler, state
 
 
 router = APIRouter()

@@ -1,5 +1,7 @@
 """Unified simulation configuration, execution, and stopping."""
 
+from . import state
+
 from .models import (
     AgentResourceLimit,
     SimulationResourceAllocation,
@@ -26,4 +28,5 @@ __all__ = [
     "SimulationEventScheduler",
     "SimulationEventStatus",
     "SimulationState",
+    "state",
 ]

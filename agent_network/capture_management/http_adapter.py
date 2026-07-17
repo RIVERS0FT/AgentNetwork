@@ -1,6 +1,5 @@
-"""Agent-local capture transport backed by capture_management.CaptureRuntime.
+"""Agent-local HTTP capture adapter backed by CaptureRuntime.
 
-This module remains only as the HTTP adapter used by services/agent_server.py.
 All tcpdump lifecycle and resource behavior is owned by CaptureRuntime.
 """
 from __future__ import annotations

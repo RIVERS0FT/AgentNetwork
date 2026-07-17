@@ -8,6 +8,11 @@ from .comm_manager import (
     CommunicationError,
     SendResult,
 )
+from .network_emulation import (
+    clear_network_emulation,
+    configure_network_emulation,
+    normalize_profile,
+)
 
 __all__ = [
     "A2A_MEDIA_TYPE",
@@ -16,4 +21,7 @@ __all__ = [
     "CommManager",
     "CommunicationError",
     "SendResult",
+    "clear_network_emulation",
+    "configure_network_emulation",
+    "normalize_profile",
 ]

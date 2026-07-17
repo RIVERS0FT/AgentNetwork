@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_network import full_packet_capture, real_packet_store
+from agent_network.capture_management import http_adapter as full_packet_capture
+from agent_network.capture_management import packet_store as real_packet_store
 from agent_network.agent_management import ContainerRuntime
 from agent_network.capture_management import runtime as capture_runtime
 from agent_network.file_management import get_file_manager, reset_file_manager

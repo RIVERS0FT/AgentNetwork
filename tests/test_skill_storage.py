@@ -1,7 +1,7 @@
 import json
 from agent_network.file_management import FileManager
 from agent_network.scene_management import SceneStorage
-from agent_network import skill_source
+from agent_network import mcp_server as skill_source
 
 
 def test_skill_sources_use_managed_scene_resource(tmp_path):

@@ -9,6 +9,7 @@
 - `SimulationManager` 按 `simulation_id` 保存 `SimulationRun`，并负责全部状态迁移；
 - `SimulationRuntimeConfig` 保存最大持续时间、Agent 调用超时、优雅停止等待时间和本次运行的资源分配；
 - `SimulationResourceAllocator` 在启动容器前解析默认资源与逐 Agent 覆盖，并校验 Agent 引用和宿主机容量；
+- `simulation_management/state.py` 承载现有控制面共享状态、WebSocket 观察者和 Token 使用统计，不得在顶层或 API 中复制；
 - `agent_network/api/managed_simulations.py` 仅作为 HTTP 适配器调用 `SimulationManager`；
 - `agent_network/api/simulations.py` 暂时只保留底层场景执行、抓包和网络配置流程，不拥有对外生命周期状态；
 - `ContainerRuntime` 落实 Docker CPU、内存、PID 限制和 Agent 执行并发上限。

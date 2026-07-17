@@ -26,8 +26,8 @@ from agent_network.comm_management import (
     CommunicationError,
 )
 from agent_network.task_management import CallbackDispatcher, TaskManager
-from agent_network.full_packet_capture import capture_status, start_full_capture, stop_full_capture
-from agent_network.network_emulation import clear_network_emulation, configure_network_emulation
+from agent_network.capture_management import capture_status, start_full_capture, stop_full_capture
+from agent_network.comm_management import clear_network_emulation, configure_network_emulation
 from agent_network.adapters.base import AgentContext
 from agent_network.adapters.claude_code import ClaudeCodeAdapter
 from agent_network.adapters.direct_llm import DirectLLMAdapter

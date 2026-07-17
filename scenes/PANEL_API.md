@@ -248,7 +248,7 @@ ws.onopen = () => ws.send("all");
 |------|----------|
 | `status` | Agent 状态、统计、最近日志、关系 |
 | `logs` | 最近日志与日志统计 |
-| `packets` | 最近 PacketRecorder 报文和统计 |
+| `packets` | 最近真实 PCAP 解码报文和统计 |
 | `all` | Agent、日志、报文统计、关系的组合快照 |
 
 服务端也可能主动推送：

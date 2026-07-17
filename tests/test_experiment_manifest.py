@@ -31,7 +31,7 @@ def test_manifest_audit_and_bundle_use_managed_resources(tmp_path, monkeypatch):
     pcap=manager.write_bytes(_pcap_bytes(), owner_type="capture_session", owner_id=session, resource_type="pcap", root_name="pcap", relative_path=f"{session}/a1.pcap", logical_name="a1.pcap", media_type="application/vnd.tcpdump.pcap", resource_id=stable_resource_id("capture",session,"a1","pcap"))
     manager.write_json({"agent_id":"a1","session_id":session,"status":"stopped","runtime_container":"ag-o1","runtime_ip":"172.1.0.2","sha256":pcap.sha256}, owner_type="capture_session", owner_id=session, resource_type="capture_manifest", root_name="pcap", relative_path=f"{session}/a1.manifest.json", logical_name="a1.manifest.json", resource_id=stable_resource_id("capture",session,"a1","manifest"), overwrite=True)
     finalize_manifest(session,status="complete",stop_reason="completed"); quality=audit_session(session); assert quality["passed"] is True, quality
-    import agent_network.real_packet_store as store
+    import agent_network.capture_management.packet_store as store
     monkeypatch.setattr(store,"analyze_packets",lambda **kw:{"session_id":session,"packets_analyzed":1}); monkeypatch.setattr(store,"query_packets",lambda **kw:[{"packet":1}])
     bundle=build_bundle(session); descriptor=manager.prepare_download(bundle.resource_id)
     with zipfile.ZipFile(descriptor.internal_path) as archive: names=set(archive.namelist())

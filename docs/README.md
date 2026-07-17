@@ -18,6 +18,7 @@
 | [仿真编排与容器运行时设计.md](仿真编排与容器运行时设计.md) | setup/launch、事件驱动调度、持续时间控制、容器池、资源限制、终止与失败处理 |
 | [ADR-019-持续时间约束的事件驱动仿真.md](ADR-019-持续时间约束的事件驱动仿真.md) | 禁止恢复固定执行计数调度的权威设计决策 |
 | [ADR-026-SimulationManager统一仿真生命周期.md](ADR-026-SimulationManager统一仿真生命周期.md) | 固定统一仿真配置、启动、优雅停止、强制停止、持续时间与资源分配入口 |
+| [ADR-028-AgentNetwork领域模块收敛.md](ADR-028-AgentNetwork领域模块收敛.md) | 固定抓包、通信、仿真状态和 Skill MCP 的领域归属及旧顶层入口删除规则 |
 | [统一文件管理设计.md](统一文件管理设计.md) | 剧本、日志、PCAP、manifest 和归档共用的文件写入、读取、压缩、解压、下载与可见性基础设施 |
 | [ADR-020-统一文件管理入口.md](ADR-020-统一文件管理入口.md) | 禁止业务模块新增直接文件操作和独立可见性机制的权威设计决策 |
 | [统一抓包模块设计.md](统一抓包模块设计.md) | 抓包会话、Agent 本地 tcpdump、失败回滚、健康检查、PCAP 投影、分析与下载统一入口 |
@@ -50,9 +51,7 @@
 - 容器分配与 Agent 执行：`agent_network/agent_management.py`
 - Agent 统一 A2A 通信：`agent_network/comm_management/comm_manager.py`
 - Agent Task 生命周期与回调：`agent_network/task_management/`
-- 旧通信导入兼容：`agent_network/comm.py`
-- Tool MCP：`agent_network/mcp_server.py`
-- Skill 源文件 MCP：`agent_network/skill_mcp_server.py`
+- 系统、场景 Tool 与受限 Skill 源 MCP：`agent_network/mcp_server.py`
 - 统一文件管理基础设施：`agent_network/file_management/`
 - 统一抓包管理：`agent_network/capture_management/`
 - 抓包外部 API：`agent_network/api/captures.py`
@@ -61,8 +60,9 @@
 - 日志批量管理与会话可见性：`agent_network/log_management/log_batch.py`
 - 日志批量能力安装适配：`agent_network/log_management/log_batch_install.py`
 - 日志批量外部 API：`agent_network/api/log_batches.py`
-- PCAP 内部解码分析：`agent_network/real_packet_store.py`
-- 网络仿真：`agent_network/network_emulation.py`
+- PCAP 内部解码分析：`agent_network/capture_management/packet_store.py`
+- 网络仿真：`agent_network/comm_management/network_emulation.py`
+- 仿真控制面共享状态：`agent_network/simulation_management/state.py`
 - 实验可追溯性与质量审计：`agent_network/experiment_manifest.py`
 
 ## 文档维护原则

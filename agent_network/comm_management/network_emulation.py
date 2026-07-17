@@ -1,4 +1,4 @@
-"""Apply optional per-peer Linux traffic control profiles inside an Agent."""
+"""Apply per-peer communication conditions inside an Agent using Linux tc."""
 
 import os
 import shutil
