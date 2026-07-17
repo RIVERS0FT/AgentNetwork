@@ -53,7 +53,7 @@
   "event_stream": [
     {
       "event_type": "BUSINESS_LINK_CHANGED",
-      "round": 0,
+        "event_sequence": 0,
       "action": "SIGN",
       "source": "PLANNER",
       "target": "AI_ASSISTANT",
@@ -62,7 +62,7 @@
     },
     {
       "event_type": "BUSINESS_LINK_CHANGED",
-      "round": 0,
+        "event_sequence": 0,
       "action": "SIGN",
       "source": "RF_ENGINEER",
       "target": "AI_ASSISTANT",
@@ -71,7 +71,7 @@
     },
     {
       "event_type": "BUSINESS_LINK_CHANGED",
-      "round": 0,
+        "event_sequence": 0,
       "action": "CREATE",
       "source": "PLANNER",
       "target": "COST_ANALYST",

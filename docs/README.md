@@ -12,7 +12,8 @@
 | [剧本管理设计.md](剧本管理设计.md) | 剧本上传、查询、下载、删除、预览的 SR、AR、模块、接口、逻辑模型和时序设计 |
 | [剧本管理数据模型.md](剧本管理数据模型.md) | 剧本管理类、结构体、枚举及其具体字段、关系和当前实现映射 |
 | [剧本管理类操作设计.md](剧本管理类操作设计.md) | 剧本资源、批量处理任务和归档资源类的领域函数、状态迁移与带函数类图 |
-| [剧本校验待完成项.md](剧本校验待完成项.md) | 当前核心校验边界、Skill/Tool/任务/Agent/严格 Schema/跨文件一致性的待完成项与验收标准 |
+| [剧本严格校验设计.md](剧本严格校验设计.md) | Skill、Tool、任务、Agent、严格 Schema 与跨文件一致性校验合同 |
+| [实施记录-事件驱动仿真与严格剧本校验.md](实施记录-事件驱动仿真与严格剧本校验.md) | 本次事件调度、剧本校验、领域模型、API 与防回退实施基线 |
 | [ADR-022-SceneManager统一剧本管理入口.md](ADR-022-SceneManager统一剧本管理入口.md) | 固定 SceneManager 批量编排、占用检查、逐项隔离和 SceneStorage/FileManager 职责边界 |
 | [仿真编排与容器运行时设计.md](仿真编排与容器运行时设计.md) | setup/launch、事件驱动调度、持续时间控制、容器池、资源限制、终止与失败处理 |
 | [ADR-019-持续时间约束的事件驱动仿真.md](ADR-019-持续时间约束的事件驱动仿真.md) | 禁止恢复固定执行计数调度的权威设计决策 |
@@ -23,6 +24,7 @@
 | [ADR-021-统一抓包生命周期入口.md](ADR-021-统一抓包生命周期入口.md) | 禁止恢复分散抓包控制、模拟网络事实和非幂等网络日志投影的权威决策 |
 | [统一日志管理设计.md](统一日志管理设计.md) | LogManager 批量下载、删除、解析、文件可见性和会话可见性统一设计 |
 | [ADR-023-LogManager统一批量管理与会话可见性.md](ADR-023-LogManager统一批量管理与会话可见性.md) | 固定唯一 LogManager、批量结果和父子可见性门控规则 |
+| [ADR-027-自定义日志根目录索引隔离.md](ADR-027-自定义日志根目录索引隔离.md) | 固定非默认日志根独立资源索引，防止可见性和日志列表跨根污染 |
 | [通信与网络仿真设计.md](通信与网络仿真设计.md) | A2A CommManager、通信矩阵、Linux `tc`、真实抓包 |
 | [ADR-024-CommManager统一A2A通信与禁止广播.md](ADR-024-CommManager统一A2A通信与禁止广播.md) | 固定统一 A2A 管理入口、点对点通信、禁止广播、顺序多目标发送和防回退规则 |
 | [ADR-025-Agent任务下发与A2A回调.md](ADR-025-Agent任务下发与A2A回调.md) | 固定 Agent/仿真编排任务下发、持久化状态机、Push 回调认证、查询与取消规则 |
@@ -38,10 +40,12 @@
 - 控制面：`services/server.py`
 - 统一仿真管理包：`agent_network/simulation_management/`
 - 仿真生命周期管理：`agent_network/simulation_management/simulation_manager.py`
+- 仿真事件调度：`agent_network/simulation_management/event_scheduler.py`
 - 仿真 HTTP 适配：`agent_network/api/managed_simulations.py`
 - 统一剧本管理包：`agent_network/scene_management/`
 - 统一剧本业务管理：`agent_network/scene_management/scene_manager.py`
 - 单剧本存储与解析：`agent_network/scene_management/scene_storage.py`
+- 剧本领域模型与严格校验：`agent_network/scene_management/models.py`、`agent_network/scene_management/validator.py`
 - Agent 容器运行时：`services/agent_server.py`
 - 容器分配与 Agent 执行：`agent_network/agent_management.py`
 - Agent 统一 A2A 通信：`agent_network/comm_management/comm_manager.py`

@@ -44,6 +44,8 @@ def test_run_request_contains_scene_key_and_run_agent_uses_backend_adapter():
     assert "scene_key: str = \"default\"" in text
     assert "AgentContext(" in text
     assert "scene_key=req.scene_key" in text
+    assert "event_sequence=req.event_sequence" in text
+    assert "event_type=req.event_type" in text
     assert "adapter.run_agent_task" in text
     assert "The full ReAct loop is delegated" in text
 

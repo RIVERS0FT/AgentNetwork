@@ -12,6 +12,8 @@ def test_simulation_task_api_uses_a2a_comm_manager_and_persistent_store():
     assert 'agent_id="srv"' in SOURCE
     assert "simulation_tasks = TaskManager(" in SOURCE
     assert "simulation_comm.delegate_task" in SOURCE
+    assert "simulation_manager.enqueue_event" in SOURCE
+    assert "run.state != SimulationState.RUNNING" in SOURCE
     assert '@router.post("/simulations/{simulation_id}/agents/{agent_id}/tasks")' in SOURCE
     assert '@router.get("/simulations/{simulation_id}/tasks/{task_id}")' in SOURCE
     assert '@router.post("/simulations/{simulation_id}/tasks/{task_id}:cancel")' in SOURCE

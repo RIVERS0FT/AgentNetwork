@@ -1,12 +1,18 @@
 from __future__ import annotations
-import json
 import re
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from agent_network.file_management import FileManager, ResourceNotFoundError, ResourceNotReadyError, get_file_manager, stable_resource_id
 from agent_network.network_emulation import normalize_profile
 from agent_network.scene_management.scene_def import AgentDef, SceneDefinition
+from agent_network.scene_management.models import (
+    SceneListItem,
+    SceneSummary,
+    SceneValidationError,
+)
+from agent_network.scene_management.validator import SceneValidator
 REQUIRED_SCENE_FILES = ('meta_and_roles.json', 'instances_and_skills.json', 'network_topology.json')
 _TOPOLOGY_NETWORK_FIELDS = ('delay_ms', 'jitter_ms', 'loss_pct', 'rate_mbit')
 _TOPOLOGY_LINK_FIELDS = {'endpoint_a', 'endpoint_b', 'channel_id', *_TOPOLOGY_NETWORK_FIELDS}
@@ -17,6 +23,7 @@ class SceneStorage:
 
     def __init__(self, file_manager: Optional[FileManager]=None) -> None:
         self.files = file_manager or get_file_manager()
+        self.validator = SceneValidator()
 
     @staticmethod
     def validate_scene_key(scene_key: str) -> str:
@@ -55,50 +62,85 @@ class SceneStorage:
             raise ResourceNotReadyError(f"Scene '{scene_key}' is hidden")
         return resource
 
-    def list_scenes(self, *, include_hidden: bool=False) -> List[Dict[str, Any]]:
+    def list_scenes(self) -> List[Dict[str, Any]]:
         self._discover()
         result = []
-        for resource in self.files.list_resources(owner_type='scene', resource_type='scene_directory', include_hidden=include_hidden):
+        resources = self.files.list_resources(
+            owner_type='scene',
+            resource_type='scene_directory',
+            include_hidden=False,
+        )
+        for resource in sorted(resources, key=lambda item: item.created_at):
             try:
                 meta = self.files.read_child_json(resource.resource_id, 'meta_and_roles.json', allow_hidden=True)
             except (OSError, ValueError, ResourceNotFoundError):
                 meta = {}
             metadata = meta.get('scenario_metadata', {}) if isinstance(meta, dict) else {}
-            result.append({'scene_key': resource.owner_id, 'title': metadata.get('title') or resource.owner_id, 'visible': resource.visible, 'resource_id': resource.resource_id})
-        return sorted(result, key=lambda item: item['scene_key'].lower())
+            result.append(
+                SceneListItem(
+                    scene_key=resource.owner_id,
+                    title=metadata.get('title') or resource.owner_id,
+                ).to_dict()
+            )
+        return result
 
     def read_json(self, scene_key: str, filename: str) -> Any:
         resource = self.get_resource(scene_key)
         return self.files.read_child_json(resource.resource_id, filename)
 
     def details(self, scene_key: str) -> Dict[str, Any]:
-        resource = self.get_resource(scene_key)
-        files = {Path(name).stem: self.files.read_child_json(resource.resource_id, name) for name in REQUIRED_SCENE_FILES}
-        metadata = files['meta_and_roles'].get('scenario_metadata', {})
-        return {'scene_key': scene_key, 'title': metadata.get('title') or scene_key, 'description': metadata.get('global_rules', ''), 'visible': resource.visible, 'resource_id': resource.resource_id, 'files': files}
+        definition = self.build_definition(scene_key)
+        return SceneSummary(
+            scene_key=definition.scene_key,
+            title=definition.title,
+            description=definition.description,
+            agents=[asdict(agent) for agent in definition.agents],
+            skills=definition.skills,
+            tools=definition.tools,
+            tasks=definition.tasks,
+            topology=definition.topology,
+            validation=definition.validation,
+        ).to_dict()
 
     def build_definition(self, scene_key: str) -> SceneDefinition:
         scene_key = self.validate_scene_key(scene_key)
         meta = self.read_json(scene_key, 'meta_and_roles.json')
         instances = self.read_json(scene_key, 'instances_and_skills.json')
         topology_config = self.read_json(scene_key, 'network_topology.json')
+        validated = self.validator.validate(
+            scene_key,
+            self.files.resolve_path('scenes', scene_key),
+            meta,
+            instances,
+            topology_config,
+        )
+        if not validated.validation.valid:
+            raise SceneValidationError(validated.validation)
         scenario_metadata = meta.get('scenario_metadata', {})
         title = scenario_metadata.get('title', scene_key)
         description = scenario_metadata.get('global_rules', '')
         roles = meta.get('roles', {})
         containers = instances.get('container_instances', {})
+        normalized_containers = {
+            str(key).lower(): value for key, value in containers.items()
+        }
         agents: List[AgentDef] = []
         for role_id, role in roles.items():
-            instance = containers.get(role_id, {})
+            instance = normalized_containers.get(str(role_id).lower(), {})
             skill_refs = list(instance.get('skill_refs') or [])
             if not all((isinstance(item, str) and item for item in skill_refs)):
                 raise ValueError(f"Scene '{scene_key}' role '{role_id}' skill_refs must contain non-empty strings.")
             allowed_tools = list(instance.get('tool_refs') or [])
             backend = str(role.get('model_backbone', 'openclaw') or 'openclaw').strip()
-            if backend not in {'openclaw', 'claude-code'}:
+            if backend not in {'openclaw', 'claude-code', 'direct_llm'}:
                 raise ValueError(f"Scene '{scene_key}' role '{role_id}' uses unsupported backend '{backend}'.")
             identity = role.get('identity', '') or role.get('name', role_id)
-            agents.append(AgentDef(agent_id=role_id.lower(), role=identity, name=role.get('name', role_id), background=role.get('background', ''), core_goal=role.get('core_goal', ''), backend=backend, skill_refs=list(dict.fromkeys(skill_refs)), allowed_tools=list(dict.fromkeys(allowed_tools)), tasks=list(instance.get('tasks') or [])))
+            task_values = []
+            for task in instance.get('tasks') or []:
+                task_values.append(
+                    task if isinstance(task, str) else str(task.get('goal') or task.get('name') or '')
+                )
+            agents.append(AgentDef(agent_id=role_id.lower(), role=identity, name=role.get('name', role_id), background=role.get('background', ''), core_goal=role.get('core_goal', ''), backend=backend, skill_refs=list(dict.fromkeys(skill_refs)), allowed_tools=list(dict.fromkeys(allowed_tools)), tasks=[task for task in task_values if task]))
         raw_topology = topology_config.get('topology')
         if not isinstance(raw_topology, list):
             raise ValueError(f"Scene '{scene_key}' network_topology.json must contain a root-level topology array.")
@@ -127,7 +169,17 @@ class SceneStorage:
             channel_ids.add(channel_id)
             network = normalize_profile({field: edge.get(field, 0) for field in _TOPOLOGY_NETWORK_FIELDS})
             topology_edges.append({'endpoint_a': endpoint_a, 'endpoint_b': endpoint_b, 'channel_id': channel_id, **network})
-        return SceneDefinition(scene_key=scene_key, title=title, description=description, agents=agents, topology=topology_edges)
+        return SceneDefinition(
+            scene_key=scene_key,
+            title=title,
+            description=description,
+            agents=agents,
+            skills=validated.skills,
+            tools=validated.tools,
+            tasks=validated.tasks,
+            topology=topology_edges,
+            validation=validated.validation,
+        )
 
     def create_archive(self, scene_key: str):
         scene = self.get_resource(scene_key)

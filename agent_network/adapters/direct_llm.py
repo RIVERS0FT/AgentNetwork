@@ -277,7 +277,10 @@ def _build_task_payload(agent_context: AgentContext) -> str:
         "allowed_tools": agent_context.allowed_tools,
         "permissions": agent_context.permissions,
         "state_snapshot": agent_context.state_snapshot,
-        "tick": agent_context.tick,
+        "simulation_id": agent_context.simulation_id,
+        "event_id": agent_context.event_id,
+        "event_sequence": agent_context.event_sequence,
+        "event_type": agent_context.event_type,
         "simulation_seed": agent_context.simulation_seed,
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)

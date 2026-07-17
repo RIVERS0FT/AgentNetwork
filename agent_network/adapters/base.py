@@ -15,9 +15,12 @@ class AgentContext:
     allowed_tools: List[str]
     permissions: Dict[str, Any]
     state_snapshot: Dict[str, Any]
-    tick: int
     timeout_seconds: int
     max_turns: int
+    simulation_id: str = ""
+    event_id: str = ""
+    event_sequence: int = 0
+    event_type: str = ""
     scene_key: str = "default"
     agent_directory: Dict[str, str] = field(default_factory=dict)
     comm_matrix: Dict[str, List[str]] = field(default_factory=dict)

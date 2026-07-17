@@ -1,22 +1,20 @@
 import json
-import asyncio
 
 import pytest
 
-from agent_network.api import simulations
+from agent_network.file_management import FileManager
+from agent_network.scene_management import SceneStorage, SceneValidationError
 
 
 def _write_scene(root, scene_name="demo_scene", backend="openclaw"):
     folder = root / scene_name
     folder.mkdir()
-
     (folder / "meta_and_roles.json").write_text(
         json.dumps(
             {
                 "scenario_metadata": {
                     "title": "Demo Scene",
                     "global_rules": "Global rules",
-                    "max_rounds": 2,
                 },
                 "roles": {
                     "CEO": {
@@ -27,12 +25,10 @@ def _write_scene(root, scene_name="demo_scene", backend="openclaw"):
                         "primary_interaction_paradigm": "INTERNAL_COLLABORATION",
                     }
                 },
-            },
-            ensure_ascii=False,
+            }
         ),
         encoding="utf-8",
     )
-
     (folder / "instances_and_skills.json").write_text(
         json.dumps(
             {
@@ -40,50 +36,44 @@ def _write_scene(root, scene_name="demo_scene", backend="openclaw"):
                     "CEO": {
                         "skill_refs": ["planning", "reporting"],
                         "tool_refs": ["write_plan"],
+                        "tasks": [],
                     }
                 }
-            },
-            ensure_ascii=False,
+            }
         ),
         encoding="utf-8",
     )
-
     (folder / "network_topology.json").write_text(
-        json.dumps({"topology": []}, ensure_ascii=False),
-        encoding="utf-8",
+        json.dumps({"topology": []}), encoding="utf-8"
     )
-
     skills_dir = folder / "skills"
     skills_dir.mkdir()
-    (skills_dir / "planning.md").write_text(
-        """---
-name: planning
-description: Plan work
-tools:
-  - write_plan
----
-Planning SOP.
-""",
+    (skills_dir / "planning.md").write_text("Planning SOP.\n", encoding="utf-8")
+    (skills_dir / "reporting.md").write_text("Reporting SOP.\n", encoding="utf-8")
+    (folder / "tools.py").write_text(
+        'def write_plan(**kwargs):\n    return kwargs\n\nToolRegistry.register("write_plan", write_plan)\n',
         encoding="utf-8",
     )
-    (skills_dir / "reporting.md").write_text(
-        """---
-name: reporting
-description: Report work
----
-Reporting SOP.
-""",
-        encoding="utf-8",
-    )
-
     return folder
 
 
-def test_scene_building_uses_identity_role_and_skill_refs(tmp_path, monkeypatch):
-    _write_scene(tmp_path)
-    monkeypatch.setattr(simulations, "_SCENES_DIR", tmp_path)
+def _storage(tmp_path):
+    return SceneStorage(
+        FileManager(
+            {
+                "scenes": tmp_path,
+                "archives": tmp_path / ".archives",
+                "temp": tmp_path / ".temp",
+            },
+            catalog_path=tmp_path / ".registry.json",
+        )
+    )
 
-    scene_def = simulations._build_scene_from_folder("demo_scene")
+
+def test_scene_building_uses_unified_validated_domain_model(tmp_path):
+    _write_scene(tmp_path)
+
+    scene_def = _storage(tmp_path).build_definition("demo_scene")
     agent = scene_def.agents[0]
 
     assert scene_def.scene_key == "demo_scene"
@@ -93,47 +83,59 @@ def test_scene_building_uses_identity_role_and_skill_refs(tmp_path, monkeypatch)
     assert agent.role == "Leader"
     assert agent.core_goal == "Coordinate the team"
     assert agent.backend == "openclaw"
-    assert agent.tasks == []
     assert agent.skill_refs == ["planning", "reporting"]
     assert agent.allowed_tools == ["write_plan"]
-    removed_key = "extra" + "_meta"
-    assert not hasattr(agent, removed_key)
+    assert [item.skill_id for item in scene_def.skills] == ["planning", "reporting"]
+    assert [item.tool_id for item in scene_def.tools] == ["write_plan"]
+    assert scene_def.validation.validation_status == "fully_validated"
 
 
-
-def test_scene_building_accepts_claude_code_backend(tmp_path, monkeypatch):
-    _write_scene(tmp_path, backend="claude-code")
-    monkeypatch.setattr(simulations, "_SCENES_DIR", tmp_path)
-
-    scene_def = simulations._build_scene_from_folder("demo_scene")
-
-    assert scene_def.agents[0].backend == "claude-code"
-
-def test_scene_building_rejects_removed_brain_backend(tmp_path, monkeypatch):
-    _write_scene(tmp_path, backend="brain")
-    monkeypatch.setattr(simulations, "_SCENES_DIR", tmp_path)
-
-    with pytest.raises(ValueError) as exc:
-        simulations._build_scene_from_folder("demo_scene")
-
-    assert "removed backend 'brain'" in str(exc.value)
+@pytest.mark.parametrize("backend", ["claude-code", "direct_llm"])
+def test_scene_building_accepts_supported_backends(tmp_path, backend):
+    _write_scene(tmp_path, backend=backend)
+    assert _storage(tmp_path).build_definition("demo_scene").agents[0].backend == backend
 
 
-def test_scene_building_rejects_unknown_backend(tmp_path, monkeypatch):
-    _write_scene(tmp_path, backend="unknown-backend")
-    monkeypatch.setattr(simulations, "_SCENES_DIR", tmp_path)
+@pytest.mark.parametrize("backend", ["brain", "unknown-backend"])
+def test_scene_building_reports_unsupported_backend(tmp_path, backend):
+    _write_scene(tmp_path, backend=backend)
 
-    with pytest.raises(ValueError) as exc:
-        simulations._build_scene_from_folder("demo_scene")
+    with pytest.raises(SceneValidationError) as exc:
+        _storage(tmp_path).build_definition("demo_scene")
 
     assert "unsupported backend" in str(exc.value)
 
 
-def test_setup_records_explicit_simulation_seed(tmp_path, monkeypatch):
-    _write_scene(tmp_path)
-    monkeypatch.setattr(simulations, "_SCENES_DIR", tmp_path)
+def test_scene_validation_reports_all_detected_issues(tmp_path):
+    folder = _write_scene(tmp_path)
+    meta_path = folder / "meta_and_roles.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["scenario_metadata"]["max_rounds"] = 2
+    meta["roles"]["CEO"]["model_backbone"] = "brain"
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
 
-    result = asyncio.run(simulations.setup_simulation(simulations.SimulationRunRequest(scene="demo_scene", seed=1234)))
+    with pytest.raises(SceneValidationError) as exc:
+        _storage(tmp_path).build_definition("demo_scene")
 
-    assert result["seed"] == 1234
-    assert simulations._pending_seed == 1234
+    codes = {issue.code for issue in exc.value.result.issues}
+    assert "SCHEMA_UNKNOWN_FIELD" in codes
+    assert "AGENT_BACKEND_UNSUPPORTED" in codes
+    assert exc.value.result.error_count >= 2
+
+
+def test_scene_validation_rejects_task_dependency_cycle(tmp_path):
+    folder = _write_scene(tmp_path)
+    instances_path = folder / "instances_and_skills.json"
+    instances = json.loads(instances_path.read_text(encoding="utf-8"))
+    instances["container_instances"]["CEO"]["tasks"] = [
+        {"task_id": "plan", "goal": "Plan", "depends_on": ["report"]},
+        {"task_id": "report", "goal": "Report", "depends_on": ["plan"]},
+    ]
+    instances_path.write_text(json.dumps(instances), encoding="utf-8")
+
+    with pytest.raises(SceneValidationError) as exc:
+        _storage(tmp_path).build_definition("demo_scene")
+
+    assert "TASK_DEPENDENCY_CYCLE" in {
+        issue.code for issue in exc.value.result.issues
+    }

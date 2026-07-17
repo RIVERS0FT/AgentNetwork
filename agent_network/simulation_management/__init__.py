@@ -5,8 +5,11 @@ from .models import (
     SimulationResourceAllocation,
     SimulationRun,
     SimulationRuntimeConfig,
+    SimulationEvent,
+    SimulationEventStatus,
     SimulationState,
 )
+from .event_scheduler import SimulationEventScheduler
 from .resource_allocator import ResourceAllocationError, SimulationResourceAllocator
 from .simulation_manager import SimulationManager, SimulationManagerError
 
@@ -19,5 +22,8 @@ __all__ = [
     "SimulationResourceAllocator",
     "SimulationRun",
     "SimulationRuntimeConfig",
+    "SimulationEvent",
+    "SimulationEventScheduler",
+    "SimulationEventStatus",
     "SimulationState",
 ]

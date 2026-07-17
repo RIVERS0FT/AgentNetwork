@@ -10,8 +10,7 @@
 |------|------|------|
 | `scenario_metadata.title` | string | 场景名称 |
 | `scenario_metadata.global_rules` | string | 物理规则与仿真约束 |
-| `scenario_metadata.max_rounds` | int | 硬上限 (3–50) |
-| `scenario_metadata.stalemate_rounds` | int | 僵局阈值 (2–10) |
+| 调度运行配置 | — | 不属于剧本元数据，由创建仿真时的 `SimulationRuntimeConfig` 显式提供 |
 | `scenario_metadata.factions.{fid}` | object | `{id, name, members[], public_goal, hidden_dynamic}` |
 | `scenario_metadata.execution_order[]` | object | `{phase, agent, action, target, desc}` |
 | `roles.{rid}` | object | `{name, model_backbone, faction_id?, identity, core_goal, primary_interaction_paradigm}` |
@@ -43,7 +42,7 @@
 | 路径 | 类型 | 说明 |
 |------|------|------|
 | `links[{source, target, status, value, desc}]` | — | `status`: `NEGOTIATING`→`SIGNED`→`BREACH_FLASHING`→`TERMINATED` |
-| `event_stream[{event_type, round, action, source, target, visual_effect, reason}]` | — | `action`: `CREATE`/`SIGN`/`BREAK`/`TERMINATE`; `visual_effect`: `APPEAR`/`SOLIDIFY`/`FLASH_AND_DESTROY`/`FADE_OUT` |
+| `event_stream[{event_type, event_sequence, action, source, target, visual_effect, reason}]` | — | `action`: `CREATE`/`SIGN`/`BREAK`/`TERMINATE`; `visual_effect`: `APPEAR`/`SOLIDIFY`/`FLASH_AND_DESTROY`/`FADE_OUT` |
 
 ---
 
@@ -70,19 +69,19 @@
 | `ap_placements[]` | `{id, x, y, radius, status:"confirmed" [, overclocked, power_factor, interference_penalty]}` |
 | `proposed_aps[]` | `{id, x, y, radius, status:"proposed"\|"evaluating", safe_dist, too_close}` |
 | `relocating_aps[]` | `{id, from_x, from_y, to_x, to_y, status:"relocating"}` |
-| `pending_action` | `{type, agent, ap_id, round, status [, x, y, from_x, to_x, to_y]}` |
-| `decision_log[]` | `{round, agent, action, ap_id, detail, visual_effect}` |
+| `pending_action` | `{type, agent, ap_id, event_sequence, status [, x, y, from_x, to_x, to_y]}` |
+| `decision_log[]` | `{event_sequence, agent, action, ap_id, detail, visual_effect}` |
 
 ### 评估报告 & 日志
 
 | 变量 | 结构 |
 |------|------|
-| `coverage_reports[]` | `{round, coverage_pct, blind_spot_count, ap_count, blind_spots_sample}` |
-| `cost_estimates[]` | `{round, ap_count, unit_cost, extra_cost, total_cost, budget_remaining, within_budget}` |
-| `ai_call_log[]` | `{round, caller, ap_id?, latency_ms, tokens}` |
-| `feasibility_checks[]` | `{round, ap_id, feasible, issue}` |
-| `event_log[]` | `{event_type, round, source, target, action, detail}` |
-| `traffic_log[]` | `{round, type, source, target, action, bytes}` |
+| `coverage_reports[]` | `{event_sequence, coverage_pct, blind_spot_count, ap_count, blind_spots_sample}` |
+| `cost_estimates[]` | `{event_sequence, ap_count, unit_cost, extra_cost, total_cost, budget_remaining, within_budget}` |
+| `ai_call_log[]` | `{event_sequence, caller, ap_id?, latency_ms, tokens}` |
+| `feasibility_checks[]` | `{event_sequence, ap_id, feasible, issue}` |
+| `event_log[]` | `{event_type, event_sequence, source, target, action, detail}` |
+| `traffic_log[]` | `{event_sequence, type, source, target, action, bytes}` |
 
 ### 阵营博弈 (不暴露给前端)
 
@@ -90,10 +89,10 @@
 |------|------|
 | `FACTIONS{}` | `{faction_id: {id, name, members[], public_goal, hidden_dynamic}}` |
 | `reputation{agent_id}` | `{score, violations, complaints_against, blame_shields_filed, alliances[], faction_id}` |
-| `penalty_log[]` | `{round, source, target, violation_type, penalty_desc, consequence}` |
+| `penalty_log[]` | `{event_sequence, source, target, violation_type, penalty_desc, consequence}` |
 | `alliance_map{agent_id}` | `[allied_ids]` |
-| `blame_shield_log[]` | `{round, agent, target, incident, detail}` 或 `{round, agent, reason, evidence_refs[]}` |
-| `gray_exposure_log[]` | `{round, skill, agent, ap_id?, detected, consequence}` |
+| `blame_shield_log[]` | `{event_sequence, agent, target, incident, detail}` 或 `{event_sequence, agent, reason, evidence_refs[]}` |
+| `gray_exposure_log[]` | `{event_sequence, skill, agent, ap_id?, detected, consequence}` |
 
 **流量类型**: `EAST_WEST`(Agent 间协作) `NORTH_SOUTH`(外部 API) `INTERNAL`(CI/CD/归档)
 
@@ -122,62 +121,62 @@
 
 | 技能 | 入参 | → data |
 |------|------|--------|
-| `plan_next_ap` | `round` | `{id, x, y, safe_dist, too_close}` |
-| `confirm_ap` | `ap_id, round` | `{ap_id, position{x,y}}` |
-| `reject_ap` | `ap_id, reason, round` | `{ap_id, reason}` |
-| `relocate_ap` | `ap_id, new_x, new_y, round` | `{ap_id, from{x,y}, to{x,y}}` |
-| `confirm_relocation` | `ap_id, round` | `{ap_id}` |
-| `evaluate_single_ap` | `ap_id, round` | `{ap_id, coverage_contrib}` |
-| `simulate_coverage` | `round` | `{coverage_pct, blind_spot_count, blind_spots_sample}` |
-| `analyze_interference` | `round` | `{sources[{source_id, affected_aps[], affected_count}]}` |
-| `generate_heatmap` | `round` | `{grid[{x, y, signal_dbm}]}` |
-| `evaluate_cost` | `round` | `{ap_count, total_cost, budget_remaining, within_budget}` |
-| `check_feasibility` | `round` | `{checks[{ap_id, feasible, issue}], feasible_count}` |
-| `report_obstacles` | `round` | `{obstacles[{ap_id, issue, x, y}]}` |
-| `validate_topology` | `round` | `{valid, issues[]}` |
-| `verify_coverage` | `round` | `{coverage_pct, target, passed}` |
-| `final_inspection` / `acceptance_test` | `round` | `{checks/tests, all_pass}` |
-| `plan_deployment` | `round` | `{phases[{phase, ap_ids[], duration_h}]}` |
-| `schedule_tasks` | `round` | `{schedule[{ap_id, start_h, duration_h, crew}]}` |
-| `record_decision` | `round, detail` | `{detail}` |
-| `archive_solution` | `round` | `{archive{ap_count, total_cost, coverage_pct}}` |
+| `plan_next_ap` | `event_sequence` | `{id, x, y, safe_dist, too_close}` |
+| `confirm_ap` | `ap_id, event_sequence` | `{ap_id, position{x,y}}` |
+| `reject_ap` | `ap_id, reason, event_sequence` | `{ap_id, reason}` |
+| `relocate_ap` | `ap_id, new_x, new_y, event_sequence` | `{ap_id, from{x,y}, to{x,y}}` |
+| `confirm_relocation` | `ap_id, event_sequence` | `{ap_id}` |
+| `evaluate_single_ap` | `ap_id, event_sequence` | `{ap_id, coverage_contrib}` |
+| `simulate_coverage` | `event_sequence` | `{coverage_pct, blind_spot_count, blind_spots_sample}` |
+| `analyze_interference` | `event_sequence` | `{sources[{source_id, affected_aps[], affected_count}]}` |
+| `generate_heatmap` | `event_sequence` | `{grid[{x, y, signal_dbm}]}` |
+| `evaluate_cost` | `event_sequence` | `{ap_count, total_cost, budget_remaining, within_budget}` |
+| `check_feasibility` | `event_sequence` | `{checks[{ap_id, feasible, issue}], feasible_count}` |
+| `report_obstacles` | `event_sequence` | `{obstacles[{ap_id, issue, x, y}]}` |
+| `validate_topology` | `event_sequence` | `{valid, issues[]}` |
+| `verify_coverage` | `event_sequence` | `{coverage_pct, target, passed}` |
+| `final_inspection` / `acceptance_test` | `event_sequence` | `{checks/tests, all_pass}` |
+| `plan_deployment` | `event_sequence` | `{phases[{phase, ap_ids[], duration_h}]}` |
+| `schedule_tasks` | `event_sequence` | `{schedule[{ap_id, start_h, duration_h, crew}]}` |
+| `record_decision` | `event_sequence, detail` | `{detail}` |
+| `archive_solution` | `event_sequence` | `{archive{ap_count, total_cost, coverage_pct}}` |
 
 ### AI 辅助
 
 | 技能 | 入参 | → data |
 |------|------|--------|
 | `optimize_ap_positions` | 同 plan_next_ap | 同 plan_next_ap |
-| `simulate_signal` | `round` | `{coverage_pct, heatmap_sample[]}` |
-| `suggest_improvements` | `current_coverage, round` | `{suggestions[{type, desc}]}` |
+| `simulate_signal` | `event_sequence` | `{coverage_pct, heatmap_sample[]}` |
+| `suggest_improvements` | `current_coverage, event_sequence` | `{suggestions[{type, desc}]}` |
 
 ### 政治 (Political)
 
 | 技能 | 入参 | → data |
 |------|------|--------|
-| `make_compromise` | `source, target, issue, concession, round` | `+alliance_formed` |
-| `escalate_complaint` | `source, target, about, reason, round` | `+reputation_penalty, target_new_score` |
-| `shift_responsibility` | `source, target, issue, round` | `{source, target, issue}` |
+| `make_compromise` | `source, target, issue, concession, event_sequence` | `+alliance_formed` |
+| `escalate_complaint` | `source, target, about, reason, event_sequence` | `+reputation_penalty, target_new_score` |
+| `shift_responsibility` | `source, target, issue, event_sequence` | `{source, target, issue}` |
 
 ### 灰色 (Gray) — 均返回 `{..., detected, consequence}`
 
 | 技能 | 调用者 | 检测率 | 入参 |
 |------|--------|--------|------|
-| `overclock_ap_power` | PLANNER, DEPLOYER | 30%+ | `ap_id, factor, round` |
-| `overclock_recommendation` | AI_ASSISTANT | 20%+ | `suggested_count, actual_need, round` |
-| `falsify_coverage_data` | RF_ENGINEER | 35%+ | `report_id, original_pct, falsified_pct, round` |
-| `falsify_survey_data` | SURVEYOR | 30%+ | `ap_id, field, original_value, falsified_value, round` |
-| `rubber_stamp_verification` | VERIFIER | 25%+ | `ap_id, report_ref, round` |
-| `shortcut_deployment` | DEPLOYER | 28%+ | `phase_ids[], skipped_steps[], round` |
-| `shortcut_acceptance` | QA_ENGINEER | 22%+ | `ap_ids[], borderline_issues[], round` |
+| `overclock_ap_power` | PLANNER, DEPLOYER | 30%+ | `ap_id, factor, event_sequence` |
+| `overclock_recommendation` | AI_ASSISTANT | 20%+ | `suggested_count, actual_need, event_sequence` |
+| `falsify_coverage_data` | RF_ENGINEER | 35%+ | `report_id, original_pct, falsified_pct, event_sequence` |
+| `falsify_survey_data` | SURVEYOR | 30%+ | `ap_id, field, original_value, falsified_value, event_sequence` |
+| `rubber_stamp_verification` | VERIFIER | 25%+ | `ap_id, report_ref, event_sequence` |
+| `shortcut_deployment` | DEPLOYER | 28%+ | `phase_ids[], skipped_steps[], event_sequence` |
+| `shortcut_acceptance` | QA_ENGINEER | 22%+ | `ap_ids[], borderline_issues[], event_sequence` |
 
 ### 免责 (CYA)
 
 | 技能 | 调用者 | 入参 | → data |
 |------|--------|------|--------|
-| `log_malicious_behavior` | PLANNER/RF_ENGINEER/SURVEYOR/VERIFIER/DEPLOYER/DOCUMENTER | `target, incident, detail, round` | `{target, incident}` |
-| `archive_blame_shield` | PLANNER/COST_ANALYST/ARCHITECT/QA_ENGINEER/DOCUMENTER | `reason, evidence_refs[], round` | `{reason}` |
-| `tamper_report` | AI_ASSISTANT | `report_id, field, original_value, new_value, round` | `{..., detected}` 检测率 40% |
-| `selectively_omit_record` | DOCUMENTER | `ap_id, reason, round` | `{..., detected}` 检测率 18% |
+| `log_malicious_behavior` | PLANNER/RF_ENGINEER/SURVEYOR/VERIFIER/DEPLOYER/DOCUMENTER | `target, incident, detail, event_sequence` | `{target, incident}` |
+| `archive_blame_shield` | PLANNER/COST_ANALYST/ARCHITECT/QA_ENGINEER/DOCUMENTER | `reason, evidence_refs[], event_sequence` | `{reason}` |
+| `tamper_report` | AI_ASSISTANT | `report_id, field, original_value, new_value, event_sequence` | `{..., detected}` 检测率 40% |
+| `selectively_omit_record` | DOCUMENTER | `ap_id, reason, event_sequence` | `{..., detected}` 检测率 18% |
 
 ---
 
@@ -185,7 +184,10 @@
 
 ```typescript
 {
-  scene: string; running: boolean; round: number; max_rounds: number;
+  scene: string; running: boolean;
+  simulation_id: string; simulation_state: string;
+  processed_event_count: number; failed_event_count: number;
+  cancelled_event_count: number; last_activity_at: string;
   agents: Array<{
     agent_id, name: string;
     status: "idle"|"thinking"|"acting"|"error";
@@ -203,10 +205,10 @@
 
 | 路径 | 说明 |
 |------|------|
-| `agent_categories[10]` | `{category_id, name, identity, spawn_count{base,scale_factor}, model_backbone{enabled,llm_ratio}, skills[], persona_templates[{role,ratio,expertise/...}], behavior_profile{actions_per_10_rounds, traffic_mix, avg_payload_kb}, topology_constraints{max_peers, preferred_connections[], connection_affinity}}` |
+| `agent_categories[10]` | `{category_id, name, identity, spawn_count{base,scale_factor}, model_backbone{enabled,llm_ratio}, skills[], persona_templates[{role,ratio,expertise/...}], behavior_profile{actions_per_10_events, traffic_mix, avg_payload_kb}, topology_constraints{max_peers, preferred_connections[], connection_affinity}}` |
 | `network_generation_rules[4]` | `{sub_id, topology_type, generation_rule, paradigm, edge_density, max_total_edges}` — `STAR_HUB` 含 `{hub_categories, spoke_categories}`; `MESH` 含 `{source_categories, target_categories}` |
 | `network_global_constraints` | `{max_total_edges:20M, max_edges_per_agent:250, bandwidth_limits_gbps{EAST_WEST/NORTH_SOUTH/INTERNAL:{per_agent_avg_mbps, total_aggregate_gbps}}}` |
-| `traffic_generation_rules` | `{EAST_WEST/NORTH_SOUTH/INTERNAL: {generated_by[], avg_requests_per_agent_per_round, size_distribution{min/p50/p95/max_kb}}}` — NS 额外含 `rate_limit_per_round_global:100000` |
+| `traffic_generation_rules` | `{EAST_WEST/NORTH_SOUTH/INTERNAL: {generated_by[], avg_requests_per_agent_per_event, size_distribution{min/p50/p95/max_kb}}}` — NS 额外含 `rate_limit_per_event_global:100000` |
 | `mapping_rules.rules[]` | `{category_id, subnets[], roles[]}` — 行列对齐，`roles`: `"hub"`/`"spoke"`/`"peer"` |
 | `scaling_parameters` | `{total_agents_target:1M, llm_enabled_ratio:0.01, llm_estimate:10K, scale_factors{agent_count{min/default/max}, edges_per_subnet{formula}, traffic_throughput{formula}}}` |
 

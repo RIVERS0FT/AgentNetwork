@@ -1,6 +1,4 @@
 import json
-import os
-
 from agent_network.adapters.base import AgentContext
 from agent_network.adapters import claude_code, openclaw
 from agent_network.adapters.claude_code import ClaudeCodeAdapter
@@ -23,7 +21,10 @@ def _context() -> AgentContext:
         allowed_tools=["send_message", "write_plan"],
         permissions={"can_send": ["agent_b"]},
         state_snapshot={"version": 1},
-        tick=3,
+        simulation_id="sim-test",
+        event_id="evt-test",
+        event_sequence=3,
+        event_type="agent_ready",
         timeout_seconds=60,
         max_turns=5,
         scene_key="demo_scene",
@@ -40,10 +41,14 @@ def test_claude_task_payload_contains_full_context_not_latest_message_only():
 
     assert payload["scene_key"] == "demo_scene"
     assert payload["trace_id"] == "trace-test"
+    assert payload["simulation_id"] == "sim-test"
+    assert payload["event_id"] == "evt-test"
+    assert payload["event_sequence"] == 3
+    assert payload["event_type"] == "agent_ready"
     assert payload["agent"]["agent_id"] == "agent_a"
     assert [m["content"] for m in payload["messages"]] == ["first", "second"]
     assert payload["skill_refs"] == ["planning"]
-    assert payload["skill_context"] == []
+    assert "skill_context" not in payload
     assert payload["allowed_tools"] == ["send_message", "write_plan"]
 
     server = claude_code._claude_mcp_server(_context())
@@ -56,7 +61,7 @@ def test_openclaw_task_payload_contains_full_context_not_latest_message_only():
     assert payload["scene_key"] == "demo_scene"
     assert [m["content"] for m in payload["messages"]] == ["first", "second"]
     assert payload["skill_refs"] == ["planning"]
-    assert payload["skill_context"] == []
+    assert "skill_context" not in payload
 
 
 def test_mock_claude_adapter_returns_application_event_without_real_llm(monkeypatch):

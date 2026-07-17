@@ -179,7 +179,10 @@ class RunRequest(BaseModel):
     allowed_tools: List[str] = []
     permissions: Dict[str, Any] = {}
     state_snapshot: Dict[str, Any] = {}
-    tick: int = 0
+    simulation_id: str = ""
+    event_id: str = ""
+    event_sequence: int = 0
+    event_type: str = ""
     timeout_seconds: int = 60
     max_turns: int = 10
     scene_key: str = "default"
@@ -238,9 +241,12 @@ async def run_agent(req: RunRequest):
         allowed_tools=req.allowed_tools,
         permissions=req.permissions,
         state_snapshot=req.state_snapshot,
-        tick=req.tick,
         timeout_seconds=req.timeout_seconds,
         max_turns=req.max_turns,
+        simulation_id=req.simulation_id,
+        event_id=req.event_id,
+        event_sequence=req.event_sequence,
+        event_type=req.event_type,
         scene_key=req.scene_key or os.environ.get("AGENT_SCENE_KEY", "default"),
         agent_directory=req.agent_directory,
         comm_matrix=req.comm_matrix,

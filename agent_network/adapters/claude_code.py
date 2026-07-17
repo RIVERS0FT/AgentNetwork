@@ -50,7 +50,10 @@ def _build_task_payload(agent_context: AgentContext) -> str:
         "allowed_tools": agent_context.allowed_tools,
         "permissions": agent_context.permissions,
         "state_snapshot": agent_context.state_snapshot,
-        "tick": agent_context.tick,
+        "simulation_id": agent_context.simulation_id,
+        "event_id": agent_context.event_id,
+        "event_sequence": agent_context.event_sequence,
+        "event_type": agent_context.event_type,
         "agent_directory": agent_context.agent_directory,
         "comm_matrix": agent_context.comm_matrix,
         "network_mode": "a2a",
@@ -132,7 +135,7 @@ def _claude_mcp_server(agent_context: AgentContext) -> dict:
             "--trace-id",
             agent_context.trace_id,
             "--simulation-seed",
-            str(agent_context.simulation_seed + agent_context.tick),
+            str(agent_context.simulation_seed + agent_context.event_sequence),
         ],
     }
 

@@ -19,6 +19,7 @@ def _scene_zip(title: str, role_id: str = "planner") -> bytes:
             role_id: {
                 "name": role_id.title(),
                 "identity": f"{role_id} identity",
+                "core_goal": "Complete assigned work",
                 "model_backbone": "openclaw",
             }
         },
@@ -96,6 +97,53 @@ def test_batch_parse_returns_each_definition(manager):
     assert definition["scene_key"] == "alpha"
     assert definition["agents"][0]["agent_id"] == "planner"
     assert result.items[1].error_code == "scene_not_found"
+
+
+def test_scene_list_and_details_use_the_domain_contract(manager):
+    manager.upload_one(
+        filename="alpha.zip",
+        scene_key="alpha",
+        content=_scene_zip("Alpha"),
+    )
+
+    assert manager.list_scenes() == [{"scene_key": "alpha", "title": "Alpha"}]
+    details = manager.details("alpha")
+    assert set(details) == {
+        "scene_key",
+        "title",
+        "description",
+        "agents",
+        "skills",
+        "tools",
+        "tasks",
+        "topology",
+        "validation",
+    }
+    assert details["validation"]["validation_status"] == "fully_validated"
+    assert details["validation"]["schema_version"] == "agentnetwork-scene.v1"
+    assert "raw" not in details
+    assert "resource_id" not in details
+
+
+def test_invalid_scene_upload_is_rolled_back(manager):
+    payload = io.BytesIO()
+    meta = {
+        "scenario_metadata": {"title": "Invalid", "max_rounds": 3},
+        "roles": {},
+    }
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("meta_and_roles.json", json.dumps(meta))
+        archive.writestr(
+            "instances_and_skills.json", json.dumps({"container_instances": {}})
+        )
+        archive.writestr("network_topology.json", json.dumps({"topology": []}))
+
+    result = manager.upload_many(
+        [{"filename": "invalid.zip", "scene_key": "invalid", "content": payload.getvalue()}]
+    )
+
+    assert result.failed == 1
+    assert manager.list_scenes() == []
 
 
 def test_batch_download_creates_one_managed_archive(manager):

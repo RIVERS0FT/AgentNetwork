@@ -18,7 +18,7 @@ def _build_manager_for_log_dir(log_dir: str) -> FileManager:
         return default
     data_root = requested.parent
     roots = {'scenes': os.environ.get('SCENE_DIR', './scenes'), 'logs': requested, 'pcap': os.environ.get('PCAP_DIR', str(data_root / 'pcap')), 'archives': os.environ.get('ARCHIVE_DIR', str(data_root / 'archives')), 'temp': os.environ.get('FILE_TEMP_DIR', str(data_root / 'tmp'))}
-    return FileManager(roots, catalog_path=data_root / 'file_registry.json')
+    return FileManager(roots, catalog_path=requested / '.file_registry.json')
 
 def install_log_manager() -> None:
     """Replace the legacy file-owning LogManager with a FileManager-backed class."""

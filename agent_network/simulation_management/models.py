@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -27,6 +28,14 @@ class SimulationState(str, Enum):
     STOPPED = "STOPPED"
     FORCE_STOPPED = "FORCE_STOPPED"
     FAILED = "FAILED"
+
+
+class SimulationEventStatus(str, Enum):
+    PENDING = "PENDING"
+    DISPATCHED = "DISPATCHED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 TERMINAL_STATES = {
@@ -86,7 +95,9 @@ class SimulationResourceAllocation:
 class SimulationRuntimeConfig:
     duration_seconds: int = 3600
     agent_timeout_seconds: int = 300
+    idle_timeout_seconds: int = 5
     graceful_stop_timeout_seconds: int = 30
+    network_mode: str = "a2a"
     resource_allocation: SimulationResourceAllocation = field(
         default_factory=SimulationResourceAllocation
     )
@@ -96,10 +107,14 @@ class SimulationRuntimeConfig:
             raise ValueError("duration_seconds must be between 1 and 604800")
         if not 1 <= int(self.agent_timeout_seconds) <= 86400:
             raise ValueError("agent_timeout_seconds must be between 1 and 86400")
+        if not 0 <= int(self.idle_timeout_seconds) <= 3600:
+            raise ValueError("idle_timeout_seconds must be between 0 and 3600")
         if not 0 <= int(self.graceful_stop_timeout_seconds) <= 3600:
             raise ValueError(
                 "graceful_stop_timeout_seconds must be between 0 and 3600"
             )
+        if self.network_mode != "a2a":
+            raise ValueError("network_mode must be 'a2a'")
 
     @classmethod
     def from_dict(
@@ -109,9 +124,11 @@ class SimulationRuntimeConfig:
         return cls(
             duration_seconds=int(value.get("duration_seconds", 3600)),
             agent_timeout_seconds=int(value.get("agent_timeout_seconds", 300)),
+            idle_timeout_seconds=int(value.get("idle_timeout_seconds", 5)),
             graceful_stop_timeout_seconds=int(
                 value.get("graceful_stop_timeout_seconds", 30)
             ),
+            network_mode=str(value.get("network_mode", "a2a")),
             resource_allocation=SimulationResourceAllocation.from_dict(
                 value.get("resource_allocation")
             ),
@@ -127,6 +144,47 @@ class SimulationControl:
     force_stop_event: threading.Event = field(default_factory=threading.Event)
     terminal_event: threading.Event = field(default_factory=threading.Event)
     reason: str = ""
+    condition: threading.Condition = field(
+        default_factory=threading.Condition,
+        repr=False,
+    )
+
+    def wake(self) -> None:
+        with self.condition:
+            self.condition.notify_all()
+
+
+@dataclass
+class SimulationEvent:
+    simulation_id: str
+    sequence: int
+    event_type: str
+    target_agent_id: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    source_agent_id: str = ""
+    event_id: str = field(default_factory=lambda: f"evt-{uuid.uuid4().hex}")
+    available_at: float = field(default_factory=time.monotonic)
+    created_at: str = field(default_factory=_now_iso)
+    dispatched_at: str = ""
+    completed_at: str = ""
+    status: SimulationEventStatus = SimulationEventStatus.PENDING
+    error: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "simulation_id": self.simulation_id,
+            "sequence": self.sequence,
+            "event_type": self.event_type,
+            "source_agent_id": self.source_agent_id,
+            "target_agent_id": self.target_agent_id,
+            "payload": self.payload,
+            "created_at": self.created_at,
+            "dispatched_at": self.dispatched_at,
+            "completed_at": self.completed_at,
+            "status": self.status.value,
+            "error": self.error,
+        }
 
 
 @dataclass
@@ -140,6 +198,7 @@ class SimulationRun:
     configured_at: str = ""
     started_at: str = ""
     deadline_at: str = ""
+    last_activity_at: str = ""
     stopped_at: str = ""
     stop_reason: str = ""
     error: str = ""
@@ -147,6 +206,10 @@ class SimulationRun:
     setup: dict[str, Any] = field(default_factory=dict)
     result: dict[str, Any] = field(default_factory=dict)
     resource_plan: dict[str, Any] = field(default_factory=dict)
+    processed_event_count: int = 0
+    failed_event_count: int = 0
+    cancelled_event_count: int = 0
+    scheduler: Any = field(default=None, repr=False)
     control: SimulationControl = field(default_factory=SimulationControl, repr=False)
 
     def mark_configured(self) -> None:
@@ -157,6 +220,7 @@ class SimulationRun:
         now = datetime.now(timezone.utc)
         self.state = SimulationState.RUNNING
         self.started_at = _now_iso()
+        self.last_activity_at = self.started_at
         self.deadline_at = (
             now + timedelta(seconds=self.runtime_config.duration_seconds)
         ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -172,6 +236,7 @@ class SimulationRun:
             "configured_at": self.configured_at,
             "started_at": self.started_at,
             "deadline_at": self.deadline_at,
+            "last_activity_at": self.last_activity_at,
             "stopped_at": self.stopped_at,
             "stop_reason": self.stop_reason,
             "error": self.error,
@@ -179,4 +244,7 @@ class SimulationRun:
             "setup": self.setup,
             "result": self.result,
             "resource_plan": self.resource_plan,
+            "processed_event_count": self.processed_event_count,
+            "failed_event_count": self.failed_event_count,
+            "cancelled_event_count": self.cancelled_event_count,
         }

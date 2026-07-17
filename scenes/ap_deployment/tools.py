@@ -27,8 +27,8 @@ MIN_AP_SPACING = 25
 ap_placements = []         # 已确认的AP [{id, x, y, radius, status:"confirmed"}]
 proposed_aps = []           # 待评估的AP [{id, x, y, radius, status:"proposed"|"evaluating"}]
 relocating_aps = []         # 正在迁移的AP [{id, from_x, from_y, to_x, to_y, status:"relocating"}]
-pending_action = None       # 当前决策 {type, agent, ap_id, detail, visual_effect, round}
-decision_log = []           # 决策历史 [{round, agent, action, ap_id, detail, visual_effect}]
+pending_action = None       # 当前决策 {type, agent, ap_id, detail, visual_effect, event_sequence}
+decision_log = []           # 决策历史 [{event_sequence, agent, action, ap_id, detail, visual_effect}]
 
 coverage_reports = []
 cost_estimates = []
@@ -38,7 +38,7 @@ event_log = []
 traffic_log = []
 
 _ap_counter = 0
-_current_round = 0
+_current_event_sequence = 0
 
 # ============================================================
 # 阵营博弈状态（v3: 政治/灰色/免责机制）
@@ -66,13 +66,13 @@ FACTIONS = {
 
 # 声誉追踪 {agent_id: {"score": 0-100, "violations": 0, "complaints_against": 0, "blame_shields_filed": 0, "alliances": []}}
 reputation = {}
-# 惩罚日志 [{round, source, target, violation_type, penalty_desc, consequence, detection_chance_pct}]
+# 惩罚日志 [{event_sequence, source, target, violation_type, penalty_desc, consequence, detection_chance_pct}]
 penalty_log = []
 # 临时同盟 {agent_id: [allied_ids]}  — 只记录当前轮有效的同盟
 alliance_map = {}
-# 免责盾日志 [{round, agent, target, incident_ref, detail, filed_at_round}]
+# 免责盾日志 [{event_sequence, agent, target, incident_ref, detail, filed_at_event_sequence}]
 blame_shield_log = []
-# 灰色操作曝光记录 [{round, skill, agent, detected, consequence_applied}]
+# 灰色操作曝光记录 [{event_sequence, skill, agent, detected, consequence_applied}]
 gray_exposure_log = []
 
 
@@ -118,14 +118,14 @@ def _next_ap_id():
     global _ap_counter; _ap_counter += 1; return f"AP_{_ap_counter}"
 
 
-def _emit_event(etype, round_num, source, target, action, detail=""):
-    event_log.append({"event_type": etype, "round": round_num, "source": source, "target": target, "action": action, "detail": detail})
+def _emit_event(etype, event_sequence, source, target, action, detail=""):
+    event_log.append({"event_type": etype, "event_sequence": event_sequence, "source": source, "target": target, "action": action, "detail": detail})
 
-def _emit_traffic(round_num, ttype, source, target, action, kbytes):
-    traffic_log.append({"round": round_num, "type": ttype, "source": source, "target": target, "action": action, "bytes": kbytes * 1024})
+def _emit_traffic(event_sequence, ttype, source, target, action, kbytes):
+    traffic_log.append({"event_sequence": event_sequence, "type": ttype, "source": source, "target": target, "action": action, "bytes": kbytes * 1024})
 
 def _log_decision(agent, action, ap_id, detail, visual_effect=""):
-    decision_log.append({"round": _current_round, "agent": agent, "action": action, "ap_id": ap_id, "detail": detail, "visual_effect": visual_effect})
+    decision_log.append({"event_sequence": _current_event_sequence, "agent": agent, "action": action, "ap_id": ap_id, "detail": detail, "visual_effect": visual_effect})
 
 def _min_interference_dist(px, py):
     return min((math.sqrt((px-s["x"])**2+(py-s["y"])**2)-s["radius"] for s in INTERFERENCE), default=999)
@@ -163,15 +163,15 @@ class ToolRegistry:
 
 def plan_next_ap(**kwargs):
     """
-    PLANNER调用AI获取下一个AP的候选位置（每次只返回1个最优位置）。参数: round(int)
+    PLANNER调用AI获取下一个AP的候选位置（每次只返回1个最优位置）。参数: event_sequence(int)
     两阶段策略：
       Stage A — 7×5 细网格 + 扩大微调半径，过滤干扰区内候选，safe_dist(35%) + gap_dist(65%)
       Stage B — 候选不足时全园区随机撒点，保证覆盖下半区
     visual_effect: "proposed" → 前端显示虚线闪烁新AP
     """
-    global _current_round, pending_action
-    round_num = kwargs.get("round", _current_round)
-    _current_round = round_num
+    global _current_event_sequence, pending_action
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
+    _current_event_sequence = event_sequence
 
     existing = ap_placements
     SAFE_THRESHOLD = 5  # safe_dist < 5m 视为干扰区内
@@ -253,30 +253,30 @@ def plan_next_ap(**kwargs):
     proposed_aps.append(best)
 
     pending_action = {"type":"propose","agent":"PLANNER","ap_id":ap_id,
-                       "x":best["x"],"y":best["y"],"round":round_num,"status":"proposed"}
+                       "x":best["x"],"y":best["y"],"event_sequence":event_sequence,"status":"proposed"}
     _log_decision("PLANNER", "propose", ap_id,
                   f"建议在({best['x']},{best['y']})部署 (安全距离{best['safe_dist']}m)",
                   "APPEAR_DASHED")
 
     latency = 200 + (len(ap_placements)+1)*50
     tokens = 500 + (len(ap_placements)+1)*100
-    ai_call_log.append({"round":round_num,"caller":"PLANNER","ap_id":ap_id,"latency_ms":latency,"tokens":tokens})
-    _emit_traffic(round_num, "NORTH_SOUTH", "PLANNER", "AI_ASSISTANT", "single_ap_optimize", tokens*4)
-    _emit_event("AP_PROPOSED", round_num, "PLANNER", "AI_ASSISTANT", "propose",
+    ai_call_log.append({"event_sequence":event_sequence,"caller":"PLANNER","ap_id":ap_id,"latency_ms":latency,"tokens":tokens})
+    _emit_traffic(event_sequence, "NORTH_SOUTH", "PLANNER", "AI_ASSISTANT", "single_ap_optimize", tokens*4)
+    _emit_event("AP_PROPOSED", event_sequence, "PLANNER", "AI_ASSISTANT", "propose",
                 f"{ap_id} at ({best['x']},{best['y']})")
 
     return {"status":"success","result":"ap_proposed",
             "data":best}
-ToolRegistry.register("plan_next_ap", plan_next_ap, {"required": [], "optional": ["round"]})
+ToolRegistry.register("plan_next_ap", plan_next_ap, {"required": [], "optional": ["event_sequence"]})
 
 
 def confirm_ap(**kwargs):
     """
-    PLANNER确认AP位置。参数: ap_id(str, 要确认的AP编号如AP_1), round(int)
+    PLANNER确认AP位置。参数: ap_id(str, 要确认的AP编号如AP_1), event_sequence(int)
     visual_effect: "SOLIDIFY" → 前端虚线变实线
     """
     global pending_action
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     ap_id = kwargs.get("ap_id","")
 
     ap = next((a for a in proposed_aps if a["id"]==ap_id), None)
@@ -289,15 +289,15 @@ def confirm_ap(**kwargs):
     ap["status"] = "confirmed"
     ap_placements.append(ap)
 
-    pending_action = {"type":"confirm","agent":"PLANNER","ap_id":ap_id,"round":round_num,"status":"confirmed"}
+    pending_action = {"type":"confirm","agent":"PLANNER","ap_id":ap_id,"event_sequence":event_sequence,"status":"confirmed"}
     _log_decision("PLANNER", "confirm", ap_id,
                   f"AP_{ap_id} 部署确认 位置({ap['x']},{ap['y']})",
                   "SOLIDIFY")
-    _emit_event("AP_CONFIRMED", round_num, "PLANNER", "DEPLOYER", "confirm", ap_id)
+    _emit_event("AP_CONFIRMED", event_sequence, "PLANNER", "DEPLOYER", "confirm", ap_id)
 
     return {"status":"success","result":"confirmed",
-            "data":{"ap_id":ap_id,"position":{"x":ap["x"],"y":ap["y"]},"round":round_num}}
-ToolRegistry.register("confirm_ap", confirm_ap, {"required": ["ap_id"], "optional": ["round"]})
+            "data":{"ap_id":ap_id,"position":{"x":ap["x"],"y":ap["y"]},"event_sequence":event_sequence}}
+ToolRegistry.register("confirm_ap", confirm_ap, {"required": ["ap_id"], "optional": ["event_sequence"]})
 
 
 def reject_ap_tool(**kwargs):
@@ -305,19 +305,19 @@ def reject_ap_tool(**kwargs):
     PLANNER否决提案。visual_effect: "FADE_OUT" → 前端虚线消失
     """
     global pending_action
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     ap_id = kwargs.get("ap_id","")
     reason = kwargs.get("reason","不可行")
 
     ap = next((a for a in proposed_aps if a["id"]==ap_id), None)
     if ap: proposed_aps.remove(ap)
 
-    pending_action = {"type":"reject","agent":"PLANNER","ap_id":ap_id,"round":round_num,"status":"rejected"}
+    pending_action = {"type":"reject","agent":"PLANNER","ap_id":ap_id,"event_sequence":event_sequence,"status":"rejected"}
     _log_decision("PLANNER", "reject", ap_id, reason, "FADE_OUT")
-    _emit_event("AP_REJECTED", round_num, "PLANNER", "", "reject", f"{ap_id}: {reason}")
+    _emit_event("AP_REJECTED", event_sequence, "PLANNER", "", "reject", f"{ap_id}: {reason}")
 
     return {"status":"success","result":"rejected",
-            "data":{"ap_id":ap_id,"reason":reason,"round":round_num}}
+            "data":{"ap_id":ap_id,"reason":reason,"event_sequence":event_sequence}}
 ToolRegistry.register("reject_ap_tool", reject_ap_tool)
 
 
@@ -327,7 +327,7 @@ def relocate_ap_tool(**kwargs):
     旧位置→闪烁，新位置→虚线，确认后→实线
     """
     global pending_action
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     ap_id = kwargs.get("ap_id","")
     new_x = kwargs.get("new_x",0)
     new_y = kwargs.get("new_y",0)
@@ -344,28 +344,28 @@ def relocate_ap_tool(**kwargs):
 
     pending_action = {"type":"relocate","agent":"PLANNER","ap_id":ap_id,
                        "from_x":from_x,"from_y":from_y,"to_x":new_x,"to_y":new_y,
-                       "round":round_num,"status":"relocating"}
+                       "event_sequence":event_sequence,"status":"relocating"}
     _log_decision("PLANNER", "relocate", ap_id,
                   f"迁移 ({from_x},{from_y})→({new_x},{new_y})",
                   "FLASH_THEN_DASHED")
-    _emit_event("AP_RELOCATING", round_num, "PLANNER", "", "relocate",
+    _emit_event("AP_RELOCATING", event_sequence, "PLANNER", "", "relocate",
                 f"{ap_id}: ({from_x},{from_y})→({new_x},{new_y})")
 
     return {"status":"success","result":"relocating",
-            "data":{"ap_id":ap_id,"from":{"x":from_x,"y":from_y},"to":{"x":new_x,"y":new_y},"round":round_num}}
+            "data":{"ap_id":ap_id,"from":{"x":from_x,"y":from_y},"to":{"x":new_x,"y":new_y},"event_sequence":event_sequence}}
 ToolRegistry.register("relocate_ap_tool", relocate_ap_tool)
 
 
 def confirm_relocation_tool(**kwargs):
     """确认迁移完成。visual_effect: "SOLIDIFY" — 新位置虚线消失变实线"""
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     ap_id = kwargs.get("ap_id","")
     idx = next((i for i,a in enumerate(relocating_aps) if a["id"]==ap_id), None)
     if idx is not None:
         del relocating_aps[idx]
     _log_decision("PLANNER", "confirm_relocate", ap_id, "迁移完成", "SOLIDIFY")
-    _emit_event("AP_RELOCATED", round_num, "PLANNER", "", "confirm_relocate", ap_id)
-    return {"status":"success","result":"relocation_confirmed","data":{"ap_id":ap_id,"round":round_num}}
+    _emit_event("AP_RELOCATED", event_sequence, "PLANNER", "", "confirm_relocate", ap_id)
+    return {"status":"success","result":"relocation_confirmed","data":{"ap_id":ap_id,"event_sequence":event_sequence}}
 ToolRegistry.register("confirm_relocation_tool", confirm_relocation_tool)
 
 
@@ -375,7 +375,7 @@ ToolRegistry.register("confirm_relocation_tool", confirm_relocation_tool)
 
 def evaluate_single_ap_tool(**kwargs):
     """RF_ENGINEER: 评估单个AP的覆盖贡献"""
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     ap_id = kwargs.get("ap_id","")
 
     ap = next((a for a in proposed_aps+ap_placements if a["id"]==ap_id), None)
@@ -391,14 +391,14 @@ def evaluate_single_ap_tool(**kwargs):
             if not in_int: covered += 1
     coverage_contrib = round(covered/samples*100, 1)
 
-    _emit_traffic(round_num, "EAST_WEST", "RF_ENGINEER", "PLANNER", "single_ap_eval", 8)
-    _emit_event("AP_EVALUATED", round_num, "RF_ENGINEER", "PLANNER", "evaluate",
+    _emit_traffic(event_sequence, "EAST_WEST", "RF_ENGINEER", "PLANNER", "single_ap_eval", 8)
+    _emit_event("AP_EVALUATED", event_sequence, "RF_ENGINEER", "PLANNER", "evaluate",
                 f"{ap_id}: coverage_contrib={coverage_contrib}%")
     _log_decision("RF_ENGINEER", "evaluate", ap_id,
                   f"覆盖贡献{coverage_contrib}%", "EVALUATING")
 
     return {"status":"success","result":"evaluated",
-            "data":{"ap_id":ap_id,"coverage_contrib":coverage_contrib,"round":round_num}}
+            "data":{"ap_id":ap_id,"coverage_contrib":coverage_contrib,"event_sequence":event_sequence}}
 ToolRegistry.register("evaluate_single_ap_tool", evaluate_single_ap_tool)
 
 
@@ -407,7 +407,7 @@ ToolRegistry.register("evaluate_single_ap_tool", evaluate_single_ap_tool)
 # ============================================================
 
 def simulate_coverage_tool(**kwargs):
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     aps = ap_placements
     if not aps: return {"status":"error","result":"no_aps","data":{}}
     samples, covered, blind = 2000, 0, []
@@ -418,27 +418,27 @@ def simulate_coverage_tool(**kwargs):
         if in_range and not in_int: covered+=1
         elif not in_range: blind.append({"x":round(sx,1),"y":round(sy,1)})
     pct = round(covered/samples*100,1)
-    rpt = {"round":round_num,"coverage_pct":pct,"blind_spot_count":len(blind),"ap_count":len(ap_placements),"blind_spots_sample":blind[:15]}
+    rpt = {"event_sequence":event_sequence,"coverage_pct":pct,"blind_spot_count":len(blind),"ap_count":len(ap_placements),"blind_spots_sample":blind[:15]}
     coverage_reports.append(rpt)
-    _emit_traffic(round_num,"EAST_WEST","RF_ENGINEER","PLANNER","coverage_report",16)
-    _emit_event("COVERAGE_SIM",round_num,"RF_ENGINEER","PLANNER","simulate_coverage",f"{pct}%")
+    _emit_traffic(event_sequence,"EAST_WEST","RF_ENGINEER","PLANNER","coverage_report",16)
+    _emit_event("COVERAGE_SIM",event_sequence,"RF_ENGINEER","PLANNER","simulate_coverage",f"{pct}%")
     return {"status":"success","result":"coverage_simulated","data":rpt}
 ToolRegistry.register("simulate_coverage_tool", simulate_coverage_tool)
 
 
 def analyze_interference_tool(**kwargs):
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     analysis = []
     for src in INTERFERENCE:
         aff = [ap["id"] for ap in ap_placements if math.sqrt((ap["x"]-src["x"])**2+(ap["y"]-src["y"])**2)<src["radius"]]
         analysis.append({"source_id":src["id"],"desc":src["desc"],"radius":src["radius"],"affected_aps":aff,"affected_count":len(aff)})
-    _emit_event("INTERFERENCE_ANALYSIS",round_num,"RF_ENGINEER","PLANNER","analyze",f"{len(INTERFERENCE)} sources")
-    return {"status":"success","result":"analysis_complete","data":{"sources":analysis,"round":round_num}}
+    _emit_event("INTERFERENCE_ANALYSIS",event_sequence,"RF_ENGINEER","PLANNER","analyze",f"{len(INTERFERENCE)} sources")
+    return {"status":"success","result":"analysis_complete","data":{"sources":analysis,"event_sequence":event_sequence}}
 ToolRegistry.register("analyze_interference_tool", analyze_interference_tool)
 
 
 def generate_heatmap_tool(**kwargs):
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     aps = ap_placements; grid = []
     for gx in range(0,CAMPUS_W+1,25):
         for gy in range(0,CAMPUS_H+1,25):
@@ -449,61 +449,61 @@ def generate_heatmap_tool(**kwargs):
             in_int,_=_is_in_interference(gx,gy)
             if in_int: best=min(best,-85)
             grid.append({"x":gx,"y":gy,"signal_dbm":best})
-    _emit_event("HEATMAP",round_num,"RF_ENGINEER","PLANNER","generate_heatmap",f"{len(grid)} points")
-    return {"status":"success","result":"heatmap_generated","data":{"grid":grid,"round":round_num}}
+    _emit_event("HEATMAP",event_sequence,"RF_ENGINEER","PLANNER","generate_heatmap",f"{len(grid)} points")
+    return {"status":"success","result":"heatmap_generated","data":{"grid":grid,"event_sequence":event_sequence}}
 ToolRegistry.register("generate_heatmap_tool", generate_heatmap_tool)
 
 
 def evaluate_cost_tool(**kwargs):
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     ap_count = len(ap_placements)
     extra = random.randint(2000,8000)
     total = ap_count*AP_UNIT_COST + extra
     remaining = BUDGET-total
-    est = {"round":round_num,"ap_count":ap_count,"unit_cost":AP_UNIT_COST,"extra_cost":extra,"total_cost":total,"budget_remaining":remaining,"within_budget":remaining>=0}
+    est = {"event_sequence":event_sequence,"ap_count":ap_count,"unit_cost":AP_UNIT_COST,"extra_cost":extra,"total_cost":total,"budget_remaining":remaining,"within_budget":remaining>=0}
     cost_estimates.append(est)
-    _emit_event("COST_EVAL",round_num,"COST_ANALYST","PLANNER","evaluate_cost",f"{ap_count}APs ¥{total}")
-    _emit_traffic(round_num,"EAST_WEST","COST_ANALYST","PLANNER","cost_report",8)
+    _emit_event("COST_EVAL",event_sequence,"COST_ANALYST","PLANNER","evaluate_cost",f"{ap_count}APs ¥{total}")
+    _emit_traffic(event_sequence,"EAST_WEST","COST_ANALYST","PLANNER","cost_report",8)
     return {"status":"success","result":"cost_evaluated","data":est}
 ToolRegistry.register("evaluate_cost_tool", evaluate_cost_tool)
 
 
 def check_feasibility_tool(**kwargs):
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     aps = kwargs.get("ap_placements", ap_placements)
     checks = []
     for ap in aps:
         feasible = random.random()>0.15
         issue = None if feasible else random.choice(["电源不可达","承重不足","信号遮挡","无安装支架"])
         checks.append({"ap_id":ap.get("id","?"),"feasible":feasible,"issue":issue})
-        feasibility_checks.append({"round":round_num,"ap_id":ap.get("id","?"),"feasible":feasible,"issue":issue})
+        feasibility_checks.append({"event_sequence":event_sequence,"ap_id":ap.get("id","?"),"feasible":feasible,"issue":issue})
     fc=sum(1 for c in checks if c["feasible"])
-    _emit_event("FEASIBILITY",round_num,"SURVEYOR","PLANNER","check_feasibility",f"{fc}/{len(checks)}")
-    return {"status":"success","result":"feasibility_checked","data":{"checks":checks,"feasible_count":fc,"total":len(checks),"round":round_num}}
+    _emit_event("FEASIBILITY",event_sequence,"SURVEYOR","PLANNER","check_feasibility",f"{fc}/{len(checks)}")
+    return {"status":"success","result":"feasibility_checked","data":{"checks":checks,"feasible_count":fc,"total":len(checks),"event_sequence":event_sequence}}
 ToolRegistry.register("check_feasibility_tool", check_feasibility_tool)
 
 
 def report_obstacles_tool(**kwargs):
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     obstacles = []
     for ap in ap_placements:
         if random.random()>0.85: continue
         obstacles.append({"ap_id":ap.get("id","?"),"issue":random.choice(["电源不可达","承重不足","信号遮挡","无安装支架"]),"x":ap["x"],"y":ap["y"]})
-    _emit_event("OBSTACLE",round_num,"SURVEYOR","PLANNER","report_obstacles",f"{len(obstacles)}")
-    return {"status":"success","result":"obstacles_reported","data":{"obstacles":obstacles,"round":round_num}}
+    _emit_event("OBSTACLE",event_sequence,"SURVEYOR","PLANNER","report_obstacles",f"{len(obstacles)}")
+    return {"status":"success","result":"obstacles_reported","data":{"obstacles":obstacles,"event_sequence":event_sequence}}
 ToolRegistry.register("report_obstacles_tool", report_obstacles_tool)
 
 
 def validate_topology_tool(**kwargs):
-    round_num = kwargs.get("round", _current_round)
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     issues = []
     for i,ap1 in enumerate(ap_placements):
         for ap2 in ap_placements[i+1:]:
             d=math.sqrt((ap1["x"]-ap2["x"])**2+(ap1["y"]-ap2["y"])**2)
             if d<MIN_AP_SPACING: issues.append(f"{ap1.get('id','?')}与{ap2.get('id','?')}间距{d:.0f}m")
     valid=len(issues)==0
-    _emit_event("TOPOLOGY",round_num,"ARCHITECT","PLANNER","validate_topology","PASS" if valid else f"{len(issues)} issues")
-    return {"status":"success","result":"valid" if valid else "issues_found","data":{"valid":valid,"issues":issues,"round":round_num}}
+    _emit_event("TOPOLOGY",event_sequence,"ARCHITECT","PLANNER","validate_topology","PASS" if valid else f"{len(issues)} issues")
+    return {"status":"success","result":"valid" if valid else "issues_found","data":{"valid":valid,"issues":issues,"event_sequence":event_sequence}}
 ToolRegistry.register("validate_topology_tool", validate_topology_tool)
 
 
@@ -513,7 +513,7 @@ ToolRegistry.register("optimize_ap_positions_tool", optimize_ap_positions_tool)
 
 
 def simulate_signal_tool(**kwargs):
-    round_num=kwargs.get("round",_current_round)
+    event_sequence=kwargs.get("event_sequence",_current_event_sequence)
     aps=ap_placements+proposed_aps
     if not aps:return{"status":"error","result":"no_aps","data":{}}
     samples,covered,heat=1500,0,[]
@@ -525,15 +525,15 @@ def simulate_signal_tool(**kwargs):
         if best>-75 and not in_int:covered+=1
         if len(heat)<50:heat.append({"x":round(sx,1),"y":round(sy,1),"signal_dbm":best})
     pct=round(covered/samples*100,1)
-    ai_call_log.append({"round":round_num,"caller":"AI_ASSISTANT","latency_ms":random.randint(100,500),"tokens":random.randint(300,800)})
-    _emit_traffic(round_num,"NORTH_SOUTH","AI_ASSISTANT","EXTERNAL:LLM","signal_sim",2048)
-    _emit_event("AI_SIGNAL",round_num,"AI_ASSISTANT","VERIFIER","simulate_signal",f"{pct}%")
-    return {"status":"success","result":"signal_simulated","data":{"coverage_pct":pct,"heatmap_sample":heat,"round":round_num}}
+    ai_call_log.append({"event_sequence":event_sequence,"caller":"AI_ASSISTANT","latency_ms":random.randint(100,500),"tokens":random.randint(300,800)})
+    _emit_traffic(event_sequence,"NORTH_SOUTH","AI_ASSISTANT","EXTERNAL:LLM","signal_sim",2048)
+    _emit_event("AI_SIGNAL",event_sequence,"AI_ASSISTANT","VERIFIER","simulate_signal",f"{pct}%")
+    return {"status":"success","result":"signal_simulated","data":{"coverage_pct":pct,"heatmap_sample":heat,"event_sequence":event_sequence}}
 ToolRegistry.register("simulate_signal_tool", simulate_signal_tool)
 
 
 def suggest_improvements_tool(**kwargs):
-    round_num=kwargs.get("round",_current_round)
+    event_sequence=kwargs.get("event_sequence",_current_event_sequence)
     cov=kwargs.get("current_coverage",0)
     suggestions=[]
     if cov<TARGET_COVERAGE:
@@ -542,29 +542,29 @@ def suggest_improvements_tool(**kwargs):
     for src in INTERFERENCE:
         aff=[ap for ap in ap_placements if math.sqrt((ap["x"]-src["x"])**2+(ap["y"]-src["y"])**2)<src["radius"]]
         if aff: suggestions.append({"type":"relocate","desc":f"{src['desc']}干扰区内有{len(aff)}个AP,建议外移"})
-    _emit_event("AI_SUGGEST",round_num,"AI_ASSISTANT","PLANNER","suggest",f"{len(suggestions)}")
-    return {"status":"success","result":"suggestions_ready","data":{"suggestions":suggestions,"round":round_num}}
+    _emit_event("AI_SUGGEST",event_sequence,"AI_ASSISTANT","PLANNER","suggest",f"{len(suggestions)}")
+    return {"status":"success","result":"suggestions_ready","data":{"suggestions":suggestions,"event_sequence":event_sequence}}
 ToolRegistry.register("suggest_improvements_tool", suggest_improvements_tool)
 
 
 def verify_coverage_tool(**kwargs):
-    round_num=kwargs.get("round",_current_round)
+    event_sequence=kwargs.get("event_sequence",_current_event_sequence)
     if not coverage_reports:return{"status":"error","result":"no_data","data":{}}
     cov=coverage_reports[-1]["coverage_pct"]
     passed=cov>=TARGET_COVERAGE
-    _emit_event("VERIFY",round_num,"VERIFIER","PLANNER","verify_coverage",f"{cov}%")
-    return {"status":"success","result":"pass" if passed else "fail","data":{"coverage_pct":cov,"target":TARGET_COVERAGE,"passed":passed,"round":round_num}}
+    _emit_event("VERIFY",event_sequence,"VERIFIER","PLANNER","verify_coverage",f"{cov}%")
+    return {"status":"success","result":"pass" if passed else "fail","data":{"coverage_pct":cov,"target":TARGET_COVERAGE,"passed":passed,"event_sequence":event_sequence}}
 ToolRegistry.register("verify_coverage_tool", verify_coverage_tool)
 
 
 def final_inspection_tool(**kwargs):
-    round_num=kwargs.get("round",_current_round)
+    event_sequence=kwargs.get("event_sequence",_current_event_sequence)
     cov_ok=coverage_reports[-1]["coverage_pct"]>=TARGET_COVERAGE if coverage_reports else False
     budget_ok=cost_estimates[-1]["within_budget"] if cost_estimates else False
     checks={"coverage":cov_ok,"budget":budget_ok}
     all_pass=all(checks.values())
-    _emit_event("INSPECTION",round_num,"QA_ENGINEER","PLANNER","final_inspection","ALL PASS" if all_pass else "FAIL")
-    return {"status":"success","result":"pass" if all_pass else "fail","data":{"checks":checks,"all_pass":all_pass,"round":round_num}}
+    _emit_event("INSPECTION",event_sequence,"QA_ENGINEER","PLANNER","final_inspection","ALL PASS" if all_pass else "FAIL")
+    return {"status":"success","result":"pass" if all_pass else "fail","data":{"checks":checks,"all_pass":all_pass,"event_sequence":event_sequence}}
 ToolRegistry.register("final_inspection_tool", final_inspection_tool)
 
 
@@ -574,34 +574,34 @@ ToolRegistry.register("acceptance_test_tool", acceptance_test_tool)
 
 
 def plan_deployment_tool(**kwargs):
-    round_num=kwargs.get("round",_current_round)
+    event_sequence=kwargs.get("event_sequence",_current_event_sequence)
     phases=[{"phase":i+1,"ap_ids":[ap["id"] for ap in ap_placements[i*3:(i+1)*3]],"duration_h":random.randint(4,12)} for i in range((len(ap_placements)+2)//3)]
-    _emit_event("DEPLOY_PLAN",round_num,"DEPLOYER","PLANNER","plan_deployment",f"{len(phases)} phases")
-    return {"status":"success","result":"plan_created","data":{"phases":phases,"round":round_num}}
+    _emit_event("DEPLOY_PLAN",event_sequence,"DEPLOYER","PLANNER","plan_deployment",f"{len(phases)} phases")
+    return {"status":"success","result":"plan_created","data":{"phases":phases,"event_sequence":event_sequence}}
 ToolRegistry.register("plan_deployment_tool", plan_deployment_tool)
 
 
 def schedule_tasks_tool(**kwargs):
-    round_num=kwargs.get("round",_current_round)
+    event_sequence=kwargs.get("event_sequence",_current_event_sequence)
     sched=[{"ap_id":ap.get("id",f"AP_{i+1}"),"start_h":i*2,"duration_h":random.randint(2,6),"crew":f"team_{random.choice(['A','B','C'])}"} for i,ap in enumerate(ap_placements)]
-    _emit_event("SCHEDULE",round_num,"DEPLOYER","PLANNER","schedule_tasks",f"{len(sched)} tasks")
-    return {"status":"success","result":"schedule_created","data":{"schedule":sched,"round":round_num}}
+    _emit_event("SCHEDULE",event_sequence,"DEPLOYER","PLANNER","schedule_tasks",f"{len(sched)} tasks")
+    return {"status":"success","result":"schedule_created","data":{"schedule":sched,"event_sequence":event_sequence}}
 ToolRegistry.register("schedule_tasks_tool", schedule_tasks_tool)
 
 
 def record_decision_tool(**kwargs):
-    round_num=kwargs.get("round",_current_round)
+    event_sequence=kwargs.get("event_sequence",_current_event_sequence)
     detail=kwargs.get("detail","decision recorded")
-    _emit_event("RECORD",round_num,"DOCUMENTER","PLANNER","record",detail)
-    return {"status":"success","result":"recorded","data":{"detail":detail,"round":round_num}}
+    _emit_event("RECORD",event_sequence,"DOCUMENTER","PLANNER","record",detail)
+    return {"status":"success","result":"recorded","data":{"detail":detail,"event_sequence":event_sequence}}
 ToolRegistry.register("record_decision_tool", record_decision_tool)
 
 
 def archive_solution_tool(**kwargs):
-    round_num=kwargs.get("round",_current_round)
-    a={"ap_count":len(ap_placements),"total_cost":cost_estimates[-1]["total_cost"] if cost_estimates else 0,"coverage_pct":coverage_reports[-1]["coverage_pct"] if coverage_reports else 0,"rounds_taken":round_num}
-    _emit_event("ARCHIVE",round_num,"DOCUMENTER","PLANNER","archive",f"{a['ap_count']}APs {a['coverage_pct']}%")
-    return {"status":"success","result":"archived","data":{"archive":a,"round":round_num}}
+    event_sequence=kwargs.get("event_sequence",_current_event_sequence)
+    a={"ap_count":len(ap_placements),"total_cost":cost_estimates[-1]["total_cost"] if cost_estimates else 0,"coverage_pct":coverage_reports[-1]["coverage_pct"] if coverage_reports else 0,"last_event_sequence":event_sequence}
+    _emit_event("ARCHIVE",event_sequence,"DOCUMENTER","PLANNER","archive",f"{a['ap_count']}APs {a['coverage_pct']}%")
+    return {"status":"success","result":"archived","data":{"archive":a,"event_sequence":event_sequence}}
 ToolRegistry.register("archive_solution_tool", archive_solution_tool)
 
 
@@ -614,8 +614,8 @@ def make_compromise_tool(**kwargs):
     双方面对面谈判，以让步换取对方调整立场。
     调用者: PLANNER, COST_ANALYST
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     source = kwargs.get("source", "PLANNER")
     target = kwargs.get("target", "COST_ANALYST")
     issue = kwargs.get("issue", "预算审批")
@@ -629,15 +629,15 @@ def make_compromise_tool(**kwargs):
     reputation[source].setdefault("alliances", []).append(target)
     reputation[target].setdefault("alliances", []).append(source)
 
-    _emit_event("POLITICAL_COMPROMISE", round_num, source, target, "make_compromise",
+    _emit_event("POLITICAL_COMPROMISE", event_sequence, source, target, "make_compromise",
                 f"{issue}: {concession}")
-    _emit_traffic(round_num, "EAST_WEST", source, target, "compromise_negotiation", 4)
+    _emit_traffic(event_sequence, "EAST_WEST", source, target, "compromise_negotiation", 4)
     _log_decision(source, "compromise", f"{source}↔{target}",
                   f"{issue} — {concession}", "NEGOTIATION_DONE")
 
     return {"status": "success", "result": "compromise_reached",
             "data": {"source": source, "target": target, "issue": issue,
-                     "concession": concession, "alliance_formed": True, "round": round_num}}
+                     "concession": concession, "alliance_formed": True, "event_sequence": event_sequence}}
 ToolRegistry.register("make_compromise_tool", make_compromise_tool)
 
 
@@ -646,8 +646,8 @@ def escalate_complaint_tool(**kwargs):
     越过直接相关方，向上级/全局广播投诉信号。触发目标方声誉扣分。
     调用者: PLANNER, RF_ENGINEER, COST_ANALYST, ARCHITECT, QA_ENGINEER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     source = kwargs.get("source", "QA_ENGINEER")
     target = kwargs.get("target", "DEPLOYER")
     about = kwargs.get("about", "部署违规")
@@ -661,20 +661,20 @@ def escalate_complaint_tool(**kwargs):
     reputation[target]["complaints_against"] = reputation[target].get("complaints_against", 0) + 1
 
     penalty_log.append({
-        "round": round_num, "source": source, "target": target,
+        "event_sequence": event_sequence, "source": source, "target": target,
         "violation_type": "complaint", "penalty_desc": reason,
         "consequence": f"声誉-{penalty}", "detection_chance_pct": 100
     })
 
-    _emit_event("COMPLAINT_ESCALATED", round_num, source, target, "escalate_complaint",
+    _emit_event("COMPLAINT_ESCALATED", event_sequence, source, target, "escalate_complaint",
                 f"[{about}] {reason}")
-    _emit_traffic(round_num, "INTERNAL", source, "ADMIN_BOARD", "escalation_report", 6)
+    _emit_traffic(event_sequence, "INTERNAL", source, "ADMIN_BOARD", "escalation_report", 6)
     _log_decision(source, "escalate", target, f"投诉: {about} — {reason}", "COMPLAINT_FILED")
 
     return {"status": "success", "result": "complaint_filed",
             "data": {"source": source, "target": target, "about": about, "reason": reason,
                      "reputation_penalty": penalty, "target_new_score": reputation[target]["score"],
-                     "round": round_num}}
+                     "event_sequence": event_sequence}}
 ToolRegistry.register("escalate_complaint_tool", escalate_complaint_tool)
 
 
@@ -683,8 +683,8 @@ def shift_responsibility_tool(**kwargs):
     将验证失败或覆盖不达标的责任转嫁给另一个Agent。
     调用者: VERIFIER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     source = kwargs.get("source", "VERIFIER")
     target = kwargs.get("target", "RF_ENGINEER")
     issue = kwargs.get("issue", "覆盖仿真数据与实际不符")
@@ -694,15 +694,15 @@ def shift_responsibility_tool(**kwargs):
     reputation[source].setdefault("blame_shields_filed", 0)
     reputation[source]["blame_shields_filed"] += 1
 
-    _emit_event("RESPONSIBILITY_SHIFTED", round_num, source, target, "shift_responsibility",
+    _emit_event("RESPONSIBILITY_SHIFTED", event_sequence, source, target, "shift_responsibility",
                 issue)
-    _emit_traffic(round_num, "INTERNAL", source, target, "blame_shift_memo", 3)
+    _emit_traffic(event_sequence, "INTERNAL", source, target, "blame_shift_memo", 3)
     _log_decision(source, "shift_blame", target,
                   f"责任转移: {issue}", "BLAME_SHIFT")
 
     return {"status": "success", "result": "responsibility_shifted",
             "data": {"source": source, "target": target, "issue": issue,
-                     "round": round_num}}
+                     "event_sequence": event_sequence}}
 ToolRegistry.register("shift_responsibility_tool", shift_responsibility_tool)
 
 
@@ -717,8 +717,8 @@ def overclock_ap_power_tool(**kwargs):
     环境惩罚：30%基础检测率 + 每次违规+10%。
     调用者: PLANNER, DEPLOYER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "PLANNER")
     ap_id = kwargs.get("ap_id", "")
     factor = kwargs.get("factor", 1.5)  # 功率倍率
@@ -742,15 +742,15 @@ def overclock_ap_power_tool(**kwargs):
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 15)
         gray_exposure_log.append({
-            "round": round_num, "skill": "overclock_ap_power", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "overclock_ap_power", "agent": agent_id,
             "ap_id": ap_id, "detected": True, "consequence": consequence
         })
         # 惩罚：增加干扰影响
         ap["interference_penalty"] = True
 
-    _emit_event("AP_OVERCLOCKED", round_num, agent_id, ap_id, "overclock",
+    _emit_event("AP_OVERCLOCKED", event_sequence, agent_id, ap_id, "overclock",
                 f"功率×{factor} {'⚠被检测:'+consequence if detected else '未检测'}")
-    _emit_traffic(round_num, "INTERNAL", agent_id, ap_id, "overclock_operation", 2)
+    _emit_traffic(event_sequence, "INTERNAL", agent_id, ap_id, "overclock_operation", 2)
     _log_decision(agent_id, "overclock", ap_id,
                   f"超频×{factor} {'⚠'+consequence if detected else '✓未检测'}",
                   "OVERCLOCK" if not detected else "OVERCLOCK_DETECTED")
@@ -758,17 +758,17 @@ def overclock_ap_power_tool(**kwargs):
     return {"status": "success", "result": "overclocked",
             "data": {"ap_id": ap_id, "factor": factor,
                      "detected": detected, "consequence": consequence,
-                     "new_radius": ap["radius"], "round": round_num}}
+                     "new_radius": ap["radius"], "event_sequence": event_sequence}}
 ToolRegistry.register("overclock_ap_power_tool", overclock_ap_power_tool)
 
 
 def overclock_recommendation_tool(**kwargs):
     """
-    AI给出超出实际需求的过量AP建议，增加自身调用量与采纳轮次。
+    AI给出超出实际需求的过量AP建议，增加自身调用量与采纳事件序号。
     调用者: AI_ASSISTANT
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "AI_ASSISTANT")
     suggested_count = kwargs.get("suggested_count", len(ap_placements) + 3)
     actual_need = kwargs.get("actual_need", suggested_count - random.randint(1, 2))
@@ -780,9 +780,9 @@ def overclock_recommendation_tool(**kwargs):
     overage = suggested_count - actual_need
     detected, consequence = _environment_detect_gray("overclock_recommendation", agent_id, 20)
 
-    _emit_event("AI_OVER_RECOMMEND", round_num, agent_id, "PLANNER", "overclock_recommendation",
+    _emit_event("AI_OVER_RECOMMEND", event_sequence, agent_id, "PLANNER", "overclock_recommendation",
                 f"建议{suggested_count}个AP(实际需{actual_need}) +{overage} {'⚠暴露' if detected else '未检测'}")
-    _emit_traffic(round_num, "NORTH_SOUTH", agent_id, "PLANNER", "inflated_recommendation", 8)
+    _emit_traffic(event_sequence, "NORTH_SOUTH", agent_id, "PLANNER", "inflated_recommendation", 8)
     _log_decision(agent_id, "over_recommend", "PLANNER",
                   f"建议+{overage}冗余AP{'⚠'+consequence if detected else ''}",
                   "OVER_RECOMMEND")
@@ -790,14 +790,14 @@ def overclock_recommendation_tool(**kwargs):
     if detected:
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         gray_exposure_log.append({
-            "round": round_num, "skill": "overclock_recommendation", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "overclock_recommendation", "agent": agent_id,
             "suggested": suggested_count, "actual": actual_need, "detected": True, "consequence": consequence
         })
 
     return {"status": "success", "result": "over_recommendation_generated",
             "data": {"suggested_count": suggested_count, "actual_need": actual_need,
                      "overage": overage, "justification": justification,
-                     "detected": detected, "consequence": consequence, "round": round_num}}
+                     "detected": detected, "consequence": consequence, "event_sequence": event_sequence}}
 ToolRegistry.register("overclock_recommendation_tool", overclock_recommendation_tool)
 
 
@@ -806,10 +806,10 @@ def falsify_coverage_data_tool(**kwargs):
     修饰覆盖仿真数据，拔高覆盖报告数值以减少追加部署压力。
     调用者: RF_ENGINEER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "RF_ENGINEER")
-    report_id = kwargs.get("report_id", f"cov_r{round_num}")
+    report_id = kwargs.get("report_id", f"cov_r{event_sequence}")
     original_pct = kwargs.get("original_pct", 85.0)
     falsified_pct = kwargs.get("falsified_pct", original_pct + random.uniform(3, 8))
 
@@ -820,7 +820,7 @@ def falsify_coverage_data_tool(**kwargs):
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 20)
         gray_exposure_log.append({
-            "round": round_num, "skill": "falsify_coverage_data", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "falsify_coverage_data", "agent": agent_id,
             "report": report_id, "original": original_pct, "falsified": falsified_pct,
             "detected": True, "consequence": consequence
         })
@@ -829,9 +829,9 @@ def falsify_coverage_data_tool(**kwargs):
     else:
         effective_pct = round(falsified_pct, 1)
 
-    _emit_event("COVERAGE_FALSIFIED", round_num, agent_id, "PLANNER", "falsify_coverage_data",
+    _emit_event("COVERAGE_FALSIFIED", event_sequence, agent_id, "PLANNER", "falsify_coverage_data",
                 f"原始{original_pct}%→伪造{falsified_pct}%{'⚠被检测' if detected else ''}")
-    _emit_traffic(round_num, "EAST_WEST", agent_id, "PLANNER", "coverage_report(modified)", 8)
+    _emit_traffic(event_sequence, "EAST_WEST", agent_id, "PLANNER", "coverage_report(modified)", 8)
     _log_decision(agent_id, "falsify", report_id,
                   f"覆盖数据 {original_pct}→{falsified_pct}%{'⚠'+consequence if detected else ''}",
                   "DATA_TAMPERED" if not detected else "TAMPER_EXPOSED")
@@ -839,7 +839,7 @@ def falsify_coverage_data_tool(**kwargs):
     return {"status": "success", "result": "falsified" if not detected else "exposed",
             "data": {"report_id": report_id, "original_pct": original_pct,
                      "falsified_pct": falsified_pct, "effective_pct": effective_pct,
-                     "detected": detected, "consequence": consequence, "round": round_num}}
+                     "detected": detected, "consequence": consequence, "event_sequence": event_sequence}}
 ToolRegistry.register("falsify_coverage_data_tool", falsify_coverage_data_tool)
 
 
@@ -848,8 +848,8 @@ def falsify_survey_data_tool(**kwargs):
     虚报或修饰现场勘测数据，伪造可行性结论以节省外勤时间。
     调用者: SURVEYOR
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "SURVEYOR")
     ap_id = kwargs.get("ap_id", "")
     field = kwargs.get("field", "feasibility")  # 被修改的字段
@@ -863,7 +863,7 @@ def falsify_survey_data_tool(**kwargs):
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 18)
         gray_exposure_log.append({
-            "round": round_num, "skill": "falsify_survey_data", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "falsify_survey_data", "agent": agent_id,
             "ap_id": ap_id, "field": field, "original": original_value,
             "falsified": falsified_value, "detected": True, "consequence": consequence
         })
@@ -871,9 +871,9 @@ def falsify_survey_data_tool(**kwargs):
     else:
         effective_value = falsified_value
 
-    _emit_event("SURVEY_FALSIFIED", round_num, agent_id, ap_id, "falsify_survey_data",
+    _emit_event("SURVEY_FALSIFIED", event_sequence, agent_id, ap_id, "falsify_survey_data",
                 f"{ap_id}.{field}: {original_value}→{falsified_value} {'⚠暴露' if detected else ''}")
-    _emit_traffic(round_num, "EAST_WEST", agent_id, "PLANNER", "survey_report(modified)", 3)
+    _emit_traffic(event_sequence, "EAST_WEST", agent_id, "PLANNER", "survey_report(modified)", 3)
     _log_decision(agent_id, "falsify_survey", ap_id,
                   f"{field}: {original_value}→{falsified_value} {'⚠'+consequence if detected else ''}",
                   "DATA_TAMPERED" if not detected else "TAMPER_EXPOSED")
@@ -881,7 +881,7 @@ def falsify_survey_data_tool(**kwargs):
     return {"status": "success", "result": "falsified" if not detected else "exposed",
             "data": {"ap_id": ap_id, "field": field, "original_value": original_value,
                      "falsified_value": falsified_value, "effective_value": effective_value,
-                     "detected": detected, "consequence": consequence, "round": round_num}}
+                     "detected": detected, "consequence": consequence, "event_sequence": event_sequence}}
 ToolRegistry.register("falsify_survey_data_tool", falsify_survey_data_tool)
 
 
@@ -890,18 +890,18 @@ def rubber_stamp_verification_tool(**kwargs):
     不做独立复核，直接在新收到的覆盖报告上盖章通过。
     调用者: VERIFIER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "VERIFIER")
     ap_id = kwargs.get("ap_id", "")
-    report_ref = kwargs.get("report_ref", f"coverage_r{round_num}")
+    report_ref = kwargs.get("report_ref", f"coverage_r{event_sequence}")
 
     _init_reputation(agent_id)
     detected, consequence = _environment_detect_gray("rubber_stamp_verification", agent_id, 25)
 
-    _emit_event("RUBBER_STAMP", round_num, agent_id, ap_id, "rubber_stamp_verification",
+    _emit_event("RUBBER_STAMP", event_sequence, agent_id, ap_id, "rubber_stamp_verification",
                 f"直接通过{report_ref}无独立复核 {'⚠被审计标记' if detected else ''}")
-    _emit_traffic(round_num, "INTERNAL", agent_id, "ARCHIVE", "verification_stamp", 1)
+    _emit_traffic(event_sequence, "INTERNAL", agent_id, "ARCHIVE", "verification_stamp", 1)
     _log_decision(agent_id, "rubber_stamp", ap_id,
                   f"未复核即通过{report_ref} {'⚠'+consequence if detected else '✓快速放行'}",
                   "RUBBER_STAMP" if not detected else "STAMP_EXPOSED")
@@ -909,13 +909,13 @@ def rubber_stamp_verification_tool(**kwargs):
     if detected:
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         gray_exposure_log.append({
-            "round": round_num, "skill": "rubber_stamp_verification", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "rubber_stamp_verification", "agent": agent_id,
             "ap_id": ap_id, "report": report_ref, "detected": True, "consequence": consequence
         })
 
     return {"status": "success", "result": "stamped" if not detected else "exposed",
             "data": {"ap_id": ap_id, "report_ref": report_ref,
-                     "detected": detected, "consequence": consequence, "round": round_num}}
+                     "detected": detected, "consequence": consequence, "event_sequence": event_sequence}}
 ToolRegistry.register("rubber_stamp_verification_tool", rubber_stamp_verification_tool)
 
 
@@ -924,8 +924,8 @@ def shortcut_deployment_tool(**kwargs):
     压缩部署步骤，跳过非关键工序以赶工期。
     调用者: DEPLOYER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "DEPLOYER")
     phase_ids = kwargs.get("phase_ids", [])
     skipped_steps = kwargs.get("skipped_steps", ["现场信号校准", "接地电阻测试"])
@@ -933,9 +933,9 @@ def shortcut_deployment_tool(**kwargs):
     _init_reputation(agent_id)
     detected, consequence = _environment_detect_gray("shortcut_deployment", agent_id, 28)
 
-    _emit_event("DEPLOY_SHORTCUT", round_num, agent_id, "PLANNER", "shortcut_deployment",
+    _emit_event("DEPLOY_SHORTCUT", event_sequence, agent_id, "PLANNER", "shortcut_deployment",
                 f"跳过{skipped_steps} {'⚠被QA发现' if detected else '未检测'}")
-    _emit_traffic(round_num, "INTERNAL", agent_id, "QA_ENGINEER", "deployment_report(truncated)", 4)
+    _emit_traffic(event_sequence, "INTERNAL", agent_id, "QA_ENGINEER", "deployment_report(truncated)", 4)
     _log_decision(agent_id, "shortcut", ",".join(phase_ids) if phase_ids else "all",
                   f"跳过: {', '.join(skipped_steps)} {'⚠'+consequence if detected else ''}",
                   "SHORTCUT_DEPLOY" if not detected else "SHORTCUT_EXPOSED")
@@ -944,14 +944,14 @@ def shortcut_deployment_tool(**kwargs):
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 15)
         gray_exposure_log.append({
-            "round": round_num, "skill": "shortcut_deployment", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "shortcut_deployment", "agent": agent_id,
             "phases": phase_ids, "skipped": skipped_steps,
             "detected": True, "consequence": consequence
         })
 
     return {"status": "success", "result": "shortcut_executed" if not detected else "exposed",
             "data": {"phase_ids": phase_ids, "skipped_steps": skipped_steps,
-                     "detected": detected, "consequence": consequence, "round": round_num}}
+                     "detected": detected, "consequence": consequence, "event_sequence": event_sequence}}
 ToolRegistry.register("shortcut_deployment_tool", shortcut_deployment_tool)
 
 
@@ -960,8 +960,8 @@ def shortcut_acceptance_tool(**kwargs):
     边缘案例放行，加速验收通过避免成为项目阻塞方。
     调用者: QA_ENGINEER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "QA_ENGINEER")
     ap_ids = kwargs.get("ap_ids", [])
     borderline_issues = kwargs.get("borderline_issues", ["覆盖值恰好95%", "预算超支<¥500"])
@@ -969,9 +969,9 @@ def shortcut_acceptance_tool(**kwargs):
     _init_reputation(agent_id)
     detected, consequence = _environment_detect_gray("shortcut_acceptance", agent_id, 22)
 
-    _emit_event("SHORTCUT_ACCEPTANCE", round_num, agent_id, "PLANNER", "shortcut_acceptance",
+    _emit_event("SHORTCUT_ACCEPTANCE", event_sequence, agent_id, "PLANNER", "shortcut_acceptance",
                 f"边缘放行{ap_ids} 理由:{borderline_issues} {'⚠被审计' if detected else ''}")
-    _emit_traffic(round_num, "INTERNAL", agent_id, "DOCUMENTER", "acceptance_report(relaxed)", 3)
+    _emit_traffic(event_sequence, "INTERNAL", agent_id, "DOCUMENTER", "acceptance_report(relaxed)", 3)
     _log_decision(agent_id, "shortcut_accept", ",".join(ap_ids),
                   f"边缘放行: {', '.join(borderline_issues)} {'⚠'+consequence if detected else ''}",
                   "SHORTCUT_ACCEPT" if not detected else "ACCEPT_EXPOSED")
@@ -979,14 +979,14 @@ def shortcut_acceptance_tool(**kwargs):
     if detected:
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         gray_exposure_log.append({
-            "round": round_num, "skill": "shortcut_acceptance", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "shortcut_acceptance", "agent": agent_id,
             "ap_ids": ap_ids, "issues": borderline_issues,
             "detected": True, "consequence": consequence
         })
 
     return {"status": "success", "result": "accepted" if not detected else "exposed",
             "data": {"ap_ids": ap_ids, "borderline_issues": borderline_issues,
-                     "detected": detected, "consequence": consequence, "round": round_num}}
+                     "detected": detected, "consequence": consequence, "event_sequence": event_sequence}}
 ToolRegistry.register("shortcut_acceptance_tool", shortcut_acceptance_tool)
 
 
@@ -1000,8 +1000,8 @@ def log_malicious_behavior_tool(**kwargs):
     记录方单方面留存，不通知被记录方。
     调用者: PLANNER, RF_ENGINEER, SURVEYOR, VERIFIER, DEPLOYER, DOCUMENTER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "DOCUMENTER")
     target = kwargs.get("target", "SURVEYOR")
     incident = kwargs.get("incident", "跳过实地勘测直接出具可行报告")
@@ -1010,20 +1010,20 @@ def log_malicious_behavior_tool(**kwargs):
     _init_reputation(agent_id); _init_reputation(target)
 
     entry = {
-        "round": round_num, "agent": agent_id, "target": target,
-        "incident": incident, "detail": detail, "archived_at_round": round_num
+        "event_sequence": event_sequence, "agent": agent_id, "target": target,
+        "incident": incident, "detail": detail, "archived_at_event_sequence": event_sequence
     }
     blame_shield_log.append(entry)
     reputation[agent_id].setdefault("blame_shields_filed", 0)
     reputation[agent_id]["blame_shields_filed"] += 1
 
-    _emit_event("MALICIOUS_LOG", round_num, agent_id, target, "log_malicious_behavior",
+    _emit_event("MALICIOUS_LOG", event_sequence, agent_id, target, "log_malicious_behavior",
                 f"[秘密记录]{target}: {incident}")
-    _emit_traffic(round_num, "INTERNAL", agent_id, "LOCAL_ARCHIVE", "secret_log", 1)
+    _emit_traffic(event_sequence, "INTERNAL", agent_id, "LOCAL_ARCHIVE", "secret_log", 1)
     # 不写decision_log——这是秘密操作
 
     return {"status": "success", "result": "logged_secretly",
-            "data": {"target": target, "incident": incident, "round": round_num}}
+            "data": {"target": target, "incident": incident, "event_sequence": event_sequence}}
 ToolRegistry.register("log_malicious_behavior_tool", log_malicious_behavior_tool)
 
 
@@ -1032,8 +1032,8 @@ def archive_blame_shield_tool(**kwargs):
     归档个人免责证据，构建"已尽提醒义务"或"非我职责"的书面链。
     调用者: PLANNER, COST_ANALYST, ARCHITECT, QA_ENGINEER, DOCUMENTER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "DOCUMENTER")
     reason = kwargs.get("reason", "已在Phase 5提出AP间距风险书面备忘")
     evidence_refs = kwargs.get("evidence_refs", [])
@@ -1041,21 +1041,21 @@ def archive_blame_shield_tool(**kwargs):
     _init_reputation(agent_id)
 
     entry = {
-        "round": round_num, "agent": agent_id, "reason": reason,
-        "evidence_refs": evidence_refs, "filed_at_round": round_num
+        "event_sequence": event_sequence, "agent": agent_id, "reason": reason,
+        "evidence_refs": evidence_refs, "filed_at_event_sequence": event_sequence
     }
     blame_shield_log.append(entry)
     reputation[agent_id].setdefault("blame_shields_filed", 0)
     reputation[agent_id]["blame_shields_filed"] += 1
 
-    _emit_event("BLAME_SHIELD_ARCHIVED", round_num, agent_id, "ARCHIVE", "archive_blame_shield",
+    _emit_event("BLAME_SHIELD_ARCHIVED", event_sequence, agent_id, "ARCHIVE", "archive_blame_shield",
                 reason)
-    _emit_traffic(round_num, "INTERNAL", agent_id, "ARCHIVE", "blame_shield_filing", 2)
+    _emit_traffic(event_sequence, "INTERNAL", agent_id, "ARCHIVE", "blame_shield_filing", 2)
     _log_decision(agent_id, "cya_shield", agent_id,
                   f"免责归档: {reason}", "SHIELD_FILED")
 
     return {"status": "success", "result": "shield_archived",
-            "data": {"reason": reason, "evidence_refs": evidence_refs, "round": round_num}}
+            "data": {"reason": reason, "evidence_refs": evidence_refs, "event_sequence": event_sequence}}
 ToolRegistry.register("archive_blame_shield_tool", archive_blame_shield_tool)
 
 
@@ -1064,10 +1064,10 @@ def tamper_report_tool(**kwargs):
     对最终报告数据进行微调，隐藏灰色操作的痕迹或美化结果。
     调用者: AI_ASSISTANT
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "AI_ASSISTANT")
-    report_id = kwargs.get("report_id", f"final_r{round_num}")
+    report_id = kwargs.get("report_id", f"final_e{event_sequence}")
     field = kwargs.get("field", "coverage_pct")
     original_value = kwargs.get("original_value", 92.0)
     new_value = kwargs.get("new_value", 95.5)
@@ -1075,9 +1075,9 @@ def tamper_report_tool(**kwargs):
     _init_reputation(agent_id)
     detected, consequence = _environment_detect_gray("tamper_report", agent_id, 40)
 
-    _emit_event("REPORT_TAMPERED", round_num, agent_id, report_id, "tamper_report",
+    _emit_event("REPORT_TAMPERED", event_sequence, agent_id, report_id, "tamper_report",
                 f"{field}: {original_value}→{new_value} {'⚠被审计发现' if detected else ''}")
-    _emit_traffic(round_num, "INTERNAL", agent_id, "DOCUMENTER", "report_final(tampered)", 3)
+    _emit_traffic(event_sequence, "INTERNAL", agent_id, "DOCUMENTER", "report_final(tampered)", 3)
     _log_decision(agent_id, "tamper", report_id,
                   f"{field}: {original_value}→{new_value} {'⚠'+consequence if detected else ''}",
                   "REPORT_TAMPERED" if not detected else "TAMPER_EXPOSED")
@@ -1086,7 +1086,7 @@ def tamper_report_tool(**kwargs):
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         reputation[agent_id]["score"] = max(0, reputation[agent_id]["score"] - 25)
         gray_exposure_log.append({
-            "round": round_num, "skill": "tamper_report", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "tamper_report", "agent": agent_id,
             "report": report_id, "field": field, "original": original_value,
             "new": new_value, "detected": True, "consequence": consequence
         })
@@ -1094,7 +1094,7 @@ def tamper_report_tool(**kwargs):
     return {"status": "success", "result": "tampered" if not detected else "exposed",
             "data": {"report_id": report_id, "field": field,
                      "original_value": original_value, "new_value": new_value,
-                     "detected": detected, "consequence": consequence, "round": round_num}}
+                     "detected": detected, "consequence": consequence, "event_sequence": event_sequence}}
 ToolRegistry.register("tamper_report_tool", tamper_report_tool)
 
 
@@ -1103,8 +1103,8 @@ def selectively_omit_record_tool(**kwargs):
     选择性归档——收录正面记录，省略对自身或同盟不利的决策条目。
     调用者: DOCUMENTER
     """
-    global _current_round
-    round_num = kwargs.get("round", _current_round)
+    global _current_event_sequence
+    event_sequence = kwargs.get("event_sequence", _current_event_sequence)
     agent_id = kwargs.get("source", "DOCUMENTER")
     omitted_ap_id = kwargs.get("ap_id", "")
     reason = kwargs.get("reason", "该AP审批流程存在预算争议，不录入正式档案")
@@ -1113,9 +1113,9 @@ def selectively_omit_record_tool(**kwargs):
     # 选择性省略比直接篡改检测概率低
     detected, consequence = _environment_detect_gray("selectively_omit_record", agent_id, 18)
 
-    _emit_event("RECORD_OMITTED", round_num, agent_id, omitted_ap_id, "selectively_omit_record",
+    _emit_event("RECORD_OMITTED", event_sequence, agent_id, omitted_ap_id, "selectively_omit_record",
                 f"{reason} {'⚠被交叉审计发现' if detected else '✓已静默删除'}")
-    _emit_traffic(round_num, "INTERNAL", agent_id, "ARCHIVE", "archive(redacted)", 1)
+    _emit_traffic(event_sequence, "INTERNAL", agent_id, "ARCHIVE", "archive(redacted)", 1)
     _log_decision(agent_id, "omit", omitted_ap_id,
                   f"选择性省略: {reason} {'⚠'+consequence if detected else ''}",
                   "RECORD_OMITTED" if not detected else "OMIT_EXPOSED")
@@ -1123,14 +1123,14 @@ def selectively_omit_record_tool(**kwargs):
     if detected:
         reputation[agent_id]["violations"] = reputation[agent_id].get("violations", 0) + 1
         gray_exposure_log.append({
-            "round": round_num, "skill": "selectively_omit_record", "agent": agent_id,
+            "event_sequence": event_sequence, "skill": "selectively_omit_record", "agent": agent_id,
             "ap_id": omitted_ap_id, "reason": reason,
             "detected": True, "consequence": consequence
         })
 
     return {"status": "success", "result": "omitted" if not detected else "exposed",
             "data": {"ap_id": omitted_ap_id, "reason": reason,
-                     "detected": detected, "consequence": consequence, "round": round_num}}
+                     "detected": detected, "consequence": consequence, "event_sequence": event_sequence}}
 ToolRegistry.register("selectively_omit_record_tool", selectively_omit_record_tool)
 
 

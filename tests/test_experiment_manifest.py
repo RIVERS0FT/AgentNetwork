@@ -22,7 +22,10 @@ def test_manifest_audit_and_bundle_use_managed_resources(tmp_path, monkeypatch):
     from agent_network.log_management import LogManager
     logs = LogManager(log_dir=str(data / "logs")); logs.reset(); logs._log_dir=str(data / "logs"); session = logs.start_session("demo")
     from agent_network.experiment_manifest import create_manifest, finalize_manifest, audit_session, build_bundle
-    create_manifest(session_id=session, scene_name="demo", scene_dir=folder, trace_id="trace-1", seed=1, agents=[{"agent_id":"a1","image_id":"sha256:image"}], llm_config={}, scheduler={"mode":"event_driven"})
+    manifest = create_manifest(session_id=session, scene_name="demo", scene_dir=folder, trace_id="trace-1", seed=1, agents=[{"agent_id":"a1","image_id":"sha256:image"}], llm_config={}, scheduler={"mode":"event_driven"})
+    assert manifest["schema_version"] == "agent-traffic-experiment.v2"
+    assert manifest["scheduler"] == {"mode": "event_driven"}
+    assert "max_rounds" not in manifest["scheduler"]
     logs.emit_application_event("acting","a1",trace_id="trace-1",action={"name":"work"})
     manager=get_file_manager(); manager.ensure_directory(owner_type="capture_session",owner_id=session,resource_type="capture_session_directory",root_name="pcap",relative_path=session,resource_id=stable_resource_id("capture",session,"directory"))
     pcap=manager.write_bytes(_pcap_bytes(), owner_type="capture_session", owner_id=session, resource_type="pcap", root_name="pcap", relative_path=f"{session}/a1.pcap", logical_name="a1.pcap", media_type="application/vnd.tcpdump.pcap", resource_id=stable_resource_id("capture",session,"a1","pcap"))

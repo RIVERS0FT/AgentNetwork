@@ -21,7 +21,13 @@ from agent_network.experiment_manifest import (
 from agent_network.log_management import get_log_manager
 from agent_network.network_emulation import normalize_profile
 from agent_network.real_packet_store import packet_stats
-from agent_network.scene_management import AgentDef, SceneDefinition, get_api_config
+from agent_network.scene_management import (
+    AgentDef,
+    SceneDefinition,
+    get_api_config,
+    get_scene_storage,
+)
+from agent_network.simulation_management import SimulationEventScheduler
 
 
 router = APIRouter()
@@ -470,20 +476,17 @@ def _launch_containers(
         agents=experiment_agents,
         llm_config=config,
         scheduler={
-            "mode": "event_driven_rounds",
-            "initial_task_delivery": "once",
-            "max_rounds": state.termination_config.get(
-                "max_rounds", 20
-            ),
-            "stalemate_rounds": state.termination_config.get(
-                "stalemate_rounds", 3
-            ),
+            "mode": "event_driven",
             "duration_seconds": getattr(
                 runtime_config, "duration_seconds", 0
             ),
             "agent_timeout_seconds": getattr(
                 runtime_config, "agent_timeout_seconds", 300
             ),
+            "idle_timeout_seconds": getattr(
+                runtime_config, "idle_timeout_seconds", 5
+            ),
+            "network_mode": getattr(runtime_config, "network_mode", "a2a"),
             "resource_plan": resource_plan,
         },
     )
@@ -597,14 +600,23 @@ def _launch_containers(
             "quality": quality,
         }
 
-    max_rounds = state.termination_config.get("max_rounds", 20)
-    stalemate_threshold = state.termination_config.get(
-        "stalemate_rounds", 3
-    )
-    results_log = []
-    silent_rounds = 0
-    stop_reason = "hard_limit"
-    state.simulation_stop_requested = False
+    scheduler = SimulationEventScheduler(simulation_run)
+    simulation_run.scheduler = scheduler
+    for assignment, tasks in created_cas:
+        scheduler.enqueue(
+            "initial_task",
+            assignment.agent_id,
+            {"task": "\n".join(task for task in tasks if task)},
+        )
+    scheduler_result = {
+        "stop_reason": "idle_completed",
+        "processed_event_count": 0,
+        "failed_event_count": 0,
+        "cancelled_event_count": 0,
+        "events": [],
+        "batches": [],
+    }
+    stop_reason = "idle_completed"
     network_clear = {
         "requested_profiles": 0,
         "failed": 0,
@@ -618,21 +630,8 @@ def _launch_containers(
     run_error = ""
 
     try:
-        for round_num in range(max_rounds):
-            if control and control.force_stop_event.is_set():
-                stop_reason = control.reason or "forced_stop"
-                break
-            if control and control.stop_event.is_set():
-                stop_reason = control.reason or "user_stopped"
-                break
-            if state.simulation_stop_requested:
-                stop_reason = "user_stopped"
-                break
-
-            state.current_turn = round_num + 1
+        def dispatch_events(events):
             context = {
-                "round": state.current_turn,
-                "total_rounds": max_rounds,
                 "scene": scene_def.scene_key,
                 "agents": [
                     {
@@ -642,14 +641,6 @@ def _launch_containers(
                     }
                     for assignment, _ in created_cas
                 ],
-                "tasks": (
-                    {
-                        assignment.agent_id: tasks
-                        for assignment, tasks in created_cas
-                    }
-                    if round_num == 0
-                    else {}
-                ),
                 "comm_matrix": {
                     key: list(value)
                     for key, value in _comm_matrix.items()
@@ -657,9 +648,8 @@ def _launch_containers(
                 "agent_directory": agent_directory,
                 "talk": talk_id,
                 "trace_id": talk_id,
-                "tick": state.current_turn,
                 "simulation_seed": _pending_seed,
-                "network_mode": "a2a",
+                "network_mode": getattr(runtime_config, "network_mode", "a2a"),
                 "max_parallel_agents": int(
                     resource_plan.get("max_parallel_agents", 10)
                 ),
@@ -667,56 +657,28 @@ def _launch_containers(
                     runtime_config, "agent_timeout_seconds", 300
                 ),
             }
-            round_result = runtime.run_round(context)
-            results_log.append(round_result)
-            results = round_result.get("results", [])
+            return runtime.run_events(events, context)
 
-            if control and control.force_stop_event.is_set():
-                stop_reason = control.reason or "forced_stop"
-                break
-            if control and control.stop_event.is_set():
-                stop_reason = control.reason or "user_stopped"
-                break
-
+        def capture_is_healthy():
+            nonlocal capture_health
             capture_health = _capture_health(
                 created_cas,
                 requests_module,
             )
             if not capture_health["healthy"]:
-                stop_reason = "capture_incomplete"
                 logger.system(
                     "capture_health",
                     "Agent capture stopped unexpectedly",
                     details=capture_health,
                 )
-                break
+            return capture_health["healthy"]
 
-            if results and all(
-                result.get("error")
-                for result in results
-            ):
-                stop_reason = "all_agents_failed"
-                break
-
-            meaningful = sum(
-                len(result.get("application_events", []))
-                + len(result.get("tool_events", []))
-                + (1 if result.get("final_message") else 0)
-                for result in results
-            )
-            silent_rounds = (
-                silent_rounds + 1
-                if meaningful == 0
-                else 0
-            )
-            if silent_rounds >= stalemate_threshold:
-                stop_reason = (
-                    f"stalemate_{stalemate_threshold}_"
-                    "silent_rounds"
-                )
-                break
-
-            time.sleep(0.3)
+        scheduler_result = scheduler.run_loop(
+            dispatch_events,
+            readiness_probe=runtime.ready_agent_ids,
+            health_check=capture_is_healthy,
+        )
+        stop_reason = scheduler_result["stop_reason"]
     except Exception as exc:
         run_error = str(exc)
         stop_reason = "runtime_exception"
@@ -757,21 +719,34 @@ def _launch_containers(
                 runtime._set_status(assignment, "idle")
 
     controlled_stop = bool(control and control.stop_event.is_set())
+    failed_stop = stop_reason in {
+        "all_agents_failed",
+        "capture_incomplete",
+        "resource_limit_exceeded",
+        "runtime_exception",
+    }
     experiment_status = (
         "complete"
         if (
             not run_error
             and not controlled_stop
-            and stop_reason != "capture_incomplete"
+            and not failed_stop
             and capture_stop["failed"] == 0
         )
-        else ("stopped" if controlled_stop and not run_error else "error")
+        else (
+            "stopped"
+            if controlled_stop and not run_error and not failed_stop
+            else "error"
+        )
     )
     finalize_manifest(
         session_id,
         status=experiment_status,
         stop_reason=stop_reason,
-        rounds=len(results_log),
+        processed_event_count=scheduler_result["processed_event_count"],
+        failed_event_count=scheduler_result["failed_event_count"],
+        cancelled_event_count=scheduler_result["cancelled_event_count"],
+        events=scheduler_result["events"],
         network_emulation=network_emulation,
         network_clear=network_clear,
         capture_start=capture_start,
@@ -782,7 +757,9 @@ def _launch_containers(
 
     return {
         "status": (
-            "error" if run_error else ("stopped" if controlled_stop else "completed")
+            "error"
+            if run_error or failed_stop
+            else ("stopped" if controlled_stop else "completed")
         ),
         "error": run_error,
         "simulation_name": scene_def.title,
@@ -798,10 +775,12 @@ def _launch_containers(
         "agent_stats": AgentRegistry.get_stats(),
         "packet_stats": packet_stats(session_id=session_id),
         "capture_health": capture_health,
-        "rounds": len(results_log),
-        "max_rounds": max_rounds,
+        "processed_event_count": scheduler_result["processed_event_count"],
+        "failed_event_count": scheduler_result["failed_event_count"],
+        "cancelled_event_count": scheduler_result["cancelled_event_count"],
+        "events": scheduler_result["events"],
         "stop_reason": stop_reason,
-        "results_log": results_log,
+        "event_batches": scheduler_result["batches"],
         "topology": scene_def.topology,
         "comm_policy": {
             "mode": "direct",
@@ -840,6 +819,11 @@ def _normalize_backend(
 def _build_scene_from_folder(
     scene_name: str,
 ) -> SceneDefinition:
+    # Kept only for internal callers while all parsing and validation are owned
+    # by SceneStorage. The code below is unreachable legacy text and will be
+    # removed when this compatibility function is deleted.
+    return get_scene_storage().build_definition(scene_name)
+
     folder = _SCENES_DIR / scene_name
     meta = json.loads(
         (folder / "meta_and_roles.json").read_text(
@@ -861,19 +845,7 @@ def _build_scene_from_folder(
     title = scenario_metadata.get("title", scene_name)
     description = scenario_metadata.get("global_rules", "")
 
-    if scenario_metadata.get("max_rounds"):
-        state.termination_config["max_rounds"] = int(
-            scenario_metadata["max_rounds"]
-        )
-    if scenario_metadata.get("stalemate_rounds"):
-        state.termination_config["stalemate_rounds"] = int(
-            scenario_metadata["stalemate_rounds"]
-        )
-
     state.current_scene_name = scene_name
-    state.current_max_rounds = state.termination_config.get(
-        "max_rounds", 20
-    )
     state.active_tools_module = None
 
     roles = meta.get("roles", {})
@@ -1010,7 +982,6 @@ def _build_scene_from_folder(
     )
 
 
-@router.post("/simulations/setup")
 async def setup_simulation(
     req: SimulationRunRequest,
 ):
@@ -1043,7 +1014,6 @@ async def setup_simulation(
     return result
 
 
-@router.post("/simulations/launch")
 async def launch_simulation():
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
@@ -1054,13 +1024,12 @@ async def launch_simulation():
     )
 
 
-@router.post("/simulations/stop")
 async def stop_simulation():
-    state.simulation_stop_requested = True
-    return {"status": "stop_requested"}
+    raise RuntimeError(
+        "legacy simulation lifecycle is removed; use SimulationManager"
+    )
 
 
-@router.get("/scenes")
 async def list_scenes():
     if not _SCENES_DIR.exists():
         return {"scenes": []}
@@ -1079,13 +1048,10 @@ async def list_scenes():
     }
 
 
-@router.get("/scenes/state")
 async def scene_state_unified():
     return {
         "scene": state.current_scene_name,
         "running": state.simulation_active,
-        "round": state.current_turn,
-        "max_rounds": state.current_max_rounds,
         "agents": [
             agent.get_status()
             for agent in AgentRegistry.list_all()
@@ -1094,7 +1060,6 @@ async def scene_state_unified():
     }
 
 
-@router.get("/scenes/{scene_name}")
 async def read_scene(scene_name: str):
     folder = _SCENES_DIR / scene_name
     if not folder.is_dir():

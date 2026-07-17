@@ -42,7 +42,7 @@ Phase 1: 逐点部署循环 (每个AP重复)
   │         ──reject_ap ──→ 虚线消失 ❌ → 重新plan    │
   └──────────────────────────────────────────────────┘
 
-Phase 2-5: 全局评估 (每轮一次)
+Phase 2-5: 全局评估（由相关任务/消息事件触发）
   RF_ENGINEER ──simulate_coverage──→ 全园区覆盖率
   RF_ENGINEER ──analyze_interference→ AP受干扰情况
   COST_ANALYST──evaluate_cost──────→ 总成本/预算

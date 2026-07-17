@@ -3,6 +3,9 @@ import os
 
 import pytest
 
+from agent_network.file_management.log_integration import (
+    _build_manager_for_log_dir,
+)
 from agent_network.log_management import LogManager
 
 
@@ -109,3 +112,21 @@ def test_hide_show_download_and_delete(manager):
     result = manager.delete_log(session_id, "network")
     assert result["deleted"] is True
     assert not os.path.exists(download_path)
+
+
+@pytest.mark.not_llm
+def test_custom_log_roots_use_isolated_resource_catalogs(tmp_path):
+    first = _build_manager_for_log_dir(str(tmp_path / "first"))
+    second = _build_manager_for_log_dir(str(tmp_path / "second"))
+
+    first.write_text(
+        "{}\n",
+        owner_type="log_session",
+        owner_id="first_session",
+        resource_type="network_log",
+        root_name="logs",
+        relative_path="first_session/network.jsonl",
+        logical_name="network.jsonl",
+    )
+
+    assert second.list_resources(owner_type="log_session") == []

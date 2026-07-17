@@ -110,11 +110,15 @@ class SceneManager:
             "title": definition.title,
             "description": definition.description,
             "agents": [asdict(agent) for agent in definition.agents],
+            "skills": [asdict(skill) for skill in definition.skills],
+            "tools": [asdict(tool) for tool in definition.tools],
+            "tasks": [asdict(task) for task in definition.tasks],
             "topology": definition.topology,
+            "validation": definition.validation.to_dict(),
         }
 
-    def list_scenes(self, *, include_hidden: bool = False) -> list[dict[str, Any]]:
-        return self.storage.list_scenes(include_hidden=include_hidden)
+    def list_scenes(self) -> list[dict[str, Any]]:
+        return self.storage.list_scenes()
 
     def details(self, scene_key: str) -> dict[str, Any]:
         return self.storage.details(scene_key)

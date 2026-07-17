@@ -8,6 +8,17 @@ from .scene_manager import (
     get_scene_manager,
 )
 from .scene_storage import SceneStorage, get_scene_storage
+from .models import (
+    SceneListItem,
+    SceneSummary,
+    SceneValidationError,
+    SkillDefinition,
+    TaskDefinition,
+    ToolDefinition,
+    ValidationIssue,
+    ValidationResult,
+)
+from .validator import SceneValidator
 
 __all__ = [
     "AgentDef",
@@ -15,7 +26,16 @@ __all__ = [
     "SceneBatchResult",
     "SceneDefinition",
     "SceneManager",
+    "SceneListItem",
+    "SceneSummary",
     "SceneStorage",
+    "SceneValidationError",
+    "SceneValidator",
+    "SkillDefinition",
+    "TaskDefinition",
+    "ToolDefinition",
+    "ValidationIssue",
+    "ValidationResult",
     "get_api_config",
     "get_scene_manager",
     "get_scene_storage",

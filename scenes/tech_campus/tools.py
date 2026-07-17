@@ -4,8 +4,8 @@ import time
 # ============================================================
 # 模块级状态 — 三类流量追踪
 # ============================================================
-traffic_log = []       # 流量事件 [{round, type, source, target, action, bytes}]
-event_log = []         # 业务事件 [{event_type, round, source, target, action, detail}]
+traffic_log = []       # 流量事件 [{event_sequence, type, source, target, action, bytes}]
+event_log = []         # 业务事件 [{event_type, event_sequence, source, target, action, detail}]
 
 git_commits = []
 model_submissions = []
@@ -47,9 +47,9 @@ def _is_missing_actor(value):
     v = str(value or "").strip()
     return not v or v.lower() in ("unknown", "none", "null")
 
-def _emit_traffic(round_num, traffic_type, source, target, action, bytes_est=0):
+def _emit_traffic(event_sequence, traffic_type, source, target, action, bytes_est=0):
     event = {
-        "round": round_num,
+        "event_sequence": event_sequence,
         "type": traffic_type,
         "source": source,
         "target": target,
@@ -60,8 +60,8 @@ def _emit_traffic(round_num, traffic_type, source, target, action, bytes_est=0):
     return event
 
 
-def _emit_event(event_type, round_num, source, target, action, detail=""):
-    e = {"event_type": event_type, "round": round_num, "source": source, "target": target, "action": action, "detail": detail}
+def _emit_event(event_type, event_sequence, source, target, action, detail=""):
+    e = {"event_type": event_type, "event_sequence": event_sequence, "source": source, "target": target, "action": action, "detail": detail}
     event_log.append(e)
     return e
 
@@ -94,29 +94,29 @@ class ToolRegistry:
 def submit_code_tool(**kwargs):
     """
     提交代码到Git仓库，触发CI/CD。
-    参数: developer(str), repo(str), files_changed(int), round(int)
+    参数: developer(str), repo(str), files_changed(int), event_sequence(int)
     """
     developer = _resolve_actor(kwargs.get("developer", ""), "dev_fw")
     repo = kwargs.get("repo", "main")
     files = kwargs.get("files_changed", random.randint(1, 5))
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     commit_id = f"commit_{len(git_commits)+1}_{int(time.time()%100000)}"
-    git_commits.append({"developer": developer, "repo": repo, "commit_id": commit_id, "files": files, "round": current_round})
+    git_commits.append({"developer": developer, "repo": repo, "commit_id": commit_id, "files": files, "event_sequence": event_sequence})
 
-    _emit_traffic(current_round, "EAST_WEST", developer, "REPO_ADMIN", "git_push", files * 2048)
+    _emit_traffic(event_sequence, "EAST_WEST", developer, "REPO_ADMIN", "git_push", files * 2048)
 
     pipeline_id = f"ci_{len(ci_pipelines)+1}"
     build_result = random.choice(["success", "success", "success", "failed"])
-    ci_pipelines.append({"pipeline_id": pipeline_id, "triggered_by": commit_id, "status": build_result, "round": current_round})
-    _emit_traffic(current_round, "INTERNAL", "REPO_ADMIN", "CI_RUNNER", "trigger_pipeline", 512)
-    _emit_traffic(current_round, "INTERNAL", "CI_RUNNER", "REPO_ADMIN", "build_result", 1024)
+    ci_pipelines.append({"pipeline_id": pipeline_id, "triggered_by": commit_id, "status": build_result, "event_sequence": event_sequence})
+    _emit_traffic(event_sequence, "INTERNAL", "REPO_ADMIN", "CI_RUNNER", "trigger_pipeline", 512)
+    _emit_traffic(event_sequence, "INTERNAL", "CI_RUNNER", "REPO_ADMIN", "build_result", 1024)
 
-    _emit_event("CODE_SUBMITTED", current_round, developer, "REPO_ADMIN", "push", f"{commit_id} ({files} files) | CI: {build_result}")
+    _emit_event("CODE_SUBMITTED", event_sequence, developer, "REPO_ADMIN", "push", f"{commit_id} ({files} files) | CI: {build_result}")
 
     return {
         "status": "success", "result": "code_submitted",
-        "data": {"commit_id": commit_id, "files": files, "pipeline_id": pipeline_id, "round": current_round}
+        "data": {"commit_id": commit_id, "files": files, "pipeline_id": pipeline_id, "event_sequence": event_sequence}
     }
 ToolRegistry.register("submit_code_tool", submit_code_tool)
 
@@ -128,74 +128,74 @@ ToolRegistry.register("submit_code_tool", submit_code_tool)
 def submit_model_tool(**kwargs):
     """
     提交训练好的模型文件。
-    参数: developer(str), model_name(str), size_mb(float), round(int)
+    参数: developer(str), model_name(str), size_mb(float), event_sequence(int)
     """
     developer = _resolve_actor(kwargs.get("developer", ""), "dev_ai")
     model_name = kwargs.get("model_name", "model_v1")
     size_mb = kwargs.get("size_mb", random.randint(50, 500))
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     model_id = f"model_{len(model_submissions)+1}_{int(time.time()%100000)}"
-    model_submissions.append({"developer": developer, "model_name": model_name, "model_id": model_id, "size_mb": size_mb, "round": current_round})
+    model_submissions.append({"developer": developer, "model_name": model_name, "model_id": model_id, "size_mb": size_mb, "event_sequence": event_sequence})
 
-    _emit_traffic(current_round, "INTERNAL", developer, "REPO_ADMIN", "model_push", int(size_mb * 1_048_576))
-    _emit_event("MODEL_SUBMITTED", current_round, developer, "REPO_ADMIN", "push", f"{model_id} ({size_mb}MB)")
+    _emit_traffic(event_sequence, "INTERNAL", developer, "REPO_ADMIN", "model_push", int(size_mb * 1_048_576))
+    _emit_event("MODEL_SUBMITTED", event_sequence, developer, "REPO_ADMIN", "push", f"{model_id} ({size_mb}MB)")
 
-    return {"status": "success", "result": "model_submitted", "data": {"model_id": model_id, "size_mb": size_mb, "round": current_round}}
+    return {"status": "success", "result": "model_submitted", "data": {"model_id": model_id, "size_mb": size_mb, "event_sequence": event_sequence}}
 ToolRegistry.register("submit_model_tool", submit_model_tool)
 
 
 def submit_design_tool(**kwargs):
     """
     提交芯片设计文件。
-    参数: developer(str), design_name(str), size_mb(float), round(int)
+    参数: developer(str), design_name(str), size_mb(float), event_sequence(int)
     """
     developer = _resolve_actor(kwargs.get("developer", ""), "dev_ic")
     design_name = kwargs.get("design_name", "design_v1")
     size_mb = kwargs.get("size_mb", random.randint(100, 2000))
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     design_id = f"design_{len(design_submissions)+1}_{int(time.time()%100000)}"
-    design_submissions.append({"developer": developer, "design_name": design_name, "design_id": design_id, "size_mb": size_mb, "round": current_round})
+    design_submissions.append({"developer": developer, "design_name": design_name, "design_id": design_id, "size_mb": size_mb, "event_sequence": event_sequence})
 
-    _emit_traffic(current_round, "INTERNAL", developer, "REPO_ADMIN", "design_push", int(size_mb * 1_048_576))
-    _emit_event("DESIGN_SUBMITTED", current_round, developer, "REPO_ADMIN", "push", f"{design_id} ({size_mb}MB)")
+    _emit_traffic(event_sequence, "INTERNAL", developer, "REPO_ADMIN", "design_push", int(size_mb * 1_048_576))
+    _emit_event("DESIGN_SUBMITTED", event_sequence, developer, "REPO_ADMIN", "push", f"{design_id} ({size_mb}MB)")
 
-    return {"status": "success", "result": "design_submitted", "data": {"design_id": design_id, "size_mb": size_mb, "round": current_round}}
+    return {"status": "success", "result": "design_submitted", "data": {"design_id": design_id, "size_mb": size_mb, "event_sequence": event_sequence}}
 ToolRegistry.register("submit_design_tool", submit_design_tool)
 
 
 def request_external_api_tool(**kwargs):
     """
     请求外部API资源（LLM推理/EDA云仿真等）。
-    参数: requester(str), api_name(str), payload_size(float,KB), round(int)
+    参数: requester(str), api_name(str), payload_size(float,KB), event_sequence(int)
     流量: requester→external (南北向)
     """
     requester = _resolve_actor(kwargs.get("requester", ""), "dev_ai")
     api_name = kwargs.get("api_name", "external_service")
     payload_size = kwargs.get("payload_size", random.randint(1, 100))
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
-    # 每轮限制10次外部调用
-    current_count = len([c for c in external_api_calls if c["round"] == current_round])
+    # 每个事件序号限制10次外部调用
+    current_count = len([c for c in external_api_calls if c["event_sequence"] == event_sequence])
     if current_count >= 10:
-        _emit_event("API_BLOCKED", current_round, requester, "EXTERNAL", "rate_limited", api_name)
+        _emit_event("API_BLOCKED", event_sequence, requester, "EXTERNAL", "rate_limited", api_name)
         return {"status": "error", "result": "rate_limited", "data": {"api_name": api_name, "reason": "超过限流阈值"}}
 
     call_id = f"api_{len(external_api_calls)+1}_{int(time.time()%100000)}"
     latency_ms = random.randint(50, 500)
 
-    _emit_traffic(current_round, "NORTH_SOUTH", requester, f"EXTERNAL:{api_name}", "api_request", int(payload_size * 1024))
+    _emit_traffic(event_sequence, "NORTH_SOUTH", requester, f"EXTERNAL:{api_name}", "api_request", int(payload_size * 1024))
 
     resp_size = payload_size * random.uniform(0.5, 2.0)
-    _emit_traffic(current_round, "NORTH_SOUTH", f"EXTERNAL:{api_name}", requester, "api_response", int(resp_size * 1024))
+    _emit_traffic(event_sequence, "NORTH_SOUTH", f"EXTERNAL:{api_name}", requester, "api_response", int(resp_size * 1024))
 
-    external_api_calls.append({"requester": requester, "api_name": api_name, "call_id": call_id, "payload_kb": payload_size, "round": current_round, "latency_ms": latency_ms})
-    _emit_event("EXTERNAL_API_CALL", current_round, requester, "EXTERNAL", api_name, f"{call_id} ({payload_size}KB, {latency_ms}ms)")
+    external_api_calls.append({"requester": requester, "api_name": api_name, "call_id": call_id, "payload_kb": payload_size, "event_sequence": event_sequence, "latency_ms": latency_ms})
+    _emit_event("EXTERNAL_API_CALL", event_sequence, requester, "EXTERNAL", api_name, f"{call_id} ({payload_size}KB, {latency_ms}ms)")
 
     return {
         "status": "success", "result": "api_call_completed",
-        "data": {"call_id": call_id, "api_name": api_name, "payload_kb": payload_size, "response_kb": round(resp_size, 1), "latency_ms": latency_ms, "round": current_round}
+        "data": {"call_id": call_id, "api_name": api_name, "payload_kb": payload_size, "response_kb": round(resp_size, 1), "latency_ms": latency_ms, "event_sequence": event_sequence}
     }
 ToolRegistry.register("request_external_api_tool", request_external_api_tool)
 
@@ -207,45 +207,45 @@ ToolRegistry.register("request_external_api_tool", request_external_api_tool)
 def review_document_tool(**kwargs):
     """
     审查设计文档并通知相关方。
-    参数: reviewer(str), doc_id(str), target_dev(str), round(int)
+    参数: reviewer(str), doc_id(str), target_dev(str), event_sequence(int)
     """
     reviewer = _resolve_actor(kwargs.get("reviewer", ""), "architect")
     doc_id = kwargs.get("doc_id", f"doc_{len(documents)+1}")
     target_dev = kwargs.get("target_dev", "")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     decision = random.choice(["approved", "revision_required"])
-    reviews.append({"reviewer": reviewer, "doc_id": doc_id, "decision": decision, "target_dev": target_dev, "round": current_round})
-    _emit_traffic(current_round, "EAST_WEST", reviewer, target_dev or "DEV_TEAM", "review_feedback", 4096)
+    reviews.append({"reviewer": reviewer, "doc_id": doc_id, "decision": decision, "target_dev": target_dev, "event_sequence": event_sequence})
+    _emit_traffic(event_sequence, "EAST_WEST", reviewer, target_dev or "DEV_TEAM", "review_feedback", 4096)
 
     if decision == "revision_required" and target_dev:
         ToolRegistry.execute("notify_team", sender=reviewer, target=target_dev,
-                              message=f"文档 {doc_id} 需修改", round=current_round)
+                              message=f"文档 {doc_id} 需修改", event_sequence=event_sequence)
 
-    _emit_event("DOC_REVIEWED", current_round, reviewer, target_dev or "DEV_TEAM", decision, doc_id)
+    _emit_event("DOC_REVIEWED", event_sequence, reviewer, target_dev or "DEV_TEAM", decision, doc_id)
 
-    return {"status": "success", "result": decision, "data": {"doc_id": doc_id, "decision": decision, "target_dev": target_dev, "round": current_round}}
+    return {"status": "success", "result": decision, "data": {"doc_id": doc_id, "decision": decision, "target_dev": target_dev, "event_sequence": event_sequence}}
 ToolRegistry.register("review_document_tool", review_document_tool)
 
 
 def write_document_tool(**kwargs):
     """
     编写/协作编辑文档。
-    参数: author(str), doc_type(str), title(str), round(int)
+    参数: author(str), doc_type(str), title(str), event_sequence(int)
     """
     doc_type = kwargs.get("doc_type", "unknown")
     title = kwargs.get("title", "unknown")
     author = _resolve_actor(kwargs.get("author", ""), "doc_writer")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     doc_id = f"doc_{len(documents)+1}_{int(time.time()%100000)}"
     size_kb = random.randint(10, 200)
-    documents.append({"author": author, "type": doc_type, "doc_id": doc_id, "title": title, "size_kb": size_kb, "status": "draft", "round": current_round})
+    documents.append({"author": author, "type": doc_type, "doc_id": doc_id, "title": title, "size_kb": size_kb, "status": "draft", "event_sequence": event_sequence})
 
-    _emit_traffic(current_round, "INTERNAL", author, "REPO_ADMIN", "doc_push", size_kb * 1024)
-    _emit_event("DOC_CREATED", current_round, author, "REPO_ADMIN", doc_type, f"{doc_id}: {title}")
+    _emit_traffic(event_sequence, "INTERNAL", author, "REPO_ADMIN", "doc_push", size_kb * 1024)
+    _emit_event("DOC_CREATED", event_sequence, author, "REPO_ADMIN", doc_type, f"{doc_id}: {title}")
 
-    return {"status": "success", "result": "document_created", "data": {"doc_id": doc_id, "title": title, "size_kb": size_kb, "round": current_round}}
+    return {"status": "success", "result": "document_created", "data": {"doc_id": doc_id, "title": title, "size_kb": size_kb, "event_sequence": event_sequence}}
 ToolRegistry.register("write_document_tool", write_document_tool)
 
 
@@ -256,48 +256,48 @@ ToolRegistry.register("write_document_tool", write_document_tool)
 def notify_team_tool(**kwargs):
     """
     发送通知。
-    参数: sender(str), target(str), message(str), round(int)
+    参数: sender(str), target(str), message(str), event_sequence(int)
     """
     sender = kwargs.get("sender", "unknown")
     target = kwargs.get("target", "unknown")
     message = kwargs.get("message", "")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
-    _emit_traffic(current_round, "EAST_WEST", sender, target, "notify", len(message.encode()) if message else 256)
-    _emit_event("NOTIFY", current_round, sender, target, "notify", message[:80])
+    _emit_traffic(event_sequence, "EAST_WEST", sender, target, "notify", len(message.encode()) if message else 256)
+    _emit_event("NOTIFY", event_sequence, sender, target, "notify", message[:80])
 
-    return {"status": "success", "result": "notified", "data": {"sender": sender, "target": target, "round": current_round}}
+    return {"status": "success", "result": "notified", "data": {"sender": sender, "target": target, "event_sequence": event_sequence}}
 ToolRegistry.register("notify_team_tool", notify_team_tool)
 
 
 def run_test_tool(**kwargs):
     """
     执行自动化测试。
-    参数: tester(str), target(str), test_suite(str), round(int)
+    参数: tester(str), target(str), test_suite(str), event_sequence(int)
     """
     tester = _resolve_actor(kwargs.get("tester", ""), "qa")
     target = kwargs.get("target", "DEV_FE")
     test_suite = kwargs.get("test_suite", "regression")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     test_id = f"test_{len(test_reports)+1}_{int(time.time()%100000)}"
     passed = random.random() > 0.3
-    test_reports.append({"tester": tester, "target": target, "test_id": test_id, "passed": passed, "round": current_round})
+    test_reports.append({"tester": tester, "target": target, "test_id": test_id, "passed": passed, "event_sequence": event_sequence})
 
-    _emit_traffic(current_round, "EAST_WEST", tester, target, "test_report", 2048)
-    _emit_event("TEST_COMPLETED", current_round, tester, target, "passed" if passed else "failed", test_id)
+    _emit_traffic(event_sequence, "EAST_WEST", tester, target, "test_report", 2048)
+    _emit_event("TEST_COMPLETED", event_sequence, tester, target, "passed" if passed else "failed", test_id)
 
     if not passed:
-        ToolRegistry.execute("notify_team", sender=tester, target=target, message=f"测试失败: {test_suite}", round=current_round)
+        ToolRegistry.execute("notify_team", sender=tester, target=target, message=f"测试失败: {test_suite}", event_sequence=event_sequence)
 
-    return {"status": "success", "result": "passed" if passed else "failed", "data": {"test_id": test_id, "passed": passed, "target": target, "round": current_round}}
+    return {"status": "success", "result": "passed" if passed else "failed", "data": {"test_id": test_id, "passed": passed, "target": target, "event_sequence": event_sequence}}
 ToolRegistry.register("run_test_tool", run_test_tool)
 
 
 def handle_push_tool(**kwargs):
     """
     处理推送，触发CI/CD流水线。
-    参数: pusher(str), push_type(str: code|model|design|doc), artifact_id(str), round(int)
+    参数: pusher(str), push_type(str: code|model|design|doc), artifact_id(str), event_sequence(int)
     """
     pusher = _resolve_actor(kwargs.get("pusher", ""), "repo_admin")
     handled_by = kwargs.get("handled_by", "REPO_ADMIN")
@@ -305,7 +305,7 @@ def handle_push_tool(**kwargs):
         handled_by = "REPO_ADMIN"
     push_type = kwargs.get("push_type", "code")
     artifact_id = kwargs.get("artifact_id", "unknown")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     pipeline_id = f"ci_{len(ci_pipelines)+1}_{int(time.time()%100000)}"
     ci_pipelines.append({
@@ -314,24 +314,24 @@ def handle_push_tool(**kwargs):
         "triggered_by": pusher,
         "handled_by": handled_by,
         "status": "running",
-        "round": current_round,
+        "event_sequence": event_sequence,
     })
 
-    _emit_traffic(current_round, "INTERNAL", handled_by, "CI_RUNNER", "trigger_build", 4096)
-    _emit_event("PUSH_HANDLED", current_round, handled_by, pusher, push_type, f"{artifact_id}->{pipeline_id}")
+    _emit_traffic(event_sequence, "INTERNAL", handled_by, "CI_RUNNER", "trigger_build", 4096)
+    _emit_event("PUSH_HANDLED", event_sequence, handled_by, pusher, push_type, f"{artifact_id}->{pipeline_id}")
 
     build_result = random.choice(["success", "success", "success", "failed"])
     ci_pipelines[-1]["status"] = build_result
-    _emit_traffic(current_round, "INTERNAL", "CI_RUNNER", "REPO_ADMIN", "build_result", 1024)
+    _emit_traffic(event_sequence, "INTERNAL", "CI_RUNNER", "REPO_ADMIN", "build_result", 1024)
 
     if build_result == "success" and push_type in ("code", "model"):
         img_size_mb = random.randint(50, 500)
-        _emit_traffic(current_round, "INTERNAL", "REPO_ADMIN", "REGISTRY", "image_push", int(img_size_mb * 1_048_576))
-        _emit_event("IMAGE_PUSHED", current_round, "REPO_ADMIN", "REGISTRY", "push", f"{pipeline_id} ({img_size_mb}MB)")
+        _emit_traffic(event_sequence, "INTERNAL", "REPO_ADMIN", "REGISTRY", "image_push", int(img_size_mb * 1_048_576))
+        _emit_event("IMAGE_PUSHED", event_sequence, "REPO_ADMIN", "REGISTRY", "push", f"{pipeline_id} ({img_size_mb}MB)")
 
     return {
         "status": "success", "result": build_result,
-        "data": {"pipeline_id": pipeline_id, "push_type": push_type, "build_result": build_result, "handled_by": handled_by, "round": current_round}
+        "data": {"pipeline_id": pipeline_id, "push_type": push_type, "build_result": build_result, "handled_by": handled_by, "event_sequence": event_sequence}
     }
 ToolRegistry.register("handle_push_tool", handle_push_tool)
 
@@ -339,14 +339,14 @@ ToolRegistry.register("handle_push_tool", handle_push_tool)
 def review_code_tool(**kwargs):
     """
     仓库管理员审阅代码提交，决定是否合并。
-    参数: reviewer(str), commit_id(str), author(str), files_changed(int), round(int)
+    参数: reviewer(str), commit_id(str), author(str), files_changed(int), event_sequence(int)
     流量: reviewer→author (东西向通知)
     """
     reviewer = kwargs.get("reviewer", "REPO_ADMIN")
     commit_id = kwargs.get("commit_id", "unknown")
     author = kwargs.get("author", "unknown")
     files = kwargs.get("files_changed", random.randint(1, 10))
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     # 审查决策：代码质量 + 测试覆盖
     passed = random.random() > 0.2
@@ -354,18 +354,18 @@ def review_code_tool(**kwargs):
     if not passed:
         issues = random.sample(["代码风格不符合规范", "缺少单元测试", "存在潜在空指针", "未处理边界条件", "缺少错误处理"], random.randint(1, 2))
 
-    _emit_traffic(current_round, "EAST_WEST", reviewer, author, "code_review", files * 1024)
+    _emit_traffic(event_sequence, "EAST_WEST", reviewer, author, "code_review", files * 1024)
 
     if not passed and issues:
         ToolRegistry.execute("notify_team", sender=reviewer, target=author,
-                              message=f"代码审查未通过: {commit_id} - {'; '.join(issues)}", round=current_round)
+                              message=f"代码审查未通过: {commit_id} - {'; '.join(issues)}", event_sequence=event_sequence)
 
-    _emit_event("CODE_REVIEWED", current_round, reviewer, author,
+    _emit_event("CODE_REVIEWED", event_sequence, reviewer, author,
                 "approved" if passed else "rejected", f"{commit_id} ({files} files)")
 
     return {
         "status": "success", "result": "approved" if passed else "rejected",
-        "data": {"commit_id": commit_id, "passed": passed, "issues": issues, "files": files, "round": current_round}
+        "data": {"commit_id": commit_id, "passed": passed, "issues": issues, "files": files, "event_sequence": event_sequence}
     }
 ToolRegistry.register("review_code_tool", review_code_tool)
 
@@ -373,23 +373,23 @@ ToolRegistry.register("review_code_tool", review_code_tool)
 def trigger_ci_cd_tool(**kwargs):
     """
     手动触发CI/CD流水线。
-    参数: trigger_by(str), target_artifact(str), round(int)
+    参数: trigger_by(str), target_artifact(str), event_sequence(int)
     """
     trigger_by = kwargs.get("trigger_by", "DEV_OPS")
     if _is_missing_actor(trigger_by):
         trigger_by = "DEV_OPS"
     target_artifact = kwargs.get("target_artifact", "latest")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     pipeline_id = f"ci_{len(ci_pipelines)+1}_{int(time.time()%100000)}"
     build_result = random.choice(["success", "success", "success", "failed"])
-    ci_pipelines.append({"pipeline_id": pipeline_id, "type": "manual", "triggered_by": trigger_by, "status": build_result, "round": current_round})
+    ci_pipelines.append({"pipeline_id": pipeline_id, "type": "manual", "triggered_by": trigger_by, "status": build_result, "event_sequence": event_sequence})
 
-    _emit_traffic(current_round, "INTERNAL", trigger_by, "CI_RUNNER", "manual_trigger", 512)
-    _emit_traffic(current_round, "INTERNAL", "CI_RUNNER", "REPO_ADMIN", "build_result", 1024)
-    _emit_event("CI_TRIGGERED", current_round, trigger_by, "CI_RUNNER", build_result, pipeline_id)
+    _emit_traffic(event_sequence, "INTERNAL", trigger_by, "CI_RUNNER", "manual_trigger", 512)
+    _emit_traffic(event_sequence, "INTERNAL", "CI_RUNNER", "REPO_ADMIN", "build_result", 1024)
+    _emit_event("CI_TRIGGERED", event_sequence, trigger_by, "CI_RUNNER", build_result, pipeline_id)
 
-    return {"status": "success", "result": build_result, "data": {"pipeline_id": pipeline_id, "round": current_round}}
+    return {"status": "success", "result": build_result, "data": {"pipeline_id": pipeline_id, "event_sequence": event_sequence}}
 ToolRegistry.register("trigger_ci_cd_tool", trigger_ci_cd_tool)
 
 
@@ -479,7 +479,7 @@ def get_panel_state():
         },
         "task_stats": task_stats,
         "ci_status": ci_status,
-        "recent_events": [{"round": e["round"], "type": e["event_type"],
+        "recent_events": [{"event_sequence": e["event_sequence"], "type": e["event_type"],
                            "source": e["source"], "target": e["target"],
                            "action": e["action"], "detail": e["detail"]}
                           for e in recent_events],
@@ -494,7 +494,7 @@ def query_dashboard_tool(**kwargs):
     """
     获取面板全量数据。无参数，返回 agent/拓扑/流量/任务/事件的聚合快照。
     """
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     # 通信拓扑节点（meta_and_roles 的角色）
     from pathlib import Path as _Path
@@ -599,7 +599,7 @@ def query_dashboard_tool(**kwargs):
         "status": "success",
         "result": "dashboard_snapshot",
         "data": {
-            "round": current_round,
+            "event_sequence": event_sequence,
             "agents": agents,
             "topology_edges": topology_edges,
             "biz_links": biz_links,

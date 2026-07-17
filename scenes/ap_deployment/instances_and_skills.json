@@ -2,8 +2,6 @@
   "container_instances": {
     "PLANNER": {
       "skill_refs": [
-        "plan_next_ap",
-        "confirm_ap",
         "reject_ap",
         "relocate_ap",
         "confirm_relocation",
@@ -16,8 +14,8 @@
         "archive_blame_shield"
       ],
       "tool_refs": [
-        "plan_next_ap_tool",
-        "confirm_ap_tool",
+        "plan_next_ap",
+        "confirm_ap",
         "reject_ap_tool",
         "relocate_ap_tool",
         "confirm_relocation_tool",

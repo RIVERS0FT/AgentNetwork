@@ -46,11 +46,11 @@ def _write_experiment_manifest(session_id: str, value: dict):
 def create_manifest(session_id: str, scene_name: str, scene_dir: Path, trace_id: str, seed: int, agents: list[dict], llm_config: dict, scheduler: dict=None) -> dict:
     session_id = _validate_session_id(session_id); sanitized_config = sanitize_config(llm_config)
     config_sha256 = hashlib.sha256(json.dumps(sanitized_config, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
-    manifest = {'schema_version': 'agent-traffic-experiment.v1', 'status': 'running', 'session_id': session_id, 'trace_id': trace_id, 'scene_name': scene_name, 'seed': seed, 'started_at': _now_iso(), 'scene': _scene_provenance(scene_name, scene_dir), 'agents': agents, 'llm_config': sanitized_config, 'llm_config_sha256': config_sha256, 'scheduler': scheduler or {}}
+    manifest = {'schema_version': 'agent-traffic-experiment.v2', 'status': 'running', 'session_id': session_id, 'trace_id': trace_id, 'scene_name': scene_name, 'seed': seed, 'started_at': _now_iso(), 'scene': _scene_provenance(scene_name, scene_dir), 'agents': agents, 'llm_config': sanitized_config, 'llm_config_sha256': config_sha256, 'scheduler': scheduler or {}}
     resource = _write_experiment_manifest(session_id, manifest); manifest['resource_id'] = resource.resource_id; return manifest
 
 def finalize_manifest(session_id: str, **updates) -> dict:
-    session_id = _validate_session_id(session_id); manifest = load_manifest(session_id) or {'schema_version': 'agent-traffic-experiment.v1', 'session_id': session_id}; manifest.pop('resource_id', None); manifest.update(updates); manifest['finished_at'] = _now_iso(); resource = _write_experiment_manifest(session_id, manifest); manifest['resource_id'] = resource.resource_id; return manifest
+    session_id = _validate_session_id(session_id); manifest = load_manifest(session_id) or {'schema_version': 'agent-traffic-experiment.v2', 'session_id': session_id}; manifest.pop('resource_id', None); manifest.update(updates); manifest['finished_at'] = _now_iso(); resource = _write_experiment_manifest(session_id, manifest); manifest['resource_id'] = resource.resource_id; return manifest
 
 def load_manifest(session_id: str) -> dict:
     try: session_id = _validate_session_id(session_id)

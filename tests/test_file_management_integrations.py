@@ -14,7 +14,7 @@ def test_log_manager_uses_file_manager(tmp_path, monkeypatch):
 
 def _make_scene(root: Path, name='demo'):
     folder = root / name; folder.mkdir(parents=True)
-    (folder / 'meta_and_roles.json').write_text(json.dumps({'scenario_metadata': {'title': 'Demo'}, 'roles': {'A': {'name': 'A', 'identity': 'planner', 'model_backbone': 'openclaw'}}}))
+    (folder / 'meta_and_roles.json').write_text(json.dumps({'scenario_metadata': {'title': 'Demo'}, 'roles': {'A': {'name': 'A', 'identity': 'planner', 'core_goal': 'Complete the plan', 'model_backbone': 'openclaw'}}}))
     (folder / 'instances_and_skills.json').write_text(json.dumps({'container_instances': {'A': {'skill_refs': [], 'tool_refs': [], 'tasks': ['go']}}}))
     (folder / 'network_topology.json').write_text(json.dumps({'topology': []})); return folder
 

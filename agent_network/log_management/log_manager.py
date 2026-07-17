@@ -903,23 +903,6 @@ class LogManager:
             payload=kwargs,
         )
 
-    def event_trigger(self, turn, event_name, impact):
-        return self.emit_system_event(
-            "event_trigger",
-            f"Round {turn}: {event_name} — {impact}",
-            payload={"turn": turn, "event_name": event_name, "impact": impact},
-        )
-
-    def dag_step(self, step_id, agent_id, action, round_num, status="started"):
-        return self.emit_system_event(
-            "dag_step",
-            f"Round {round_num}, Step {step_id}: [{agent_id}] {action} ({status})",
-            kind="debug",
-            actor={"agent_id": agent_id},
-            action={"name": action, "status": status},
-            payload={"step_id": step_id, "round": round_num},
-        )
-
     def error(self, event, message="", agent_id="", **kwargs):
         return self.emit_system_event(
             event or "system_error",

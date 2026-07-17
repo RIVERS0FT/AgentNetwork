@@ -149,6 +149,7 @@ class SimulationManager:
             run.action_status = "stop_requested"
             run.control.reason = run.control.reason or "user_stopped"
             run.control.stop_event.set()
+            run.control.wake()
         runtime = self.runtime_provider()
         if hasattr(runtime, "cancel_agent_tasks"):
             runtime.cancel_agent_tasks(states={"TASK_STATE_SUBMITTED"})
@@ -186,12 +187,39 @@ class SimulationManager:
             run.control.reason = reason
             run.control.stop_event.set()
             run.control.force_stop_event.set()
+            run.control.wake()
         runtime = self.runtime_provider()
         if hasattr(runtime, "force_stop_all"):
             runtime.force_stop_all()
         if wait_seconds > 0:
             run.control.terminal_event.wait(timeout=wait_seconds)
         return run
+
+    def enqueue_event(
+        self,
+        simulation_id: str,
+        event_type: str,
+        target_agent_id: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        source_agent_id: str = "",
+    ):
+        run = self.get_run(simulation_id)
+        scheduler = run.scheduler
+        if not scheduler or run.state not in {
+            SimulationState.STARTING,
+            SimulationState.RUNNING,
+        }:
+            raise SimulationManagerError(
+                "INVALID_SIMULATION_STATE",
+                f"simulation cannot accept events from {run.state.value}",
+            )
+        return scheduler.enqueue(
+            event_type,
+            target_agent_id,
+            payload,
+            source_agent_id=source_agent_id,
+        )
 
     def get_run(self, simulation_id: str) -> SimulationRun:
         with self._lock:

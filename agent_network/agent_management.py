@@ -5,7 +5,7 @@ This module owns:
 - Agent metadata and control-plane messages
 - Agent registration, discovery, status, and statistics
 - Agent container assignment and scheduling
-- Agent round execution and lifecycle coordination
+- Agent event execution and lifecycle coordination
 
 Single-Agent reasoning, ReAct, memory, and tool execution remain delegated to
 the selected backend adapter inside services/agent_server.py.
@@ -217,7 +217,7 @@ class ContainerAgent:
 
 
 class ContainerRuntime:
-    """Container scheduling and round execution for A2A network mode."""
+    """Container scheduling and event execution for A2A network mode."""
 
     BACKEND_CONFIG = {
         "claude-code": {
@@ -537,13 +537,20 @@ class ContainerRuntime:
         self._set_status(assignment, status)
         return assignment
 
-    def run_round(self, context: Dict = None) -> Dict:
-        return {"results": self.run_all(context)}
-
     def run_all(self, context: Dict = None) -> List[Dict]:
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         assignments = list(self.agents.values())
+        target_agent_ids = {
+            str(item).lower()
+            for item in (context or {}).get("target_agent_ids", [])
+        }
+        if target_agent_ids:
+            assignments = [
+                assignment
+                for assignment in assignments
+                if assignment.agent_id.lower() in target_agent_ids
+            ]
         if not assignments:
             return []
 
@@ -558,6 +565,11 @@ class ContainerRuntime:
             self._set_status(assignment, "acting")
             try:
                 request_context = dict(context or {})
+                request_context.pop("target_agent_ids", None)
+                event_contexts = request_context.pop("event_contexts", {})
+                request_context.update(
+                    event_contexts.get(assignment.agent_id.lower(), {})
+                )
                 request_context["agent_id"] = assignment.agent_id
                 request_context["agent_name"] = assignment.name
                 request_context["role"] = assignment.role
@@ -646,6 +658,46 @@ class ContainerRuntime:
             for future in as_completed(futures):
                 results.append(future.result())
         return results
+
+    def run_events(
+        self,
+        events: List[Any],
+        context: Dict = None,
+    ) -> List[Dict[str, Any]]:
+        event_contexts = {}
+        for event in events:
+            payload = dict(getattr(event, "payload", {}) or {})
+            target_agent_id = str(getattr(event, "target_agent_id", "")).lower()
+            event_contexts[target_agent_id] = {
+                "simulation_id": str(getattr(event, "simulation_id", "")),
+                "event_id": str(getattr(event, "event_id", "")),
+                "event_sequence": int(getattr(event, "sequence", 0)),
+                "event_type": str(getattr(event, "event_type", "")),
+                "task": str(payload.get("task") or ""),
+                "messages": list(payload.get("messages") or []),
+            }
+        event_context = dict(context or {})
+        event_context["target_agent_ids"] = list(event_contexts)
+        event_context["event_contexts"] = event_contexts
+        return self.run_all(event_context)
+
+    def ready_agent_ids(self) -> List[str]:
+        """Return Agents with inbox messages or submitted A2A tasks."""
+        ready = []
+        for assignment in list(self.agents.values()):
+            if not assignment.url or assignment.status == "error":
+                continue
+            try:
+                response = requests.get(f"{assignment.url}/status", timeout=3)
+                response.raise_for_status()
+                body = response.json()
+                if int(body.get("inbox_size", 0)) > 0 or int(
+                    body.get("pending_tasks", 0)
+                ) > 0:
+                    ready.append(assignment.agent_id.lower())
+            except Exception:
+                continue
+        return ready
 
     def stop_agent(self, agent_id: str) -> bool:
         assignment = self.agents.pop(agent_id, None)
@@ -826,9 +878,6 @@ class AgentManagement:
             raise KeyError(f"Agent '{agent_id}' not found")
         target = AgentRegistry.get(target_id) if target_id else None
         return agent.send_task(task, target=target, **kwargs)
-
-    def run_round(self, context: Dict = None) -> Dict:
-        return self.runtime.run_round(context)
 
     def unregister_agent(self, agent_id: str) -> bool:
         agent = AgentRegistry.get(agent_id)

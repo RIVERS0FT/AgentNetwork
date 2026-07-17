@@ -18,7 +18,7 @@ canvas{display:block;cursor:crosshair}
 .dlog{font:12px 'JetBrains Mono',monospace;color:var(--muted);padding:2px 6px;margin:1px 0;background:rgba(12,17,25,0.7);border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style></head>
 <body>
-<div id="hud"><span id="roundLabel">R0/-</span></div>
+<div id="hud"><span id="eventLabel">事件 0</span></div>
 <div id="decisionLog"></div>
 <div id="stats">
   <div class="box">
@@ -142,7 +142,7 @@ function draw(){
   const decs=decisions().slice(-4);
   document.getElementById('decisionLog').innerHTML=decs.map(d=>{
     const icon=d.visual_effect==='APPEAR_DASHED'?'📍':d.visual_effect==='SOLIDIFY'?'✅':d.visual_effect==='FLASH_THEN_DASHED'?'🔄':d.visual_effect==='FADE_OUT'?'❌':'📋';
-    return `<div class=dlog title="${d.agent} ${d.action} ${d.ap_id||''}: ${d.detail||''} (R${d.round||''})"><b>${d.agent}</b> ${icon} ${d.ap_id}: ${d.detail}</div>`;
+    return `<div class=dlog title="${d.agent} ${d.action} ${d.ap_id||''}: ${d.detail||''} (E${d.event_sequence||''})"><b>${d.agent}</b> ${icon} ${d.ap_id}: ${d.detail}</div>`;
   }).join('');
 
   // Action status
@@ -160,7 +160,7 @@ function updateStats(){
   document.getElementById('sPend').textContent=propData().length+relocData().length;
   const cost=data.latest_cost;document.getElementById('sCost').textContent=cost?'¥'+(cost.total_cost/1000).toFixed(1)+'K':'0';
   document.getElementById('sStatus').textContent=cov&&cov.coverage_pct>=95?'✓达标':'↻规划中';
-  document.getElementById('roundLabel').textContent=data.round!=null?'R'+data.round+'/'+(data.max_rounds||10):'R0';
+  document.getElementById('eventLabel').textContent='事件 '+(data.processed_event_count||0);
 }
 
 canvas.onmousemove=function(e){
@@ -186,11 +186,11 @@ if(window.location.protocol==='file:'){
     ap_placements:[{id:'AP_1',x:130,y:70,radius:60,status:'confirmed'},{id:'AP_2',x:300,y:130,radius:60,status:'confirmed'},{id:'AP_3',x:550,y:300,radius:60,status:'confirmed'}],
     proposed_aps:[{id:'AP_4',x:700,y:150,radius:60,status:'evaluating'}],
     relocating_aps:[{id:'AP_3',from_x:550,from_y:300,to_x:580,to_y:280,status:'relocating'}],
-    pending_action:{type:'evaluate','agent':'RF_ENGINEER','ap_id':'AP_4','round':3,'status':'evaluating'},
-    decision_log:[{round:1,agent:'PLANNER',action:'propose',ap_id:'AP_1',detail:'建议在(130,70)部署',visual_effect:'APPEAR_DASHED'},{round:1,agent:'RF_ENGINEER',action:'evaluate',ap_id:'AP_1',detail:'覆盖贡献85%',visual_effect:'EVALUATING'},{round:1,agent:'PLANNER',action:'confirm',ap_id:'AP_1',detail:'部署确认',visual_effect:'SOLIDIFY'},{round:2,agent:'PLANNER',action:'propose',ap_id:'AP_2',detail:'建议在(300,130)部署',visual_effect:'APPEAR_DASHED'},{round:2,agent:'PLANNER',action:'confirm',ap_id:'AP_2',detail:'部署确认',visual_effect:'SOLIDIFY'},{round:3,agent:'PLANNER',action:'relocate',ap_id:'AP_3',detail:'迁移(550,300)→(580,280)',visual_effect:'FLASH_THEN_DASHED'}],
+    pending_action:{type:'evaluate','agent':'RF_ENGINEER','ap_id':'AP_4','event_sequence':3,'status':'evaluating'},
+    decision_log:[{event_sequence:1,agent:'PLANNER',action:'propose',ap_id:'AP_1',detail:'建议在(130,70)部署',visual_effect:'APPEAR_DASHED'},{event_sequence:2,agent:'RF_ENGINEER',action:'evaluate',ap_id:'AP_1',detail:'覆盖贡献85%',visual_effect:'EVALUATING'},{event_sequence:3,agent:'PLANNER',action:'confirm',ap_id:'AP_1',detail:'部署确认',visual_effect:'SOLIDIFY'},{event_sequence:4,agent:'PLANNER',action:'propose',ap_id:'AP_2',detail:'建议在(300,130)部署',visual_effect:'APPEAR_DASHED'},{event_sequence:5,agent:'PLANNER',action:'confirm',ap_id:'AP_2',detail:'部署确认',visual_effect:'SOLIDIFY'},{event_sequence:6,agent:'PLANNER',action:'relocate',ap_id:'AP_3',detail:'迁移(550,300)→(580,280)',visual_effect:'FLASH_THEN_DASHED'}],
     latest_coverage:{coverage_pct:78.5,ap_count:4,blind_spots_sample:[{x:680,y:120},{x:850,y:320}]},
     latest_cost:{ap_count:4,total_cost:19000,budget_remaining:31000,within_budget:true},
-    round:3,max_rounds:10,
+    processed_event_count:6,
   };
 }
 

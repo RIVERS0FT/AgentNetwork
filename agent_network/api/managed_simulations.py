@@ -23,6 +23,7 @@ from agent_network.simulation_management import (
     SimulationManager,
     SimulationManagerError,
     SimulationRuntimeConfig,
+    SimulationState,
 )
 from agent_network.task_management import TaskManager, TaskManagerError
 
@@ -66,7 +67,9 @@ class SimulationRunRequest(BaseModel):
     seed: Optional[int] = None
     duration_seconds: int = Field(default=3600, ge=1, le=604800)
     agent_timeout_seconds: int = Field(default=300, ge=1, le=86400)
+    idle_timeout_seconds: int = Field(default=5, ge=0, le=3600)
     graceful_stop_timeout_seconds: int = Field(default=30, ge=0, le=3600)
+    network_mode: str = Field(default="a2a", pattern="^a2a$")
     resource_allocation: SimulationResourceRequest = Field(
         default_factory=SimulationResourceRequest
     )
@@ -111,9 +114,9 @@ def _agent_directory() -> dict[str, str]:
     }
 
 
-def _require_simulation(simulation_id: str) -> None:
+def _require_simulation(simulation_id: str):
     try:
-        simulation_manager.get_run(simulation_id)
+        return simulation_manager.get_run(simulation_id)
     except SimulationManagerError as exc:
         raise _simulation_error(exc) from exc
 
@@ -257,7 +260,9 @@ def _runtime_config(req: SimulationRunRequest) -> SimulationRuntimeConfig:
         {
             "duration_seconds": req.duration_seconds,
             "agent_timeout_seconds": req.agent_timeout_seconds,
+            "idle_timeout_seconds": req.idle_timeout_seconds,
             "graceful_stop_timeout_seconds": req.graceful_stop_timeout_seconds,
+            "network_mode": req.network_mode,
             "resource_allocation": _model_dict(req.resource_allocation),
         }
     )
@@ -371,7 +376,12 @@ async def delegate_simulation_task(
     req: AgentTaskRequest,
 ):
     """Delegate one durable A2A task from the orchestrator to one Agent."""
-    _require_simulation(simulation_id)
+    run = _require_simulation(simulation_id)
+    if run.state != SimulationState.RUNNING:
+        raise HTTPException(
+            status_code=409,
+            detail=f"simulation cannot accept tasks from {run.state.value}",
+        )
     directory = _agent_directory()
     target_id = agent_id.lower()
     if target_id not in directory:
@@ -398,6 +408,16 @@ async def delegate_simulation_task(
     )
     if not result.ok:
         raise HTTPException(status_code=502, detail=result.error)
+    try:
+        simulation_manager.enqueue_event(
+            simulation_id,
+            "delegated_task",
+            target_id,
+            {"task_id": result.task_id},
+            source_agent_id="srv",
+        )
+    except SimulationManagerError as exc:
+        raise _simulation_error(exc) from exc
     orchestration.logger.system(
         "simulation_task_delegated",
         agent_id="srv",
@@ -481,15 +501,23 @@ async def receive_simulation_task_event(simulation_id: str, request: Request):
 
 
 @router.get("/scenes")
-async def list_scenes(include_hidden: bool = Query(default=False)):
-    return {"scenes": scene_manager.list_scenes(include_hidden=include_hidden)}
+async def list_scenes():
+    return {"scenes": scene_manager.list_scenes()}
 
 
 @router.get("/scenes/state")
 async def scene_state():
+    runs = simulation_manager.list_runs()
+    latest = runs[-1] if runs else None
     return {
         "scene": state.current_scene_name,
         "running": state.simulation_active,
+        "simulation_id": latest.simulation_id if latest else "",
+        "simulation_state": latest.state.value if latest else "",
+        "processed_event_count": latest.processed_event_count if latest else 0,
+        "failed_event_count": latest.failed_event_count if latest else 0,
+        "cancelled_event_count": latest.cancelled_event_count if latest else 0,
+        "last_activity_at": latest.last_activity_at if latest else "",
         "agents": [agent.get_status() for agent in orchestration.AgentRegistry.list_all()],
         "custom": None,
     }

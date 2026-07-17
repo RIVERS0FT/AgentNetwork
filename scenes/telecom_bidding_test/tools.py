@@ -4,7 +4,7 @@ import random
 # 模块级业务状态 — 所有技能共享
 # ============================================================
 active_contracts = {}    # key: (source, target) -> contract dict
-event_log = []           # 运行时事件流，每轮由技能自动追加
+event_log = []           # 运行时事件流，每个事件序号由技能自动追加
 complaint_log = []       # 投诉记录
 sanction_log = []        # 处罚记录
 market_audit_log = []    # 市场审计记录
@@ -14,10 +14,10 @@ ALL_AGENCIES = set()
 ALL_OPERATORS = set()
 
 
-def _emit_event(action, source, target, visual_effect, reason, round_num=0):
+def _emit_event(action, source, target, visual_effect, reason, event_sequence=0):
     event = {
         "event_type": "BUSINESS_LINK_CHANGED",
-        "round": round_num,
+        "event_sequence": event_sequence,
         "action": action,
         "source": source,
         "target": target,
@@ -28,7 +28,7 @@ def _emit_event(action, source, target, visual_effect, reason, round_num=0):
     return event
 
 
-def _ensure_link(source, target, contract_value=0, round_num=0):
+def _ensure_link(source, target, contract_value=0, event_sequence=0):
     """若 (source,target) 不在 active_contracts 中，创建 NEGOTIATING 连线"""
     key = (source, target)
     if key not in active_contracts:
@@ -37,11 +37,11 @@ def _ensure_link(source, target, contract_value=0, round_num=0):
             "target": target,
             "contract_status": "NEGOTIATING",
             "contract_value": contract_value,
-            "round_signed": -1,
-            "breach_flash_round": -1,
+            "signed_event_sequence": -1,
+            "breach_flash_event_sequence": -1,
         }
         _emit_event("CREATE", source, target, "APPEAR",
-                     f"{source} 与 {target} 开始谈判", round_num)
+                     f"{source} 与 {target} 开始谈判", event_sequence)
 
 
 def _init_world(agencies=None, operators=None, seed_links=None):
@@ -60,8 +60,8 @@ def _init_world(agencies=None, operators=None, seed_links=None):
                     "target": link["target"],
                     "contract_status": link.get("status") or link.get("contract_status", "NEGOTIATING"),
                     "contract_value": link.get("value") or link.get("contract_value", 0),
-                    "round_signed": -1,
-                    "breach_flash_round": -1,
+                    "signed_event_sequence": -1,
+                    "breach_flash_event_sequence": -1,
                 }
 
 
@@ -116,13 +116,13 @@ ToolRegistry.register("list_candidates_tool", list_candidates_tool)
 def evaluate_proposals_tool(**kwargs):
     """
     货比三家：评估所有收到的（或可获取的）竞标方案。
-    参数: agent_id(str), proposals(list[{target,contract_value,bandwidth,latency,price}]), round(int)
+    参数: agent_id(str), proposals(list[{target,contract_value,bandwidth,latency,price}]), event_sequence(int)
     返回: 排名列表、最佳选择、是否建议转投
     proposals 可为空列表（机构自主搜寻所有运营商的公开报价）
     """
     agent_id = kwargs.get("agent_id", "unknown")
     proposals = kwargs.get("proposals", [])
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     # 若未传入方案，自动向所有运营商询价（模拟市场公开信息）
     if not proposals:
@@ -176,7 +176,7 @@ def evaluate_proposals_tool(**kwargs):
     for prop in proposals:
         tgt = prop.get("target", "")
         if tgt and tgt != agent_id:
-            _ensure_link(agent_id, tgt, prop.get("contract_value", 0), current_round)
+            _ensure_link(agent_id, tgt, prop.get("contract_value", 0), event_sequence)
 
     return {
         "status": "success",
@@ -198,12 +198,12 @@ ToolRegistry.register("evaluate_proposals_tool", evaluate_proposals_tool)
 def sign_contract_tool(**kwargs):
     """
     签署合约。会先自动创建 NEGOTIATING 连线（如不存在）。
-    参数: source(str), target(str), contract_value(float), round(int)
+    参数: source(str), target(str), contract_value(float), event_sequence(int)
     """
     source = kwargs.get("source")
     target = kwargs.get("target")
     contract_value = kwargs.get("contract_value", 100)
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     if not source or not target:
         return {"status": "error", "result": "missing_params", "data": {"error": "source 和 target 是必填参数"}}
@@ -213,22 +213,22 @@ def sign_contract_tool(**kwargs):
         return {"status": "error", "result": "already_signed", "data": {"error": f"{source} 与 {target} 已签约"}}
 
     # 确保连线存在
-    _ensure_link(source, target, contract_value, current_round)
+    _ensure_link(source, target, contract_value, event_sequence)
 
     # 如有其他 SIGNED 合约（同一机构），先自动触发 BREACH_FLASHING
     for (s, t), c in list(active_contracts.items()):
         if s == source and c["contract_status"] == "SIGNED" and t != target:
             c["contract_status"] = "BREACH_FLASHING"
-            c["breach_flash_round"] = current_round
+            c["breach_flash_event_sequence"] = event_sequence
             _emit_event("BREAK", s, t, "FLASH_AND_DESTROY",
-                         f"{s} 转投 {target}，与 {t} 解约", current_round)
+                         f"{s} 转投 {target}，与 {t} 解约", event_sequence)
 
     active_contracts[key]["contract_status"] = "SIGNED"
     active_contracts[key]["contract_value"] = contract_value
-    active_contracts[key]["round_signed"] = current_round
+    active_contracts[key]["signed_event_sequence"] = event_sequence
 
     event = _emit_event("SIGN", source, target, "SOLIDIFY",
-                         f"{source} 与 {target} 签约 (价值{contract_value})", current_round)
+                         f"{source} 与 {target} 签约 (价值{contract_value})", event_sequence)
 
     return {
         "status": "success",
@@ -238,7 +238,7 @@ def sign_contract_tool(**kwargs):
             "target": target,
             "contract_status": "SIGNED",
             "contract_value": contract_value,
-            "round": current_round,
+            "event_sequence": event_sequence,
             "visual_effect": "SOLIDIFY",
             "event": event,
         }
@@ -249,13 +249,13 @@ ToolRegistry.register("sign_contract_tool", sign_contract_tool)
 def terminate_contract_with_flash_tool(**kwargs):
     """
     主动终止合同（违约解约）。
-    参数: source(str), target(str), reason(str), round(int)
+    参数: source(str), target(str), reason(str), event_sequence(int)
     效果: SIGNED/NEGOTIATING → BREACH_FLASHING
     """
     source = kwargs.get("source")
     target = kwargs.get("target")
     reason = kwargs.get("reason", "性价比不足")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     if not source or not target:
         return {"status": "error", "result": "missing_params", "data": {"error": "source 和 target 是必填参数"}}
@@ -269,9 +269,9 @@ def terminate_contract_with_flash_tool(**kwargs):
         return {"status": "error", "result": "invalid_state", "data": {"error": f"状态为 {contract['contract_status']}"}}
 
     contract["contract_status"] = "BREACH_FLASHING"
-    contract["breach_flash_round"] = current_round
+    contract["breach_flash_event_sequence"] = event_sequence
 
-    event = _emit_event("BREAK", source, target, "FLASH_AND_DESTROY", reason, current_round)
+    event = _emit_event("BREAK", source, target, "FLASH_AND_DESTROY", reason, event_sequence)
 
     return {
         "status": "success",
@@ -281,7 +281,7 @@ def terminate_contract_with_flash_tool(**kwargs):
             "target": target,
             "contract_status": "BREACH_FLASHING",
             "reason": reason,
-            "round": current_round,
+            "event_sequence": event_sequence,
             "visual_effect": "FLASH_AND_DESTROY",
             "event": event,
         }
@@ -292,11 +292,11 @@ ToolRegistry.register("terminate_contract_with_flash_tool", terminate_contract_w
 def confirm_termination_tool(**kwargs):
     """
     确认终止（动画完成后移除连线）。
-    参数: source(str), target(str), round(int)
+    参数: source(str), target(str), event_sequence(int)
     """
     source = kwargs.get("source")
     target = kwargs.get("target")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     key = (source, target)
     if key not in active_contracts:
@@ -306,12 +306,12 @@ def confirm_termination_tool(**kwargs):
 
     del active_contracts[key]
     _emit_event("TERMINATE", source, target, "FADE_OUT",
-                 f"{source} 与 {target} 合同正式终止", current_round)
+                 f"{source} 与 {target} 合同正式终止", event_sequence)
 
     return {
         "status": "success",
         "result": "contract_terminated",
-        "data": {"source": source, "target": target, "contract_status": "TERMINATED", "round": current_round}
+        "data": {"source": source, "target": target, "contract_status": "TERMINATED", "event_sequence": event_sequence}
     }
 ToolRegistry.register("confirm_termination_tool", confirm_termination_tool)
 
@@ -323,14 +323,14 @@ ToolRegistry.register("confirm_termination_tool", confirm_termination_tool)
 def submit_bidding_proposal_tool(**kwargs):
     """
     向任意机构提交竞标方案。首次接触自动创建 NEGOTIATING 连线。
-    参数: operator_id(str), target_agency(str), price(float), bandwidth(int), latency(int), round(int)
+    参数: operator_id(str), target_agency(str), price(float), bandwidth(int), latency(int), event_sequence(int)
     """
     operator_id = kwargs.get("operator_id")
     target_agency = kwargs.get("target_agency")
     price = kwargs.get("price", random.randint(200, 800))
     bandwidth = kwargs.get("bandwidth", random.randint(5, 50))
     latency = kwargs.get("latency", random.randint(3, 15))
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     if not operator_id or not target_agency:
         return {"status": "error", "result": "missing_params", "data": {"error": "operator_id 和 target_agency 是必填参数"}}
@@ -352,7 +352,7 @@ def submit_bidding_proposal_tool(**kwargs):
         strategy = "undercut"
 
     # 自动创建 NEGOTIATING 连线（自由市场核心）
-    _ensure_link(target_agency, operator_id, price * 10, current_round)
+    _ensure_link(target_agency, operator_id, price * 10, event_sequence)
 
     score = bandwidth * 10 + (20 - latency) * 5 - price * 0.01
 
@@ -376,12 +376,12 @@ ToolRegistry.register("submit_bidding_proposal_tool", submit_bidding_proposal_to
 def process_breach_notification_tool(**kwargs):
     """
     被违约后的决策：挽留/报复/举报。
-    参数: operator_id(str), breaching_agency(str), reason(str), round(int)
+    参数: operator_id(str), breaching_agency(str), reason(str), event_sequence(int)
     """
     operator_id = kwargs.get("operator_id")
     breaching_agency = kwargs.get("breaching_agency")
     reason = kwargs.get("reason", "unknown")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     if not operator_id or not breaching_agency:
         return {"status": "error", "result": "missing_params", "data": {"error": "operator_id 和 breaching_agency 是必填参数"}}
@@ -407,7 +407,7 @@ def process_breach_notification_tool(**kwargs):
     elif strategy == "retaliate":
         data = {"action": "price_war", "message": f"对 {breaching_agency} 的新运营商发起价格战"}
     else:
-        complaint_log.append({"round": current_round, "reporter": operator_id, "target": breaching_agency, "reason": reason})
+        complaint_log.append({"event_sequence": event_sequence, "reporter": operator_id, "target": breaching_agency, "reason": reason})
         data = {"action": "report_to_regulator", "complaint_id": len(complaint_log) - 1}
 
     return {"status": "success", "result": strategy, "data": data}
@@ -420,11 +420,11 @@ ToolRegistry.register("process_breach_notification_tool", process_breach_notific
 
 def investigate_complaint_tool(**kwargs):
     """
-    调查投诉。参数: complaint_id(int), reporter(str), round(int)
+    调查投诉。参数: complaint_id(int), reporter(str), event_sequence(int)
     """
     complaint_id = kwargs.get("complaint_id")
     reporter = kwargs.get("reporter")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     if complaint_id is not None and 0 <= complaint_id < len(complaint_log):
         complaint = complaint_log[complaint_id]
@@ -457,33 +457,33 @@ def investigate_complaint_tool(**kwargs):
 
     return {
         "status": "success", "result": conclusion,
-        "data": {"complaint": complaint, "evidence": evidence, "conclusion": conclusion, "suggested_fine": suggested_fine, "round": current_round}
+        "data": {"complaint": complaint, "evidence": evidence, "conclusion": conclusion, "suggested_fine": suggested_fine, "event_sequence": event_sequence}
     }
 ToolRegistry.register("investigate_complaint_tool", investigate_complaint_tool)
 
 
 def impose_sanction_tool(**kwargs):
     """
-    施加处罚。参数: target(str), fine(float), reason(str), round(int)
+    施加处罚。参数: target(str), fine(float), reason(str), event_sequence(int)
     """
     target = kwargs.get("target")
     fine = kwargs.get("fine", 100)
     reason = kwargs.get("reason", "违规")
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     if not target or fine <= 0:
         return {"status": "error", "result": "invalid_params", "data": {}}
 
-    sanction_log.append({"round": current_round, "target": target, "fine": fine, "reason": reason})
-    return {"status": "success", "result": "sanction_imposed", "data": {"target": target, "fine": fine, "round": current_round}}
+    sanction_log.append({"event_sequence": event_sequence, "target": target, "fine": fine, "reason": reason})
+    return {"status": "success", "result": "sanction_imposed", "data": {"target": target, "fine": fine, "event_sequence": event_sequence}}
 ToolRegistry.register("impose_sanction_tool", impose_sanction_tool)
 
 
 def audit_market_share_tool(**kwargs):
     """
-    审计市场份额。参数: round(int)
+    审计市场份额。参数: event_sequence(int)
     """
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
     op_contracts = {}
     total_value = 0
     for (src, tgt), c in active_contracts.items():
@@ -495,10 +495,10 @@ def audit_market_share_tool(**kwargs):
     shares = {op: round(cnt / total * 100, 1) for op, cnt in op_contracts.items()}
     alerts = [f"{op} 份额 {shares[op]}% 超50%" for op, cnt in op_contracts.items() if cnt / total > 0.5]
 
-    market_audit_log.append({"round": current_round, "shares": shares, "total_value": total_value, "alerts": alerts})
+    market_audit_log.append({"event_sequence": event_sequence, "shares": shares, "total_value": total_value, "alerts": alerts})
     return {
         "status": "success", "result": "audit_complete",
-        "data": {"round": current_round, "market_shares": shares, "total_contracts": total, "total_value": total_value, "alerts": alerts, "antitrust_triggered": len(alerts) > 0}
+        "data": {"event_sequence": event_sequence, "market_shares": shares, "total_contracts": total, "total_value": total_value, "alerts": alerts, "antitrust_triggered": len(alerts) > 0}
     }
 ToolRegistry.register("audit_market_share_tool", audit_market_share_tool)
 
@@ -510,12 +510,12 @@ ToolRegistry.register("audit_market_share_tool", audit_market_share_tool)
 def provide_evaluation_report_tool(**kwargs):
     """
     为机构提供运营商评估报告（货比三家）。
-    参数: client_id(str), operator_ids(list[str]), round(int)
+    参数: client_id(str), operator_ids(list[str]), event_sequence(int)
     返回: 排名报告，含推荐签约方
     """
     client_id = kwargs.get("client_id")
     operator_ids = kwargs.get("operator_ids", list(ALL_OPERATORS))
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     if not client_id:
         return {"status": "error", "result": "missing_params", "data": {"error": "client_id 是必填参数"}}
@@ -546,7 +546,7 @@ def provide_evaluation_report_tool(**kwargs):
         })
 
         # 确保有谈判连线
-        _ensure_link(client_id, op, price * 10, current_round)
+        _ensure_link(client_id, op, price * 10, event_sequence)
 
     evaluations.sort(key=lambda x: x["score"], reverse=True)
     best = evaluations[0]
@@ -559,7 +559,7 @@ def provide_evaluation_report_tool(**kwargs):
             "recommended": best["operator"],
             "best_score": best["score"],
             "rankings": evaluations,
-            "round": current_round,
+            "event_sequence": event_sequence,
         }
     }
 ToolRegistry.register("provide_evaluation_report_tool", provide_evaluation_report_tool)
@@ -568,13 +568,13 @@ ToolRegistry.register("provide_evaluation_report_tool", provide_evaluation_repor
 def broker_deal_tool(**kwargs):
     """
     撮合签约：顾问推动机构与推荐运营商签约，收取佣金。
-    参数: client_id(str), operator_id(str), contract_value(float), round(int)
+    参数: client_id(str), operator_id(str), contract_value(float), event_sequence(int)
     效果: 调用 sign_contract，返回含佣金信息
     """
     client_id = kwargs.get("client_id")
     operator_id = kwargs.get("operator_id")
     contract_value = kwargs.get("contract_value", 100)
-    current_round = kwargs.get("round", 0)
+    event_sequence = kwargs.get("event_sequence", 0)
 
     if not client_id or not operator_id:
         return {"status": "error", "result": "missing_params", "data": {"error": "client_id 和 operator_id 是必填参数"}}
@@ -582,7 +582,7 @@ def broker_deal_tool(**kwargs):
     # 委托给 sign_contract
     result = ToolRegistry.execute("sign_contract",
                                     source=client_id, target=operator_id,
-                                    contract_value=contract_value, round=current_round)
+                                    contract_value=contract_value, event_sequence=event_sequence)
 
     if result["status"] == "success":
         commission = contract_value * 0.05

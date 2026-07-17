@@ -11,6 +11,12 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from agent_network.config import DEFAULT_LLM_MODEL
+from agent_network.scene_management.models import (
+    SkillDefinition,
+    TaskDefinition,
+    ToolDefinition,
+    ValidationResult,
+)
 
 
 @dataclass
@@ -36,7 +42,11 @@ class SceneDefinition:
     title: str = ""
     description: str = ""
     agents: List[AgentDef] = field(default_factory=list)
+    skills: List[SkillDefinition] = field(default_factory=list)
+    tools: List[ToolDefinition] = field(default_factory=list)
+    tasks: List[TaskDefinition] = field(default_factory=list)
     topology: List[Dict[str, Any]] = field(default_factory=list)
+    validation: ValidationResult | None = None
 
 
 def get_api_config() -> Dict[str, str]:
