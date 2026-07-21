@@ -5,6 +5,9 @@ ROOT = Path(__file__).resolve().parents[1]
 API_SOURCE = (ROOT / "agent_network" / "api" / "managed_simulations.py").read_text(
     encoding="utf-8"
 )
+EXECUTION_SOURCE = (ROOT / "agent_network" / "api" / "simulations.py").read_text(
+    encoding="utf-8"
+)
 SERVER_SOURCE = (ROOT / "services" / "server.py").read_text(encoding="utf-8")
 RUNTIME_SOURCE = (ROOT / "agent_network" / "agent_management.py").read_text(
     encoding="utf-8"
@@ -53,6 +56,31 @@ def test_managed_api_owns_all_simulation_lifecycle_operations():
     assert '@router.post("/simulations/{simulation_id}/force-stop")' in API_SOURCE
     assert '@router.get("/simulations/{simulation_id}")' in API_SOURCE
     assert "managed_simulations.router" in SERVER_SOURCE
+
+
+def test_managed_api_does_not_read_or_patch_legacy_private_state():
+    assert "execution._" not in API_SOURCE
+    for removed in (
+        "_pending_seed",
+        "_pending_config",
+        "_pending_scene_def",
+        "orchestration._capture",
+        "orchestration._capture_health",
+    ):
+        assert removed not in API_SOURCE
+    assert "run.scene_definition" in API_SOURCE
+    assert "run.execution_config" in API_SOURCE
+    assert '"running": _simulation_is_active(current)' in API_SOURCE
+    assert '"scene": current.scene if current else ""' in API_SOURCE
+    for removed in (
+        "_pending_seed",
+        "_pending_config",
+        "_pending_scene_def",
+        "_comm_matrix",
+    ):
+        assert removed not in EXECUTION_SOURCE
+    assert "def prepare_scene(" in EXECUTION_SOURCE
+    assert "def run_simulation(" in EXECUTION_SOURCE
 
 
 def test_container_runtime_enforces_simulation_resources_and_concurrency():

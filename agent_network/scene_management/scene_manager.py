@@ -105,11 +105,16 @@ class SceneManager:
 
     @staticmethod
     def _definition_payload(definition: SceneDefinition) -> dict[str, Any]:
+        agents = []
+        for agent in definition.agents:
+            value = asdict(agent)
+            value['native_capabilities'] = agent.native_capabilities.to_dict()
+            agents.append(value)
         return {
             "scene_key": definition.scene_key,
             "title": definition.title,
             "description": definition.description,
-            "agents": [asdict(agent) for agent in definition.agents],
+            "agents": agents,
             "skills": [asdict(skill) for skill in definition.skills],
             "tools": [asdict(tool) for tool in definition.tools],
             "tasks": [asdict(task) for task in definition.tasks],

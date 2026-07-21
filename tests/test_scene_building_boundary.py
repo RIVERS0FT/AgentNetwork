@@ -85,9 +85,15 @@ def test_scene_building_uses_unified_validated_domain_model(tmp_path):
     assert agent.backend == "openclaw"
     assert agent.skill_refs == ["planning", "reporting"]
     assert agent.allowed_tools == ["write_plan"]
+    assert agent.native_capabilities.enabled is True
+    assert agent.native_capabilities.allows("agent.spawn") is True
+    assert agent.native_capabilities.allows("fs.write") is False
     assert [item.skill_id for item in scene_def.skills] == ["planning", "reporting"]
     assert [item.tool_id for item in scene_def.tools] == ["write_plan"]
     assert scene_def.validation.validation_status == "fully_validated"
+    details = _storage(tmp_path).details("demo_scene")
+    json.dumps(details)
+    assert details["agents"][0]["native_capabilities"]["tools"]["allow"]
 
 
 @pytest.mark.parametrize("backend", ["claude-code", "direct_llm"])
@@ -137,5 +143,23 @@ def test_scene_validation_rejects_task_dependency_cycle(tmp_path):
         _storage(tmp_path).build_definition("demo_scene")
 
     assert "TASK_DEPENDENCY_CYCLE" in {
+        issue.code for issue in exc.value.result.issues
+    }
+
+
+def test_scene_validation_rejects_invalid_native_capability_fields(tmp_path):
+    folder = _write_scene(tmp_path)
+    instances_path = folder / "instances_and_skills.json"
+    instances = json.loads(instances_path.read_text(encoding="utf-8"))
+    instances["container_instances"]["CEO"]["native_capabilities"] = {
+        "enabled": True,
+        "unexpected": True,
+    }
+    instances_path.write_text(json.dumps(instances), encoding="utf-8")
+
+    with pytest.raises(SceneValidationError) as exc:
+        _storage(tmp_path).build_definition("demo_scene")
+
+    assert "NATIVE_CAPABILITY_INVALID" in {
         issue.code for issue in exc.value.result.issues
     }

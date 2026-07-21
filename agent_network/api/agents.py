@@ -68,6 +68,7 @@ async def register_agent(req: Dict[str, Any]):
         backend=req.get("backend", "openclaw"),
         skill_refs=req.get("skill_refs", []),
         allowed_tools=req.get("allowed_tools", []),
+        native_capabilities=req.get("native_capabilities"),
         capability_scores=req.get("capability_scores", {}),
     )
     return agent.get_status()

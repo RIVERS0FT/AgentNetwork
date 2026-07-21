@@ -10,6 +10,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from agent_network.native_capabilities import NativeCapabilityPolicy
+
 from agent_network.scene_management.models import (
     SkillDefinition,
     TaskDefinition,
@@ -32,6 +34,9 @@ class AgentDef:
     backend: str = "openclaw"
     skill_refs: List[str] = field(default_factory=list)
     allowed_tools: List[str] = field(default_factory=list)
+    native_capabilities: NativeCapabilityPolicy = field(
+        default_factory=NativeCapabilityPolicy
+    )
     tasks: List[str] = field(default_factory=list)
 
 

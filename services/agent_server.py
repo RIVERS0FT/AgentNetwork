@@ -32,6 +32,7 @@ from agent_network.adapters.base import AgentContext
 from agent_network.adapters.claude_code import ClaudeCodeAdapter
 from agent_network.adapters.direct_llm import DirectLLMAdapter
 from agent_network.adapters.openclaw import OpenCLAWAdapter
+from agent_network.native_audit import native_audit_state, native_token_valid
 
 AGENT_ID = os.environ.get("AGENT_ID", "agent-001")
 AGENT_ROLE = os.environ.get("AGENT_ROLE", "generic")
@@ -177,6 +178,7 @@ class RunRequest(BaseModel):
     messages: List[Dict[str, Any]] = []
     skill_refs: List[str] = []
     allowed_tools: List[str] = []
+    native_capabilities: Dict[str, Any] = {}
     permissions: Dict[str, Any] = {}
     state_snapshot: Dict[str, Any] = {}
     simulation_id: str = ""
@@ -197,6 +199,45 @@ class CommunicationConfig(BaseModel):
     agent_role: str = ""
     agent_directory: Dict[str, str] = {}
     comm_matrix: Dict[str, List[str]] = {}
+
+
+class NativePolicyCheckRequest(BaseModel):
+    agent_id: str
+    backend: str
+    tool_name: str
+    tool_input: Dict[str, Any] = {}
+    tool_call_id: str = ""
+    session_id: str = ""
+    spawn_depth: int = 0
+
+
+class NativeAuditRequest(BaseModel):
+    kind: str
+    agent_id: str
+    backend: str
+    tool_name: str = ""
+    tool_call_id: str = ""
+    output: Any = None
+    error: str = ""
+    duration_ms: float = 0
+    session_id: str = ""
+    child_agent_id: str = ""
+    child_session_id: str = ""
+    run_id: str = ""
+    status: str = ""
+    agent_type: str = ""
+    reason: str = ""
+    model: str = ""
+    provider: str = ""
+
+
+def _require_native_token(request: Request) -> JSONResponse | None:
+    value = request.headers.get("Authorization", "")
+    if value.lower().startswith("bearer "):
+        value = value[7:]
+    if native_token_valid(value):
+        return None
+    return JSONResponse(status_code=401, content={"error": "invalid native audit token"})
 
 
 def _make_adapter():
@@ -239,6 +280,7 @@ async def run_agent(req: RunRequest):
         messages=effective_messages,
         skill_refs=req.skill_refs,
         allowed_tools=req.allowed_tools,
+        native_capabilities=req.native_capabilities,
         permissions=req.permissions,
         state_snapshot=req.state_snapshot,
         timeout_seconds=req.timeout_seconds,
@@ -251,6 +293,14 @@ async def run_agent(req: RunRequest):
         agent_directory=req.agent_directory,
         comm_matrix=req.comm_matrix,
         simulation_seed=req.simulation_seed,
+    )
+
+    native_audit_state.configure(
+        context.agent_id,
+        BACKEND,
+        context.native_capabilities,
+        trace_id=context.trace_id,
+        simulation_id=context.simulation_id,
     )
 
     adapter = _make_adapter()
@@ -329,6 +379,62 @@ async def run_agent(req: RunRequest):
             callback_dispatcher.dispatch_status(task)
 
     return result.__dict__
+
+
+@app.post("/internal/native/policy/check")
+async def check_native_policy(body: NativePolicyCheckRequest, request: Request):
+    token_error = _require_native_token(request)
+    if token_error:
+        return token_error
+    return native_audit_state.check_tool(
+        agent_id=body.agent_id,
+        backend=body.backend,
+        tool_name=body.tool_name,
+        tool_input=body.tool_input,
+        tool_call_id=body.tool_call_id,
+        session_id=body.session_id,
+        spawn_depth=body.spawn_depth,
+    )
+
+
+@app.post("/internal/native/audit")
+async def ingest_native_audit(body: NativeAuditRequest, request: Request):
+    token_error = _require_native_token(request)
+    if token_error:
+        return token_error
+    if body.kind == "tool_result":
+        return native_audit_state.tool_result(
+            agent_id=body.agent_id,
+            backend=body.backend,
+            tool_name=body.tool_name,
+            tool_call_id=body.tool_call_id,
+            output=body.output,
+            error=body.error,
+            duration_ms=body.duration_ms,
+            session_id=body.session_id,
+        )
+    if body.kind == "subagent_lifecycle":
+        return native_audit_state.subagent_lifecycle(
+            parent_agent_id=body.agent_id,
+            child_agent_id=body.child_agent_id,
+            backend=body.backend,
+            status=body.status,
+            session_id=body.child_session_id or body.session_id,
+            run_id=body.run_id,
+            agent_type=body.agent_type,
+            reason=body.reason,
+            model=body.model,
+            provider=body.provider,
+        )
+    return JSONResponse(status_code=400, content={"error": "unknown native audit kind"})
+
+
+@app.get("/internal/native/children/{agent_id}")
+async def native_children(agent_id: str, request: Request):
+    token_error = _require_native_token(request)
+    if token_error:
+        return token_error
+    return {"agent_id": agent_id, "children": native_audit_state.child_snapshot(agent_id)}
 
 
 @app.get("/status")
@@ -680,6 +786,7 @@ async def reset_state():
     _event_queue = []
     _clear_inbox()
     comm.clear_tasks()
+    native_audit_state.reset()
     return {"status": "reset", "brain_cleared": False}
 
 

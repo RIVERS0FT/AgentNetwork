@@ -4,7 +4,6 @@ import asyncio
 import base64
 import binascii
 import os
-import random
 import secrets
 from typing import Optional
 
@@ -13,10 +12,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from agent_network.agent_management import AgentRegistry, get_runtime
-from agent_network.api import simulations as orchestration
+from agent_network.api import simulations as execution
 from agent_network.capture_management import CaptureConfig, CaptureState, get_capture_coordinator
 from agent_network.comm_management import A2A_MEDIA_TYPE, CommManager
 from agent_network.file_management import FileManagerError, ResourceNotFoundError, ResourceNotReadyError
+from agent_network.log_management import get_log_manager
 from agent_network.scene_management import SceneManager, get_scene_storage
 from agent_network.simulation_management import (
     SimulationManager,
@@ -29,14 +29,33 @@ from agent_network.task_management import TaskManager, TaskManagerError
 
 router = APIRouter()
 scene_storage = get_scene_storage()
+_ACTIVE_SIMULATION_STATES = frozenset(
+    {
+        SimulationState.STARTING,
+        SimulationState.RUNNING,
+        SimulationState.STOPPING,
+        SimulationState.FORCE_STOPPING,
+    }
+)
+
+
+def _simulation_is_active(run) -> bool:
+    return bool(run and run.state in _ACTIVE_SIMULATION_STATES)
 
 
 def _scene_is_occupied(scene_key: str) -> bool:
-    return bool(state.simulation_active and state.current_scene_name == scene_key)
+    manager = globals().get("simulation_manager")
+    if manager is None:
+        return False
+    return any(
+        run.scene == scene_key and _simulation_is_active(run)
+        for run in manager.list_runs()
+    )
 
 
 scene_manager = SceneManager(scene_storage, occupancy_checker=_scene_is_occupied)
 captures = get_capture_coordinator()
+logger = get_log_manager()
 _active_capture_id = ""
 _task_db_path = os.environ.get(
     "ORCHESTRATOR_TASK_DB_PATH",
@@ -211,32 +230,28 @@ def _capture_health_adapter(created_cas, requests_module):
     }
 
 
-# The legacy orchestration module owns simulation execution for now, but its
-# capture hooks are replaced by the single CaptureManager control-plane entry.
-orchestration._capture = _capture_adapter
-orchestration._capture_health = _capture_health_adapter
-
-
 def _model_dict(model: BaseModel) -> dict:
     return model.model_dump() if hasattr(model, "model_dump") else model.dict()
 
 
-def _setup_managed_run(scene_def, seed: int) -> dict:
-    random.seed(seed)
-    orchestration._pending_seed = seed
-    orchestration._pending_config = orchestration._get_effective_llm_config()
+def _setup_managed_run(run) -> dict:
+    scene_def = run.scene_definition
+    run.execution_config = execution.get_effective_llm_config()
     state.current_scene_name = scene_def.scene_key
     state.active_tools_module = None
-    result = orchestration._setup_scene(scene_def)
+    result = execution.prepare_scene(scene_def, run.seed)
     state.current_topology = result["topology"]
     return result
 
 
 def _run_managed_simulation(run) -> dict:
-    return orchestration._launch_containers(
-        orchestration._pending_config,
-        orchestration._pending_scene_def,
+    return execution.run_simulation(
+        run.execution_config,
+        run.scene_definition,
+        run.seed,
         simulation_run=run,
+        capture_handler=_capture_adapter,
+        capture_health_handler=_capture_health_adapter,
     )
 
 
@@ -418,7 +433,7 @@ async def delegate_simulation_task(
         )
     except SimulationManagerError as exc:
         raise _simulation_error(exc) from exc
-    orchestration.logger.system(
+    logger.system(
         "simulation_task_delegated",
         agent_id="srv",
         details={
@@ -485,7 +500,7 @@ async def receive_simulation_task_event(simulation_id: str, request: Request):
         raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    orchestration.logger.system(
+    logger.system(
         "simulation_task_callback_received",
         agent_id="srv",
         details={
@@ -507,18 +522,17 @@ async def list_scenes():
 
 @router.get("/scenes/state")
 async def scene_state():
-    runs = simulation_manager.list_runs()
-    latest = runs[-1] if runs else None
+    current = simulation_manager.current()
     return {
-        "scene": state.current_scene_name,
-        "running": state.simulation_active,
-        "simulation_id": latest.simulation_id if latest else "",
-        "simulation_state": latest.state.value if latest else "",
-        "processed_event_count": latest.processed_event_count if latest else 0,
-        "failed_event_count": latest.failed_event_count if latest else 0,
-        "cancelled_event_count": latest.cancelled_event_count if latest else 0,
-        "last_activity_at": latest.last_activity_at if latest else "",
-        "agents": [agent.get_status() for agent in orchestration.AgentRegistry.list_all()],
+        "scene": current.scene if current else "",
+        "running": _simulation_is_active(current),
+        "simulation_id": current.simulation_id if current else "",
+        "simulation_state": current.state.value if current else "",
+        "processed_event_count": current.processed_event_count if current else 0,
+        "failed_event_count": current.failed_event_count if current else 0,
+        "cancelled_event_count": current.cancelled_event_count if current else 0,
+        "last_activity_at": current.last_activity_at if current else "",
+        "agents": [agent.get_status() for agent in AgentRegistry.list_all()],
         "custom": None,
     }
 

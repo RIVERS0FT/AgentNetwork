@@ -13,6 +13,7 @@ class AgentContext:
     messages: List[Dict[str, Any]]
     skill_refs: List[str]
     allowed_tools: List[str]
+    native_capabilities: Dict[str, Any]
     permissions: Dict[str, Any]
     state_snapshot: Dict[str, Any]
     timeout_seconds: int

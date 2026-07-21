@@ -1,0 +1,11 @@
+{
+  "id": "agentnetwork-audit",
+  "name": "AgentNetwork Native Audit Bridge",
+  "description": "Fail-closed native tool policy and lifecycle audit bridge.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

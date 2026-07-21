@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ADR = ROOT / "docs" / "ADR-024-CommManager统一A2A通信与禁止广播.md"
-TASK_ADR = ROOT / "docs" / "ADR-025-Agent任务下发与A2A回调.md"
+ADR = ROOT / "docs" / "adr" / "ADR-024-CommManager统一A2A通信与禁止广播.md"
+TASK_ADR = ROOT / "docs" / "adr" / "ADR-025-Agent任务下发与A2A回调.md"
 
 
 def test_a2a_adr_records_non_regression_contract():
@@ -27,9 +27,9 @@ def test_design_indexes_link_to_authoritative_a2a_adr():
     adr_name = ADR.name
     for relative_path in (
         "docs/README.md",
-        "docs/设计决策与变更规则.md",
-        "docs/通信与网络仿真设计.md",
-        "docs/开发文档.md",
+        "docs/adr/README.md",
+        "docs/design/通信与网络仿真设计.md",
+        "docs/guides/开发文档.md",
     ):
         text = (ROOT / relative_path).read_text(encoding="utf-8")
         assert adr_name in text
@@ -51,8 +51,8 @@ def test_task_adr_records_persistence_callback_and_no_broadcast_contract():
 
     for relative_path in (
         "docs/README.md",
-        "docs/设计决策与变更规则.md",
-        "docs/通信与网络仿真设计.md",
-        "docs/开发文档.md",
+        "docs/adr/README.md",
+        "docs/design/通信与网络仿真设计.md",
+        "docs/guides/开发文档.md",
     ):
         assert TASK_ADR.name in (ROOT / relative_path).read_text(encoding="utf-8")

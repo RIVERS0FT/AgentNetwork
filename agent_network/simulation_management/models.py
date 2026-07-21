@@ -192,6 +192,8 @@ class SimulationRun:
     scene: str
     runtime_config: SimulationRuntimeConfig
     seed: int
+    scene_definition: Any = field(default=None, repr=False)
+    execution_config: dict[str, Any] = field(default_factory=dict, repr=False)
     simulation_id: str = field(default_factory=lambda: f"sim-{uuid.uuid4().hex}")
     state: SimulationState = SimulationState.CREATED
     created_at: str = field(default_factory=_now_iso)

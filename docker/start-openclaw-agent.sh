@@ -9,6 +9,7 @@ set -eu
 : "${AGENT_STRICT_BACKEND_SDK:=1}"
 
 export OPENCLAW_GATEWAY_WS_URL
+export OPENCLAW_CONFIG_PATH
 
 gateway_pid=""
 
@@ -34,7 +35,7 @@ try:
 except Exception as exc:
     print(
         "[openclaw-agent] ERROR: openclaw-sdk is not importable. "
-        "Install vendor/python/openclaw_sdk-*.whl and rebuild the image. "
+        "Install the pinned openclaw-sdk package and rebuild the image. "
         f"Original error: {exc}",
         file=sys.stderr,
     )

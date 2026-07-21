@@ -5,7 +5,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from agent_network.file_management import FileManagerError
+from agent_network.agent_management import Agent, AgentRegistry
 from agent_network.log_management import get_log_manager, infer_log_type, normalize_log_timestamp
+from agent_network.native_capabilities import NativeCapabilityPolicy
 from agent_network.simulation_management import state
 router = APIRouter(); log_manager = get_log_manager()
 
@@ -21,6 +23,43 @@ def _file_error(exc: Exception) -> HTTPException:
     if isinstance(exc, FileNotFoundError): return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, FileManagerError): return HTTPException(status_code=409, detail=str(exc))
     return HTTPException(status_code=400, detail=str(exc))
+
+
+def _project_native_subagent(record: dict) -> None:
+    if record.get('event') != 'subagent_lifecycle':
+        return
+    parent_id = str(record.get('agent_id') or '').lower()
+    child_id = str((record.get('target') or {}).get('agent_id') or '').lower()
+    if not parent_id or not child_id:
+        return
+    payload = record.get('payload') or {}
+    action = record.get('action') or {}
+    status = str(action.get('status') or (record.get('result') or {}).get('status') or '')
+    if status in {'reset', 'deleted'}:
+        AgentRegistry.unregister(child_id)
+        return
+    parent = AgentRegistry.get(parent_id)
+    child = AgentRegistry.get(child_id)
+    backend = str(payload.get('backend') or (parent.backend if parent else 'openclaw'))
+    if not child:
+        child = Agent(
+            agent_id=child_id,
+            role=str((record.get('target') or {}).get('role') or 'native-subagent'),
+            backend=backend,
+            native_capabilities=NativeCapabilityPolicy.disabled(),
+            parent_agent_id=parent_id,
+            runtime_kind=f'{backend}_native',
+            runtime_session_id=str(payload.get('child_session_id') or ''),
+            spawn_depth=(parent.spawn_depth + 1) if parent else 1,
+        )
+        if parent:
+            child.container_id = parent.container_id
+            child.container_url = parent.container_url
+        AgentRegistry.register(child)
+    child.status = status or child.status
+    child.runtime_session_id = str(
+        payload.get('child_session_id') or child.runtime_session_id
+    )
 
 @router.get('/')
 async def query_logs(agent_id: Optional[str]=Query(None), level: Optional[str]=Query(None), event: Optional[str]=Query(None), log_type: Optional[str]=Query(None), keyword: Optional[str]=Query(None), limit: int=Query(default=100, le=1000)):
@@ -95,8 +134,11 @@ async def log_ingest(req: Request):
         if not state.simulation_active and log_type == 'network' and body.get('event') == 'llm_api_packet': return {'status': 'dropped', 'reason': 'simulation_inactive'}
         record = log_manager.ingest(body, log_type=log_type)
     except ValueError as exc: raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if log_type == 'application':
+        _project_native_subagent(record)
+        await _ws_broadcast({'type': 'log_entries', 'data': [record]})
     if record.get('event') == 'llm_api_call':
-        token_updated = state.append_token_usage_record(record); await _ws_broadcast({'type': 'log_entries', 'data': [record]})
+        token_updated = state.append_token_usage_record(record)
         if token_updated: await _ws_broadcast({'type': 'token_usage', 'data': state.get_token_usage_snapshot()})
     return {'status': 'ok', 'log_type': log_type, 'record': record}
 @router.get('/agent')

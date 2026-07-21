@@ -4,12 +4,13 @@ import logging
 import os
 
 from .base import AgentContext, AgentRunResult, BackendAdapter
-from .direct_llm import run_direct_llm
 
 try:
     from claude_agent_sdk import (
+        AgentDefinition,
         AssistantMessage,
         ClaudeAgentOptions,
+        HookMatcher,
         ResultMessage,
         TextBlock,
         query,
@@ -20,6 +21,15 @@ except ImportError:
     AssistantMessage = None
     TextBlock = None
     ResultMessage = None
+    AgentDefinition = None
+    HookMatcher = None
+
+from agent_network.native_audit import native_audit_state
+from agent_network.native_capabilities import (
+    NativeCapabilityPolicy,
+    backend_allowed_tools,
+    backend_denied_tools,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +58,7 @@ def _build_task_payload(agent_context: AgentContext) -> str:
         "messages": agent_context.messages,
         "skill_refs": agent_context.skill_refs,
         "allowed_tools": agent_context.allowed_tools,
+        "native_capabilities": agent_context.native_capabilities,
         "permissions": agent_context.permissions,
         "state_snapshot": agent_context.state_snapshot,
         "simulation_id": agent_context.simulation_id,
@@ -151,7 +162,132 @@ def _claude_allowed_tools(agent_context: AgentContext) -> list[str]:
         f"mcp__agent_tools__{tool}"
         for tool in _SKILL_TOOL_NAMES
     )
+    policy = NativeCapabilityPolicy.from_dict(
+        agent_context.native_capabilities, backend="claude-code"
+    )
+    tools.extend(backend_allowed_tools("claude-code", policy))
     return _unique(tools)
+
+
+def _claude_denied_tools(agent_context: AgentContext) -> list[str]:
+    policy = NativeCapabilityPolicy.from_dict(
+        agent_context.native_capabilities, backend="claude-code"
+    )
+    return backend_denied_tools("claude-code", policy)
+
+
+def _claude_agents(agent_context: AgentContext) -> dict:
+    policy = NativeCapabilityPolicy.from_dict(
+        agent_context.native_capabilities, backend="claude-code"
+    )
+    if not policy.subagents.enabled or not policy.allows("agent.spawn"):
+        return {}
+    child_tools = backend_allowed_tools("claude-code", policy)
+    if not policy.subagents.child_can_spawn:
+        child_tools = [tool for tool in child_tools if tool != "Agent"]
+    values = {
+        "description": "Audited AgentNetwork worker for bounded delegated work",
+        "prompt": (
+            "Complete the delegated task within the granted tool policy. "
+            "Do not attempt to communicate externally or expand your permissions. "
+            "Return evidence and a concise result to the parent Agent."
+        ),
+        "tools": child_tools,
+        "model": policy.subagents.model,
+    }
+    definition = AgentDefinition(**values) if AgentDefinition else values
+    return {"agentnetwork-worker": definition}
+
+
+def _claude_hooks(agent_context: AgentContext) -> dict:
+    if not HookMatcher:
+        return {}
+    policy = NativeCapabilityPolicy.from_dict(
+        agent_context.native_capabilities, backend="claude-code"
+    )
+
+    async def pre_tool(input_data, tool_use_id, _context):
+        tool_name = str(input_data.get("tool_name") or "")
+        if tool_name.startswith("mcp__agent_tools__"):
+            return {}
+        spawn_depth = 1 if input_data.get("agent_id") else 0
+        decision = native_audit_state.check_tool(
+            agent_id=agent_context.agent_id,
+            backend="claude-code",
+            tool_name=tool_name,
+            tool_input=input_data.get("tool_input") or {},
+            tool_call_id=str(tool_use_id or ""),
+            session_id=str(input_data.get("session_id") or ""),
+            spawn_depth=spawn_depth,
+        )
+        hook_output = {
+            "hookEventName": input_data.get("hook_event_name", "PreToolUse"),
+            "permissionDecision": "allow" if decision["allowed"] else "deny",
+            "permissionDecisionReason": decision["reason"],
+        }
+        return {"hookSpecificOutput": hook_output}
+
+    async def post_tool(input_data, tool_use_id, _context):
+        tool_name = str(input_data.get("tool_name") or "")
+        if not tool_name.startswith("mcp__agent_tools__"):
+            native_audit_state.tool_result(
+                agent_id=agent_context.agent_id,
+                backend="claude-code",
+                tool_name=tool_name,
+                tool_call_id=str(tool_use_id or ""),
+                output=input_data.get("tool_response"),
+                session_id=str(input_data.get("session_id") or ""),
+            )
+        return {}
+
+    async def failed_tool(input_data, tool_use_id, _context):
+        tool_name = str(input_data.get("tool_name") or "")
+        if not tool_name.startswith("mcp__agent_tools__"):
+            native_audit_state.tool_result(
+                agent_id=agent_context.agent_id,
+                backend="claude-code",
+                tool_name=tool_name,
+                tool_call_id=str(tool_use_id or ""),
+                output=input_data.get("tool_response"),
+                error=str(input_data.get("error") or "tool execution failed"),
+                session_id=str(input_data.get("session_id") or ""),
+            )
+        return {}
+
+    async def subagent_start(input_data, tool_use_id, _context):
+        native_audit_state.subagent_lifecycle(
+            parent_agent_id=agent_context.agent_id,
+            child_agent_id=str(input_data.get("agent_id") or tool_use_id or ""),
+            backend="claude-code",
+            status="running",
+            session_id=str(input_data.get("session_id") or ""),
+            run_id=str(tool_use_id or ""),
+            agent_type=str(input_data.get("agent_type") or ""),
+            model=policy.subagents.model,
+        )
+        return {}
+
+    async def subagent_stop(input_data, tool_use_id, _context):
+        native_audit_state.subagent_lifecycle(
+            parent_agent_id=agent_context.agent_id,
+            child_agent_id=str(input_data.get("agent_id") or tool_use_id or ""),
+            backend="claude-code",
+            status="completed",
+            session_id=str(input_data.get("session_id") or ""),
+            run_id=str(tool_use_id or ""),
+            agent_type=str(input_data.get("agent_type") or ""),
+            reason=str(input_data.get("stop_reason") or ""),
+            model=policy.subagents.model,
+        )
+        return {}
+
+    return {
+        "PreToolUse": [HookMatcher(hooks=[pre_tool])],
+        "PostToolUse": [HookMatcher(hooks=[post_tool])],
+        "PostToolUseFailure": [HookMatcher(hooks=[failed_tool])],
+        "SubagentStart": [HookMatcher(hooks=[subagent_start])],
+        "SubagentStop": [HookMatcher(hooks=[subagent_stop])],
+    }
 
 
 def _extract_text_from_message(message) -> list[str]:
@@ -335,29 +471,42 @@ class ClaudeCodeAdapter(BackendAdapter):
         current_task = _build_task_payload(agent_context)
 
         if not query or not ClaudeAgentOptions:
-            if os.environ.get("AGENT_STRICT_BACKEND_SDK") == "1":
-                return AgentRunResult(
-                    trace_id=agent_context.trace_id,
-                    agent_id=agent_context.agent_id,
-                    status="error",
-                    final_message="",
-                    error="claude-agent-sdk is not installed.",
-                )
-            return run_direct_llm(
-                agent_context,
-                backend_name="claude-agent-direct-llm",
-                system_prompt=system_prompt,
-                user_payload=current_task,
+            return AgentRunResult(
+                trace_id=agent_context.trace_id,
+                agent_id=agent_context.agent_id,
+                status="error",
+                final_message="",
+                error="claude-agent-sdk is not installed.",
             )
 
         try:
+            native_policy = NativeCapabilityPolicy.from_dict(
+                agent_context.native_capabilities, backend="claude-code"
+            )
             options_kwargs = {
                 "system_prompt": system_prompt,
+                "tools": {"type": "preset", "preset": "claude_code"},
                 "allowed_tools": _claude_allowed_tools(agent_context),
+                "disallowed_tools": _claude_denied_tools(agent_context),
                 "mcp_servers": {
                     "agent_tools": _claude_mcp_server(agent_context)
                 },
+                "strict_mcp_config": True,
+                "permission_mode": "dontAsk",
+                "include_hook_events": True,
+                "enable_file_checkpointing": native_policy.allows("fs.write"),
             }
+            hooks = _claude_hooks(agent_context)
+            if hooks:
+                options_kwargs["hooks"] = hooks
+            agents = _claude_agents(agent_context)
+            if agents:
+                options_kwargs["agents"] = agents
+            existing_session = native_audit_state.session_id(
+                agent_context.agent_id
+            )
+            if native_policy.session.persistent and existing_session:
+                options_kwargs["resume"] = existing_session
             max_turns = (
                 agent_context.max_turns
                 or int(os.environ.get("CLAUDE_AGENT_MAX_TURNS", "1"))
@@ -377,6 +526,7 @@ class ClaudeCodeAdapter(BackendAdapter):
                 text_parts: list[str] = []
                 tool_events: list[dict] = []
                 runtime_events: list[dict] = []
+                mcp_tool_call_ids: set[str] = set()
                 async for message in query(
                     prompt=current_task,
                     options=options,
@@ -384,18 +534,34 @@ class ClaudeCodeAdapter(BackendAdapter):
                     text_parts.extend(
                         _extract_text_from_message(message)
                     )
-                    tool_events.extend(
-                        _tool_events_from_message(
-                            message,
-                            agent_context,
-                        )
+                    extracted_tool_events = _tool_events_from_message(
+                        message,
+                        agent_context,
                     )
+                    if hooks:
+                        for event in extracted_tool_events:
+                            tool = event.get("tool") or {}
+                            call_id = str(tool.get("tool_call_id") or "")
+                            name = str(tool.get("name") or "")
+                            if event["event"] == "tool_call_requested":
+                                if name.startswith("mcp__agent_tools__"):
+                                    mcp_tool_call_ids.add(call_id)
+                                    tool_events.append(event)
+                            elif call_id in mcp_tool_call_ids:
+                                tool_events.append(event)
+                    else:
+                        tool_events.extend(extracted_tool_events)
                     runtime_events.extend(
                         _runtime_event_from_message(
                             message,
                             agent_context,
                         )
                     )
+                    session_id = str(getattr(message, "session_id", "") or "")
+                    if session_id:
+                        native_audit_state.set_session_id(
+                            agent_context.agent_id, session_id
+                        )
                 return (
                     "\n".join(
                         [part for part in text_parts if part]

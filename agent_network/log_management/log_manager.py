@@ -157,7 +157,11 @@ APP_LAYOUTS = {
     ),
     "policy_check": (
         ("result",),
-        ("target", "task", "action", "result"),
+        ("target", "task", "action", "tool", "result", "metrics", "payload"),
+    ),
+    "subagent_lifecycle": (
+        ("target", "action", "result"),
+        ("target", "task", "action", "result", "metrics", "payload"),
     ),
     "application_error": (
         ("result",),
@@ -178,7 +182,7 @@ application_log_schema: Dict[str, Any] = {
     "name": "application.jsonl",
     "format": "jsonl",
     "log_type": "application",
-    "schema_version": "application.v11",
+    "schema_version": "application.v12",
     "additional_properties": False,
     "type_fields": _application_fields(),
     "event_schemas": {

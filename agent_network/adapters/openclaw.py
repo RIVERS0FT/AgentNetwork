@@ -5,6 +5,8 @@ import os
 import time
 
 from .base import AgentContext, AgentRunResult, BackendAdapter
+from agent_network.native_audit import native_audit_state
+from agent_network.native_capabilities import NativeCapabilityPolicy
 
 try:
     from openclaw_sdk import OpenClawClient
@@ -44,6 +46,7 @@ def _build_task_payload(agent_context: AgentContext) -> str:
         "skill_refs": agent_context.skill_refs,
         "skill_access": _skill_access(agent_context),
         "allowed_tools": agent_context.allowed_tools,
+        "native_capabilities": agent_context.native_capabilities,
         "permissions": agent_context.permissions,
         "state_snapshot": agent_context.state_snapshot,
         "simulation_id": agent_context.simulation_id,
@@ -59,6 +62,9 @@ def _build_task_payload(agent_context: AgentContext) -> str:
 
 
 def _system_prompt(agent_context: AgentContext) -> str:
+    native_policy = NativeCapabilityPolicy.from_dict(
+        agent_context.native_capabilities, backend="openclaw"
+    )
     return (
         f"You are {agent_context.agent_name} ({agent_context.agent_id}).\n"
         f"Role: {agent_context.role}\n"
@@ -70,7 +76,10 @@ def _system_prompt(agent_context: AgentContext) -> str:
         "Before using a Skill, use the backend's local file capabilities to read "
         "the package SKILL.md entrypoint, or the matching single Markdown file. "
         "Follow relative references inside the same Skill package when needed. "
-        "Do not infer Skill instructions from its name and do not read other Skills."
+        "Do not infer Skill instructions from its name and do not read other Skills. "
+        f"Native capability policy hash: {native_policy.sha256}. "
+        f"Allowed native capabilities: {', '.join(sorted(native_policy.allow)) or 'none'}. "
+        "Every native tool and sub-agent action is authorization checked and audited."
     )
 
 
@@ -110,11 +119,17 @@ def _openclaw_agent_id(agent_context: AgentContext) -> str:
 
 def _openclaw_session_name(agent_context: AgentContext) -> str:
     prefix = os.environ.get("OPENCLAW_SESSION_PREFIX", "").strip()
-    logical_session = (
-        f"{agent_context.agent_id}:{agent_context.trace_id}"
-        if agent_context.trace_id
-        else f"{agent_context.agent_id}:event-{agent_context.event_sequence}"
+    policy = NativeCapabilityPolicy.from_dict(
+        agent_context.native_capabilities, backend="openclaw"
     )
+    if policy.session.persistent and agent_context.simulation_id:
+        logical_session = f"{agent_context.agent_id}:{agent_context.simulation_id}"
+    else:
+        logical_session = (
+            f"{agent_context.agent_id}:{agent_context.trace_id}"
+            if agent_context.trace_id
+            else f"{agent_context.agent_id}:event-{agent_context.event_sequence}"
+        )
     return f"{prefix}:{logical_session}" if prefix else logical_session
 
 
@@ -179,7 +194,7 @@ class OpenCLAWAdapter(BackendAdapter):
                     "Connecting to OpenCLAW gateway: %s",
                     gateway_url or "SDK default",
                 )
-                async with OpenClawClient.connect() as client:
+                async with await OpenClawClient.connect() as client:
                     agent = client.get_agent(
                         _openclaw_agent_id(agent_context),
                         session_name=_openclaw_session_name(
@@ -196,6 +211,10 @@ class OpenCLAWAdapter(BackendAdapter):
                 loop.close()
 
             output_text = _extract_openclaw_text(response)
+            native_audit_state.set_session_id(
+                agent_context.agent_id,
+                _openclaw_session_name(agent_context),
+            )
             duration_ms = round(
                 (time.monotonic() - started) * 1000,
                 1,

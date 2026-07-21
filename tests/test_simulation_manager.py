@@ -44,9 +44,9 @@ def _manager(run_handler):
     runtime = FakeRuntime()
     manager = SimulationManager(
         scene_loader=_scene,
-        setup_handler=lambda scene, seed: {
-            "scene": scene.scene_key,
-            "seed": seed,
+        setup_handler=lambda run: {
+            "scene": run.scene_definition.scene_key,
+            "seed": run.seed,
         },
         run_handler=run_handler,
         runtime_provider=lambda: runtime,
@@ -82,6 +82,7 @@ def test_configure_resolves_per_agent_resources_and_start_completes():
 
     assert run.state == SimulationState.CONFIGURED
     assert run.seed == 7
+    assert run.scene_definition.scene_key == "demo"
     assert run.resource_plan["agents"]["agent_a"]["cpu_cores"] == 0.5
     assert run.resource_plan["agents"]["agent_b"]["memory_mb"] == 512
     assert run.resource_plan["max_parallel_agents"] == 1
@@ -173,3 +174,46 @@ def test_duration_expiry_force_stops_simulation():
     assert run.stop_reason == "duration_exceeded"
     assert runtime.force_calls == 1
 
+
+def test_each_run_owns_non_serialized_execution_context():
+    observed = []
+
+    def setup_handler(run):
+        run.execution_config = {"run_seed": str(run.seed)}
+        return {"scene": run.scene_definition.scene_key, "seed": run.seed}
+
+    def run_handler(run):
+        observed.append(
+            (
+                run.scene_definition.scene_key,
+                run.seed,
+                dict(run.execution_config),
+            )
+        )
+        return {"status": "completed"}
+
+    manager = SimulationManager(
+        scene_loader=lambda name: SimpleNamespace(
+            scene_key=name,
+            agents=[SimpleNamespace(agent_id="agent_a")],
+        ),
+        setup_handler=setup_handler,
+        run_handler=run_handler,
+        runtime_provider=FakeRuntime,
+    )
+
+    first = manager.configure(
+        "first", SimulationRuntimeConfig(duration_seconds=10), seed=11
+    )
+    manager.start(first.simulation_id)
+    second = manager.configure(
+        "second", SimulationRuntimeConfig(duration_seconds=10), seed=22
+    )
+    manager.start(second.simulation_id)
+
+    assert observed == [
+        ("first", 11, {"run_seed": "11"}),
+        ("second", 22, {"run_seed": "22"}),
+    ]
+    assert "scene_definition" not in first.to_dict()
+    assert "execution_config" not in first.to_dict()

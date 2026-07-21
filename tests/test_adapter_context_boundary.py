@@ -19,6 +19,17 @@ def _context() -> AgentContext:
         ],
         skill_refs=["planning"],
         allowed_tools=["send_message", "write_plan"],
+        native_capabilities={
+            "enabled": True,
+            "tools": {
+                "allow": ["fs.read", "fs.search", "agent.spawn"],
+                "deny": [
+                    "fs.write", "process.exec", "web.fetch", "web.search",
+                    "browser.control", "agent.message", "automation.schedule",
+                    "channel.send", "device.control", "media.generate",
+                ],
+            },
+        },
         permissions={"can_send": ["agent_b"]},
         state_snapshot={"version": 1},
         simulation_id="sim-test",
@@ -50,6 +61,7 @@ def test_claude_task_payload_contains_full_context_not_latest_message_only():
     assert payload["skill_refs"] == ["planning"]
     assert "skill_context" not in payload
     assert payload["allowed_tools"] == ["send_message", "write_plan"]
+    assert payload["native_capabilities"]["enabled"] is True
 
     server = claude_code._claude_mcp_server(_context())
     assert server["args"][1] == "agent_network.mcp_server"
@@ -64,6 +76,7 @@ def test_openclaw_task_payload_contains_full_context_not_latest_message_only():
     assert payload["scene_key"] == "demo_scene"
     assert [m["content"] for m in payload["messages"]] == ["first", "second"]
     assert payload["skill_refs"] == ["planning"]
+    assert payload["native_capabilities"]["enabled"] is True
     assert "skill_context" not in payload
 
 
@@ -81,6 +94,16 @@ def test_mock_claude_adapter_returns_application_event_without_real_llm(monkeypa
     assert "actor" not in event
 
 
+def test_claude_backend_never_falls_back_when_sdk_is_missing(monkeypatch):
+    monkeypatch.delenv("MOCK_LLM", raising=False)
+    monkeypatch.delenv("AGENT_STRICT_BACKEND_SDK", raising=False)
+    monkeypatch.setattr(claude_code, "query", None)
+    monkeypatch.setattr(claude_code, "ClaudeAgentOptions", None)
+    result = ClaudeCodeAdapter().run_agent_task(_context())
+    assert result.status == "error"
+    assert result.error == "claude-agent-sdk is not installed."
+
+
 def test_mock_openclaw_adapter_returns_application_event_without_real_llm(monkeypatch):
     monkeypatch.setenv("MOCK_LLM", "1")
 
@@ -93,6 +116,40 @@ def test_mock_openclaw_adapter_returns_application_event_without_real_llm(monkey
     assert event["agent_id"] == "agent_a"
     assert event["metrics"]["backend"] == "openclaw"
     assert "actor" not in event
+
+
+def test_openclaw_adapter_awaits_sdk_connect_factory(monkeypatch):
+    monkeypatch.delenv("MOCK_LLM", raising=False)
+
+    class FakeResult:
+        content = "openclaw result"
+
+    class FakeAgent:
+        async def execute(self, prompt):
+            assert "AgentNetwork task payload" in prompt
+            return FakeResult()
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        def get_agent(self, agent_id, session_name="main"):
+            assert agent_id == "agent_a"
+            assert session_name
+            return FakeAgent()
+
+    class FakeClientFactory:
+        @classmethod
+        async def connect(cls):
+            return FakeClient()
+
+    monkeypatch.setattr(openclaw, "OpenClawClient", FakeClientFactory)
+    result = OpenCLAWAdapter().run_agent_task(_context())
+    assert result.status == "completed"
+    assert result.final_message == "openclaw result"
 
 
 def test_claude_tool_blocks_become_traceable_application_events():
@@ -146,3 +203,35 @@ def test_claude_result_message_becomes_llm_runtime_event():
     assert event["metrics"]["duration_ms"] == 1250
     assert event["metrics"]["usage"]["input_tokens"] == 10
     assert "actor" not in event
+
+
+def test_claude_native_policy_builds_tools_agents_and_hooks(monkeypatch):
+    class FakeMatcher:
+        def __init__(self, matcher=None, hooks=None, timeout=None):
+            self.matcher = matcher
+            self.hooks = hooks or []
+            self.timeout = timeout
+
+    monkeypatch.setattr(claude_code, "HookMatcher", FakeMatcher)
+    monkeypatch.setattr(
+        claude_code,
+        "AgentDefinition",
+        lambda **kwargs: kwargs,
+    )
+
+    allowed = claude_code._claude_allowed_tools(_context())
+    denied = claude_code._claude_denied_tools(_context())
+    agents = claude_code._claude_agents(_context())
+    hooks = claude_code._claude_hooks(_context())
+
+    assert {"Read", "Glob", "Grep", "Agent"} <= set(allowed)
+    assert {"Write", "Edit", "Bash"} <= set(denied)
+    assert "agentnetwork-worker" in agents
+    assert "Agent" not in agents["agentnetwork-worker"]["tools"]
+    assert {
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "SubagentStart",
+        "SubagentStop",
+    } <= set(hooks)

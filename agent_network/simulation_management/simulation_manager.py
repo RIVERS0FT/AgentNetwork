@@ -28,7 +28,7 @@ class SimulationManager:
     def __init__(
         self,
         scene_loader: Callable[[str], Any],
-        setup_handler: Callable[[Any, int], dict[str, Any]],
+        setup_handler: Callable[[SimulationRun], dict[str, Any]],
         run_handler: Callable[[SimulationRun], dict[str, Any]],
         runtime_provider: Callable[[], Any],
         allocator: SimulationResourceAllocator | None = None,
@@ -69,9 +69,10 @@ class SimulationManager:
             scene=scene_def.scene_key,
             runtime_config=runtime_config,
             seed=resolved_seed,
+            scene_definition=scene_def,
             resource_plan=plan,
         )
-        run.setup = self.setup_handler(scene_def, resolved_seed)
+        run.setup = self.setup_handler(run)
         run.mark_configured()
         run.action_status = "configured"
         with self._lock:

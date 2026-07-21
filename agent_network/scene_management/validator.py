@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from agent_network.native_capabilities import NativeCapabilityPolicy
+
 from .models import (
     SkillDefinition,
     TaskDefinition,
@@ -31,6 +33,8 @@ _ROLE_FIELDS = {
     "faction_id",
 }
 _INSTANCE_FIELDS = {"skill_refs", "tool_refs", "tasks"}
+_INSTANCE_FIELDS.add('native_capabilities')
+
 _TASK_FIELDS = {
     "task_id",
     "name",
@@ -139,6 +143,23 @@ class SceneValidator:
             self._unknown_fields(instance, _INSTANCE_FIELDS, "instances_and_skills.json", path, add)
             skill_refs = self._string_list(instance.get("skill_refs", []), "instances_and_skills.json", f"{path}.skill_refs", "skill", str(instance_id), add)
             tool_refs = self._string_list(instance.get("tool_refs", []), "instances_and_skills.json", f"{path}.tool_refs", "tool", str(instance_id), add)
+            try:
+                role_key = normalized_roles.get(agent_id, '')
+                backend = str(
+                    (roles.get(role_key) or {}).get('model_backbone', 'openclaw')
+                )
+                NativeCapabilityPolicy.from_dict(
+                    instance.get('native_capabilities'), backend=backend
+                )
+            except (TypeError, ValueError) as exc:
+                add(
+                    'NATIVE_CAPABILITY_INVALID',
+                    'instances_and_skills.json',
+                    f'{path}.native_capabilities',
+                    'agent_instance',
+                    str(instance_id),
+                    str(exc),
+                )
             for ref in skill_refs:
                 definition = self._skill_definition(root, ref, add)
                 if definition:

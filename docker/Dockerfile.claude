@@ -9,8 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Claude Code CLI (npm 国内镜像)
+ARG CLAUDE_CODE_NPM_PACKAGE=@anthropic-ai/claude-code@2.1.216
 RUN npm config set registry https://registry.npmmirror.com && \
-    npm install -g @anthropic-ai/claude-code
+    npm install -g "${CLAUDE_CODE_NPM_PACKAGE}"
 
 WORKDIR /app
 
@@ -20,11 +21,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN python3 -m pip install --no-cache-dir --break-system-packages -r requirements.txt
 
-COPY vendor/python/ /tmp/vendor/python/
-RUN set -eux; \
-    if ls /tmp/vendor/python/claude_agent_sdk-*.whl >/dev/null 2>&1; then \
-        python3 -m pip install --no-cache-dir --break-system-packages /tmp/vendor/python/claude_agent_sdk-*.whl; \
-    fi
+ARG CLAUDE_AGENT_SDK_VERSION=0.2.124
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+    "claude-agent-sdk==${CLAUDE_AGENT_SDK_VERSION}" && \
+    python3 -c "from claude_agent_sdk import ClaudeAgentOptions, HookMatcher; print('claude-agent-sdk import ok')"
 
 COPY services/agent_server.py /app/services/
 COPY agent_network/ /app/agent_network/
@@ -45,4 +45,6 @@ ENV SERVER_URL="http://localhost:8000"
 EXPOSE 8000
 
 ENV AGENT_BACKEND="claude-code"
+ENV NATIVE_AUDIT_URL="http://127.0.0.1:8000"
+ENV NATIVE_AUDIT_REQUIRED="1"
 CMD ["python3", "services/agent_server.py"]

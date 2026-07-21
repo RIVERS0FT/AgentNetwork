@@ -118,6 +118,9 @@ def test_delegated_task_runs_and_emits_authenticated_callbacks(monkeypatch):
             )
 
     monkeypatch.setattr(agent_server, "_safe_post_json", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        "agent_network.native_audit._post_server", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(agent_server, "_make_adapter", lambda: Adapter())
     callback_session = CallbackSession()
     monkeypatch.setattr(agent_server.callback_dispatcher, "session", callback_session)

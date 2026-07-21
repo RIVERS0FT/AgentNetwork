@@ -1,0 +1,37 @@
+{
+  "plugins": {
+    "load": {
+      "paths": ["./docker/openclaw-audit-plugin"]
+    },
+    "entries": {
+      "agentnetwork-audit": {
+        "enabled": true,
+        "config": {}
+      }
+    }
+  },
+  "tools": {
+    "agentToAgent": {
+      "enabled": false,
+      "allow": []
+    },
+    "sessions": {
+      "visibility": "tree"
+    },
+    "loopDetection": {
+      "enabled": true
+    },
+    "elevated": {
+      "enabled": false
+    }
+  },
+  "agents": {
+    "defaults": {
+      "subagents": {
+        "maxConcurrent": 32,
+        "runTimeoutSeconds": 900,
+        "archiveAfterMinutes": 60
+      }
+    }
+  }
+}

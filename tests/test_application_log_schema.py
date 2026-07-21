@@ -122,7 +122,7 @@ def test_each_schema_owns_timestamp_field():
 def test_application_schema_is_strict_and_uses_one_event_source():
     schemas = application_log_schema["event_schemas"]
 
-    assert application_log_schema["schema_version"] == "application.v11"
+    assert application_log_schema["schema_version"] == "application.v12"
     assert set(application_log_schema["type_fields"]) == APPLICATION_IDENTITY_FIELDS
     assert application_log_schema["type_fields"]["trace_id"]["generator"] == "trace_id"
     assert application_log_schema["type_fields"]["agent_id"] == {
@@ -138,6 +138,9 @@ def test_application_schema_is_strict_and_uses_one_event_source():
     assert not (UNKNOWN_APPLICATION_EVENTS & set(schemas))
     assert schemas["reasoning"]["required_fields"] == ["action"]
     assert schemas["policy_check"]["required_fields"] == ["result"]
+    assert schemas["subagent_lifecycle"]["required_fields"] == [
+        "target", "action", "result"
+    ]
     assert schemas["acting"]["required_fields"] == ["action"]
 
     for event_schema in schemas.values():
@@ -319,6 +322,25 @@ def test_policy_check_uses_result_field(manager):
     assert record["result"]["status"] == "allowed"
     assert "policy" not in record
     assert "actor" not in record
+
+
+@pytest.mark.not_llm
+def test_subagent_lifecycle_is_persisted_with_parent_child_identity(manager):
+    record = manager.emit_application_event(
+        event="subagent_lifecycle",
+        agent_id="parent",
+        target={"agent_id": "child", "role": "worker"},
+        action={"type": "native_subagent", "name": "lifecycle", "status": "running"},
+        result={"status": "running"},
+        payload={"backend": "openclaw", "child_session_id": "session-child"},
+        trace_id="trace-subagent",
+    )
+
+    assert record["event"] == "subagent_lifecycle"
+    assert record["agent_id"] == "parent"
+    assert record["target"]["agent_id"] == "child"
+    assert record["action"]["status"] == "running"
+    assert record["payload"]["child_session_id"] == "session-child"
 
 
 @pytest.mark.not_llm

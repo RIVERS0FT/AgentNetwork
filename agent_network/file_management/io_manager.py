@@ -69,7 +69,7 @@ class ManagedIOMixin:
                 raise ResourceNotReadyError(resource_id)
             path = self.resolve_path(resource.root_name, resource.relative_path)
             path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open('a', encoding=encoding) as stream:
+            with path.open('a', encoding=encoding, newline='') as stream:
                 stream.write(text)
                 stream.flush()
                 os.fsync(stream.fileno())

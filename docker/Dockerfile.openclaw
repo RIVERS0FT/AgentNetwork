@@ -18,7 +18,7 @@ ARG OPENCLAW_GATEWAY_NPM_PACKAGE
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 RUN set -eux; \
     test -n "${OPENCLAW_GATEWAY_NPM_PACKAGE:-}" || \
-        (echo "OPENCLAW_GATEWAY_NPM_PACKAGE is required, for example openclaw@latest" >&2; exit 1); \
+        (echo "OPENCLAW_GATEWAY_NPM_PACKAGE is required, for example openclaw@2026.7.1-2" >&2; exit 1); \
     npm config set registry "${NPM_REGISTRY}"; \
     npm install -g "${OPENCLAW_GATEWAY_NPM_PACKAGE}"
 
@@ -27,21 +27,17 @@ WORKDIR /app
 COPY requirements.txt .
 RUN python3 -m pip install --no-cache-dir --break-system-packages -r requirements.txt
 
-# Install only the supported OpenCLAW SDK wheel. Do not install every wheel in
-# vendor/python because that directory may contain host/Python-version-specific
-# wheels such as cp312 artifacts. Missing SDK is a build error for this image.
-COPY vendor/python/ /tmp/vendor/python/
-RUN set -eux; \
-    wheel="$(find /tmp/vendor/python -maxdepth 1 -type f -name 'openclaw_sdk-*.whl' | head -n 1)"; \
-    test -n "${wheel}" || \
-        (echo "openclaw-sdk wheel is required in vendor/python/ as openclaw_sdk-*.whl" >&2; exit 1); \
-    python3 -m pip install --no-cache-dir --break-system-packages "${wheel}"; \
+ARG OPENCLAW_SDK_VERSION=2.1.0
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+    "openclaw-sdk==${OPENCLAW_SDK_VERSION}" && \
     python3 -c "from openclaw_sdk import OpenClawClient; print('openclaw_sdk import ok')"
 
 COPY services/agent_server.py /app/services/
 COPY agent_network/ /app/agent_network/
 COPY scenes/ /app/scenes/
 COPY docker/start-openclaw-agent.sh /app/start-openclaw-agent.sh
+COPY docker/openclaw.json /app/docker/openclaw.json
+COPY docker/openclaw-audit-plugin/ /app/docker/openclaw-audit-plugin/
 RUN chmod +x /app/start-openclaw-agent.sh
 
 # 注意: 使用 docker-compose 部署时，通过 environment 覆盖为 service name:
@@ -60,6 +56,9 @@ ENV OPENCLAW_START_GATEWAY="1"
 ENV OPENCLAW_GATEWAY_HOST="127.0.0.1"
 ENV OPENCLAW_GATEWAY_PORT="18789"
 ENV OPENCLAW_GATEWAY_WS_URL="ws://127.0.0.1:18789/gateway"
+ENV OPENCLAW_CONFIG_PATH="/app/docker/openclaw.json"
+ENV NATIVE_AUDIT_URL="http://127.0.0.1:8000"
+ENV NATIVE_AUDIT_REQUIRED="1"
 
 EXPOSE 8000
 

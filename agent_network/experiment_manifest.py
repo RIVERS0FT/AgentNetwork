@@ -2,6 +2,8 @@
 from __future__ import annotations
 import hashlib
 import json
+import os
+from importlib import metadata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -43,14 +45,30 @@ def _write_experiment_manifest(session_id: str, value: dict):
     manager.ensure_directory(owner_type='capture_session', owner_id=session_id, resource_type='capture_session_directory', root_name='pcap', relative_path=session_id, logical_name=session_id, resource_id=stable_resource_id('capture', session_id, 'directory'))
     return manager.write_json(value, owner_type='capture_session', owner_id=session_id, resource_type='experiment_manifest', root_name='pcap', relative_path=f'{session_id}/experiment.manifest.json', logical_name='experiment.manifest.json', resource_id=_experiment_id(session_id), overwrite=True)
 
-def create_manifest(session_id: str, scene_name: str, scene_dir: Path, trace_id: str, seed: int, agents: list[dict], llm_config: dict, scheduler: dict=None) -> dict:
+def _package_version(name: str) -> str:
+    try:
+        return metadata.version(name)
+    except metadata.PackageNotFoundError:
+        return ''
+
+
+def runtime_versions() -> dict[str, str]:
+    return {
+        'claude_code': os.environ.get('CLAUDE_CODE_NPM_PACKAGE', '@anthropic-ai/claude-code@2.1.216'),
+        'claude_agent_sdk': _package_version('claude-agent-sdk') or os.environ.get('CLAUDE_AGENT_SDK_VERSION', '0.2.124'),
+        'openclaw': os.environ.get('OPENCLAW_GATEWAY_NPM_PACKAGE', 'openclaw@2026.7.1-2'),
+        'openclaw_sdk': _package_version('openclaw-sdk') or os.environ.get('OPENCLAW_SDK_VERSION', '2.1.0'),
+    }
+
+
+def create_manifest(session_id: str, scene_name: str, scene_dir: Path, trace_id: str, seed: int, agents: list[dict], llm_config: dict, scheduler: dict=None, native_runtime: dict=None) -> dict:
     session_id = _validate_session_id(session_id); sanitized_config = sanitize_config(llm_config)
     config_sha256 = hashlib.sha256(json.dumps(sanitized_config, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
-    manifest = {'schema_version': 'agent-traffic-experiment.v2', 'status': 'running', 'session_id': session_id, 'trace_id': trace_id, 'scene_name': scene_name, 'seed': seed, 'started_at': _now_iso(), 'scene': _scene_provenance(scene_name, scene_dir), 'agents': agents, 'llm_config': sanitized_config, 'llm_config_sha256': config_sha256, 'scheduler': scheduler or {}}
+    manifest = {'schema_version': 'agent-traffic-experiment.v3', 'status': 'running', 'session_id': session_id, 'trace_id': trace_id, 'scene_name': scene_name, 'seed': seed, 'started_at': _now_iso(), 'scene': _scene_provenance(scene_name, scene_dir), 'agents': agents, 'llm_config': sanitized_config, 'llm_config_sha256': config_sha256, 'scheduler': scheduler or {}, 'native_runtime': native_runtime or runtime_versions()}
     resource = _write_experiment_manifest(session_id, manifest); manifest['resource_id'] = resource.resource_id; return manifest
 
 def finalize_manifest(session_id: str, **updates) -> dict:
-    session_id = _validate_session_id(session_id); manifest = load_manifest(session_id) or {'schema_version': 'agent-traffic-experiment.v2', 'session_id': session_id}; manifest.pop('resource_id', None); manifest.update(updates); manifest['finished_at'] = _now_iso(); resource = _write_experiment_manifest(session_id, manifest); manifest['resource_id'] = resource.resource_id; return manifest
+    session_id = _validate_session_id(session_id); manifest = load_manifest(session_id) or {'schema_version': 'agent-traffic-experiment.v3', 'session_id': session_id}; manifest.pop('resource_id', None); manifest.update(updates); manifest['finished_at'] = _now_iso(); resource = _write_experiment_manifest(session_id, manifest); manifest['resource_id'] = resource.resource_id; return manifest
 
 def load_manifest(session_id: str) -> dict:
     try: session_id = _validate_session_id(session_id)
@@ -74,6 +92,41 @@ def _application_counts(session_id: str, trace_id: str) -> tuple[int, dict]:
         total += 1; source_id = record.get('agent_id'); target_id = (record.get('target') or {}).get('agent_id'); participants = {agent_id for agent_id in (source_id, target_id) if agent_id} or {'unknown'}
         for agent_id in participants: by_agent[agent_id] = by_agent.get(agent_id, 0) + 1
     return (total, by_agent)
+
+
+def _native_audit_issues(session_id: str, trace_id: str) -> list[str]:
+    from agent_network.log_management import get_log_manager
+    try:
+        records = get_log_manager().read_session_records(session_id, 'application')
+    except (FileNotFoundError, ValueError, FileManagerError):
+        return ['native audit records are unavailable']
+    records = [record for record in records if not trace_id or record.get('trace_id') == trace_id]
+    requested = {}
+    completed = set()
+    children = {}
+    for record in records:
+        event = record.get('event')
+        tool = record.get('tool') or {}
+        call_id = str(tool.get('tool_call_id') or '')
+        action_type = str((record.get('action') or {}).get('type') or '')
+        if event == 'tool_call_requested' and action_type == 'native_tool_call' and call_id:
+            requested[call_id] = record
+            if tool.get('status') == 'denied':
+                completed.add(call_id)
+        elif event == 'tool_result_received' and action_type == 'native_tool_result' and call_id:
+            completed.add(call_id)
+        elif event == 'subagent_lifecycle':
+            child_id = str((record.get('target') or {}).get('agent_id') or '')
+            if child_id:
+                children[child_id] = str((record.get('action') or {}).get('status') or '')
+    issues = [f'native tool call {call_id} has no terminal result' for call_id in sorted(set(requested) - completed)]
+    terminal = {'completed', 'failed', 'cancelled', 'terminated', 'timeout', 'killed', 'reset', 'deleted'}
+    issues.extend(
+        f'native subagent {child_id} has no terminal lifecycle event'
+        for child_id, status in sorted(children.items())
+        if status not in terminal
+    )
+    return issues
 
 def audit_session(session_id: str, verify_hashes: bool=True) -> dict:
     try: session_id = _validate_session_id(session_id)
@@ -106,6 +159,12 @@ def audit_session(session_id: str, verify_hashes: bool=True) -> dict:
     missing_application_agents = sorted(agent for agent in expected_agents if events_by_agent.get(agent, 0) == 0)
     if missing_application_agents: issues.append('Agents without application events: ' + ', '.join(missing_application_agents))
     if experiment.get('status') != 'complete': issues.append(f"experiment status is {experiment.get('status', 'unknown')}, not complete")
+    for agent in experiment.get('agents', []):
+        if agent.get('backend') in {'claude-code', 'openclaw'} and not agent.get('native_policy_sha256'):
+            issues.append(f"{agent.get('agent_id', 'unknown')}: native policy identity missing")
+    if not experiment.get('native_runtime'):
+        issues.append('native runtime version identity missing')
+    issues.extend(_native_audit_issues(session_id, experiment.get('trace_id', '')))
     return {'status': 'passed' if not issues else 'failed', 'passed': not issues, 'session_id': session_id, 'verified_hashes': verify_hashes, 'expected_agents': sorted(expected_agents), 'observed_agents': sorted(observed_agents), 'captures': captures, 'application_events': {'total': event_total, 'by_agent': events_by_agent}, 'issues': issues}
 
 def write_quality_result(session_id: str, quality: dict): return get_file_manager().write_json(quality, owner_type='capture_session', owner_id=session_id, resource_type='quality_result', root_name='pcap', relative_path=f'{session_id}/quality.json', logical_name='quality.json', resource_id=_quality_id(session_id), overwrite=True)

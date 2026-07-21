@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 from agent_network.agent_management import ContainerAgent, ContainerRuntime
 
@@ -25,6 +26,22 @@ def test_container_runtime_accepts_claude_code_backend(monkeypatch):
     runtime = _runtime(monkeypatch)
 
     assert runtime._normalize_backend("claude-code") == "claude-code"
+
+
+def test_dynamic_containers_receive_native_audit_security_environment():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "agent_network"
+        / "agent_management.py"
+    ).read_text(encoding="utf-8")
+    for name in (
+        "NATIVE_AUDIT_TOKEN",
+        "NATIVE_AUDIT_REQUIRED",
+        "AGENT_NATIVE_WORKSPACE",
+        "AGENT_NATIVE_ALLOWED_ROOTS",
+        "SCENE_DIR",
+    ):
+        assert f'"{name}"' in source
 
 
 def test_container_runtime_converts_resource_limits_to_docker_options(monkeypatch):
@@ -144,6 +161,8 @@ def test_run_all_posts_structured_context_without_local_agent_execution(monkeypa
         "delegate_task",
         "write_plan",
     ]
+    assert posted["json"]["native_capabilities"]["enabled"] is True
+    assert posted["json"]["native_capabilities"]["audit"]["required"] is True
     assert posted["json"]["core_goal"] == "Coordinate"
 
 

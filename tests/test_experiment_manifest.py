@@ -23,7 +23,8 @@ def test_manifest_audit_and_bundle_use_managed_resources(tmp_path, monkeypatch):
     logs = LogManager(log_dir=str(data / "logs")); logs.reset(); logs._log_dir=str(data / "logs"); session = logs.start_session("demo")
     from agent_network.experiment_manifest import create_manifest, finalize_manifest, audit_session, build_bundle
     manifest = create_manifest(session_id=session, scene_name="demo", scene_dir=folder, trace_id="trace-1", seed=1, agents=[{"agent_id":"a1","image_id":"sha256:image"}], llm_config={}, scheduler={"mode":"event_driven"})
-    assert manifest["schema_version"] == "agent-traffic-experiment.v2"
+    assert manifest["schema_version"] == "agent-traffic-experiment.v3"
+    assert manifest["native_runtime"]["openclaw"] == "openclaw@2026.7.1-2"
     assert manifest["scheduler"] == {"mode": "event_driven"}
     assert "max_rounds" not in manifest["scheduler"]
     logs.emit_application_event("acting","a1",trace_id="trace-1",action={"name":"work"})
@@ -43,3 +44,32 @@ def test_audit_rejects_session_path_traversal():
     quality = audit_session("../../outside")
     assert quality["passed"] is False
     assert quality["issues"] == ["invalid session path"]
+
+
+def test_native_audit_quality_rejects_unfinished_tool_and_subagent(monkeypatch):
+    from agent_network.experiment_manifest import _native_audit_issues
+    import agent_network.log_management as log_management
+
+    class FakeLogManager:
+        def read_session_records(self, session_id, log_type):
+            assert session_id == "session-1"
+            assert log_type == "application"
+            return [
+                {
+                    "event": "tool_call_requested",
+                    "trace_id": "trace-1",
+                    "action": {"type": "native_tool_call"},
+                    "tool": {"tool_call_id": "tool-1", "status": "allowed"},
+                },
+                {
+                    "event": "subagent_lifecycle",
+                    "trace_id": "trace-1",
+                    "target": {"agent_id": "child-1"},
+                    "action": {"status": "running"},
+                },
+            ]
+
+    monkeypatch.setattr(log_management, "get_log_manager", lambda: FakeLogManager())
+    issues = _native_audit_issues("session-1", "trace-1")
+    assert "native tool call tool-1 has no terminal result" in issues
+    assert "native subagent child-1 has no terminal lifecycle event" in issues

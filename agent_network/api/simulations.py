@@ -1,12 +1,10 @@
-import asyncio
 import json
 import os
-import random
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -20,6 +18,7 @@ from agent_network.experiment_manifest import (
     finalize_manifest,
 )
 from agent_network.log_management import get_log_manager
+from agent_network.native_capabilities import NativeCapabilityPolicy
 from agent_network.scene_management import (
     AgentDef,
     SceneDefinition,
@@ -33,10 +32,6 @@ router = APIRouter()
 logger = get_log_manager()
 _SCENES_DIR = Path("scenes")
 _llm_config: Dict[str, str] = {}
-_pending_scene_def: Optional[SceneDefinition] = None
-_pending_config: Dict[str, str] = {}
-_comm_matrix: Dict[str, set] = {}
-_pending_seed: int = 0
 
 _TOPOLOGY_NETWORK_FIELDS = ("delay_ms", "jitter_ms", "loss_pct", "rate_mbit")
 _TOPOLOGY_LINK_FIELDS = {
@@ -52,7 +47,7 @@ class SimulationRunRequest(BaseModel):
     seed: Optional[int] = None
 
 
-def _get_effective_llm_config() -> Dict[str, str]:
+def get_effective_llm_config() -> Dict[str, str]:
     config = get_api_config()
     config.update(_llm_config)
     return config
@@ -297,9 +292,7 @@ def _capture_health(
     return {"healthy": failed == 0, "failed": failed, "agents": agents}
 
 
-def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
-    global _pending_scene_def
-
+def prepare_scene(scene_def: SceneDefinition, seed: int) -> Dict[str, Any]:
     AgentRegistry.reset()
     state.agent_logs.clear()
     logger.reset()
@@ -316,13 +309,13 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
             backend=definition.backend,
             skill_refs=definition.skill_refs,
             allowed_tools=definition.allowed_tools,
+            native_capabilities=definition.native_capabilities,
         )
         agent.set_comm(comm_manager)
         agent.pending_task_descs = definition.tasks
         AgentRegistry.register(agent)
         agent.start()
 
-    _pending_scene_def = scene_def
     return {
         "agents": [
             agent.get_status()
@@ -333,26 +326,23 @@ def _setup_scene(scene_def: SceneDefinition) -> Dict[str, Any]:
         "scene_key": scene_def.scene_key,
         "scene_title": scene_def.title,
         "network_mode": "a2a",
-        "seed": _pending_seed,
+        "seed": seed,
     }
 
 
-def _launch_containers(
+def run_simulation(
     config: Dict[str, str],
-    scene_def: SceneDefinition = None,
+    scene_def: SceneDefinition,
+    seed: int,
     simulation_run=None,
+    capture_handler: Callable[..., Dict[str, Any]] | None = None,
+    capture_health_handler: Callable[..., Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
-    global _comm_matrix
-
-    if scene_def is None:
-        scene_def = _pending_scene_def
     if not scene_def:
-        return {
-            "error": (
-                "No scene setup. "
-                "Call /api/simulations/setup first."
-            )
-        }
+        raise ValueError("scene_def is required")
+
+    capture_handler = capture_handler or _capture
+    capture_health_handler = capture_health_handler or _capture_health
 
     import requests as requests_module
 
@@ -373,6 +363,7 @@ def _launch_containers(
             backend=definition.backend,
             skill_refs=definition.skill_refs,
             allowed_tools=definition.allowed_tools,
+            native_capabilities=definition.native_capabilities,
             scene_key=scene_def.scene_key,
             resource_limits=(resource_plan.get("agents") or {}).get(
                 definition.agent_id.lower(), {}
@@ -408,21 +399,21 @@ def _launch_containers(
         for assignment, _ in created_cas
         if assignment.url
     }
-    _comm_matrix.clear()
+    comm_matrix: Dict[str, set] = {}
     for edge in scene_def.topology or []:
         endpoint_a = str(edge.get("endpoint_a", "")).lower()
         endpoint_b = str(edge.get("endpoint_b", "")).lower()
         if endpoint_a and endpoint_b:
-            _comm_matrix.setdefault(endpoint_a, set()).add(endpoint_b)
-            _comm_matrix.setdefault(endpoint_b, set()).add(endpoint_a)
+            comm_matrix.setdefault(endpoint_a, set()).add(endpoint_b)
+            comm_matrix.setdefault(endpoint_b, set()).add(endpoint_a)
 
     for agent in AgentRegistry.list_all():
         if agent.comm:
-            agent.comm.update_directory(agent_directory, _comm_matrix)
+            agent.comm.update_directory(agent_directory, comm_matrix)
 
     serialized_matrix = {
         source: sorted(targets)
-        for source, targets in _comm_matrix.items()
+        for source, targets in comm_matrix.items()
     }
     for assignment, _ in created_cas:
         try:
@@ -463,15 +454,17 @@ def _launch_containers(
             "runtime_container_id": assignment.container_id,
             "runtime_ip": assignment.container_ip,
             "image_id": assignment.image_id,
+            "native_capabilities": assignment.native_capabilities.to_dict(),
+            "native_policy_sha256": assignment.native_capabilities.sha256,
         }
         for assignment, _ in all_assignments
     ]
     create_manifest(
         session_id=session_id,
         scene_name=scene_def.scene_key,
-        scene_dir=_SCENES_DIR / state.current_scene_name,
+        scene_dir=_SCENES_DIR / scene_def.scene_key,
         trace_id=talk_id,
-        seed=_pending_seed,
+        seed=seed,
         agents=experiment_agents,
         llm_config=config,
         scheduler={
@@ -549,7 +542,7 @@ def _launch_containers(
         item["agent_id"]: item.get("profiles", [])
         for item in network_emulation.get("agents", [])
     }
-    capture_start = _capture(
+    capture_start = capture_handler(
         created_cas,
         True,
         requests_module,
@@ -563,7 +556,7 @@ def _launch_containers(
         details={"session_id": session_id, **capture_start},
     )
     if capture_start["failed"]:
-        capture_stop = _capture(
+        capture_stop = capture_handler(
             created_cas,
             False,
             requests_module,
@@ -642,12 +635,12 @@ def _launch_containers(
                 ],
                 "comm_matrix": {
                     key: list(value)
-                    for key, value in _comm_matrix.items()
+                    for key, value in comm_matrix.items()
                 },
                 "agent_directory": agent_directory,
                 "talk": talk_id,
                 "trace_id": talk_id,
-                "simulation_seed": _pending_seed,
+                "simulation_seed": seed,
                 "network_mode": getattr(runtime_config, "network_mode", "a2a"),
                 "max_parallel_agents": int(
                     resource_plan.get("max_parallel_agents", 10)
@@ -660,7 +653,7 @@ def _launch_containers(
 
         def capture_is_healthy():
             nonlocal capture_health
-            capture_health = _capture_health(
+            capture_health = capture_health_handler(
                 created_cas,
                 requests_module,
             )
@@ -688,7 +681,7 @@ def _launch_containers(
         )
     finally:
         state.simulation_active = False
-        capture_stop = _capture(
+        capture_stop = capture_handler(
             created_cas,
             False,
             requests_module,
@@ -751,6 +744,11 @@ def _launch_containers(
         capture_start=capture_start,
         capture_stop=capture_stop,
         error=run_error,
+        native_children=[
+            agent.get_status()
+            for agent in AgentRegistry.list_all()
+            if agent.runtime_kind != "managed"
+        ],
     )
     quality = audit_session(session_id, verify_hashes=True)
 
@@ -764,7 +762,7 @@ def _launch_containers(
         "simulation_name": scene_def.title,
         "scene_key": scene_def.scene_key,
         "session_id": session_id,
-        "seed": _pending_seed,
+        "seed": seed,
         "experiment_status": experiment_status,
         "quality": quality,
         "agents": [
@@ -785,7 +783,7 @@ def _launch_containers(
             "mode": "direct",
             "matrix": {
                 key: list(value)
-                for key, value in _comm_matrix.items()
+                for key, value in comm_matrix.items()
             },
         },
         "agent_directory": agent_directory,
@@ -881,6 +879,9 @@ def _build_scene_from_folder(
                 backend=backend,
                 skill_refs=skill_refs,
                 allowed_tools=list(allowed_tools),
+                native_capabilities=NativeCapabilityPolicy.from_dict(
+                    instance.get("native_capabilities"), backend=backend
+                ),
                 tasks=[],
             )
         )
@@ -984,42 +985,15 @@ def _build_scene_from_folder(
 async def setup_simulation(
     req: SimulationRunRequest,
 ):
-    global _pending_config, _pending_seed
-
-    scene_folder = _SCENES_DIR / req.scene
-    if not req.scene or not scene_folder.is_dir():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Scene '{req.scene}' not found",
-        )
-
-    if req.seed is None:
-        configured_seed = os.environ.get(
-            "SIMULATION_SEED", ""
-        ).strip()
-        _pending_seed = (
-            int(configured_seed)
-            if configured_seed
-            else random.SystemRandom().randrange(1, 2**31)
-        )
-    else:
-        _pending_seed = req.seed
-
-    random.seed(_pending_seed)
-    scene_def = _build_scene_from_folder(req.scene)
-    _pending_config = _get_effective_llm_config()
-    result = _setup_scene(scene_def)
-    state.current_topology = result["topology"]
-    return result
+    del req
+    raise RuntimeError(
+        "legacy simulation lifecycle is removed; use SimulationManager"
+    )
 
 
 async def launch_simulation():
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None,
-        _launch_containers,
-        _pending_config,
-        _pending_scene_def,
+    raise RuntimeError(
+        "legacy simulation lifecycle is removed; use SimulationManager"
     )
 
 

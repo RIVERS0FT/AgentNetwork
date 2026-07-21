@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from agent_network.file_management import FileManager, ResourceNotFoundError, ResourceNotReadyError, get_file_manager, stable_resource_id
 from agent_network.comm_management import normalize_profile
+from agent_network.native_capabilities import NativeCapabilityPolicy
 from agent_network.scene_management.scene_def import AgentDef, SceneDefinition
 from agent_network.scene_management.models import (
     SceneListItem,
@@ -90,11 +91,16 @@ class SceneStorage:
 
     def details(self, scene_key: str) -> Dict[str, Any]:
         definition = self.build_definition(scene_key)
+        agents = []
+        for agent in definition.agents:
+            value = asdict(agent)
+            value['native_capabilities'] = agent.native_capabilities.to_dict()
+            agents.append(value)
         return SceneSummary(
             scene_key=definition.scene_key,
             title=definition.title,
             description=definition.description,
-            agents=[asdict(agent) for agent in definition.agents],
+            agents=agents,
             skills=definition.skills,
             tools=definition.tools,
             tasks=definition.tasks,
@@ -140,7 +146,10 @@ class SceneStorage:
                 task_values.append(
                     task if isinstance(task, str) else str(task.get('goal') or task.get('name') or '')
                 )
-            agents.append(AgentDef(agent_id=role_id.lower(), role=identity, name=role.get('name', role_id), background=role.get('background', ''), core_goal=role.get('core_goal', ''), backend=backend, skill_refs=list(dict.fromkeys(skill_refs)), allowed_tools=list(dict.fromkeys(allowed_tools)), tasks=[task for task in task_values if task]))
+            native_capabilities = NativeCapabilityPolicy.from_dict(
+                instance.get('native_capabilities'), backend=backend
+            )
+            agents.append(AgentDef(agent_id=role_id.lower(), role=identity, name=role.get('name', role_id), background=role.get('background', ''), core_goal=role.get('core_goal', ''), backend=backend, skill_refs=list(dict.fromkeys(skill_refs)), allowed_tools=list(dict.fromkeys(allowed_tools)), native_capabilities=native_capabilities, tasks=[task for task in task_values if task]))
         raw_topology = topology_config.get('topology')
         if not isinstance(raw_topology, list):
             raise ValueError(f"Scene '{scene_key}' network_topology.json must contain a root-level topology array.")

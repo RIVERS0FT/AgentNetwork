@@ -20,6 +20,8 @@ from typing import Any, Dict, List, Optional, Set
 
 import requests
 
+from agent_network.native_capabilities import NativeCapabilityPolicy
+
 
 SYSTEM_TOOLS = ("send_message", "delegate_task")
 
@@ -53,7 +55,12 @@ class Agent:
         backend: str = "openclaw",
         skill_refs: List[str] = None,
         allowed_tools: List[str] = None,
+        native_capabilities: NativeCapabilityPolicy | Dict[str, Any] | None = None,
         capability_scores: Dict[str, float] = None,
+        parent_agent_id: str = "",
+        runtime_kind: str = "managed",
+        runtime_session_id: str = "",
+        spawn_depth: int = 0,
     ):
         self.agent_id = agent_id or f"agent-{uuid.uuid4()}"
         self.role = role
@@ -62,7 +69,16 @@ class Agent:
         self.backend = backend
         self.skill_refs = list(skill_refs or [])
         self.allowed_tools = list(allowed_tools or [])
+        self.native_capabilities = (
+            native_capabilities
+            if isinstance(native_capabilities, NativeCapabilityPolicy)
+            else NativeCapabilityPolicy.from_dict(native_capabilities, backend=backend)
+        )
         self.capability_scores = capability_scores or {}
+        self.parent_agent_id = str(parent_agent_id or "")
+        self.runtime_kind = str(runtime_kind or "managed")
+        self.runtime_session_id = str(runtime_session_id or "")
+        self.spawn_depth = int(spawn_depth or 0)
         self.status = "idle"
         self.container_id = f"docker-{self.agent_id}"
         self.container_url = ""
@@ -95,6 +111,12 @@ class Agent:
             "core_goal": self.core_goal,
             "backend": self.backend,
             "allowed_tools": self.allowed_tools,
+            "native_capabilities": self.native_capabilities.to_dict(),
+            "native_policy_sha256": self.native_capabilities.sha256,
+            "parent_agent_id": self.parent_agent_id,
+            "runtime_kind": self.runtime_kind,
+            "runtime_session_id": self.runtime_session_id,
+            "spawn_depth": self.spawn_depth,
             "url": self.container_url,
             "container_id": self.container_id,
             "status": self.status,
@@ -206,6 +228,9 @@ class ContainerAgent:
     backend: str = "openclaw"
     skill_refs: List[str] = field(default_factory=list)
     allowed_tools: List[str] = field(default_factory=list)
+    native_capabilities: NativeCapabilityPolicy = field(
+        default_factory=NativeCapabilityPolicy
+    )
     scene_key: str = ""
     container_id: str = ""
     container_name: str = ""
@@ -444,6 +469,11 @@ class ContainerRuntime:
                 "OPENCLAW_OPENAI_BASE_URL",
                 "OPENCLAW_DEFAULT_AGENT_ID",
                 "OPENCLAW_SESSION_NAME",
+                "NATIVE_AUDIT_TOKEN",
+                "NATIVE_AUDIT_REQUIRED",
+                "AGENT_NATIVE_WORKSPACE",
+                "AGENT_NATIVE_ALLOWED_ROOTS",
+                "SCENE_DIR",
             ):
                 if os.environ.get(key):
                     env[key] = os.environ[key]
@@ -479,6 +509,7 @@ class ContainerRuntime:
         backend: str = "openclaw",
         skill_refs: List[str] = None,
         allowed_tools: List[str] = None,
+        native_capabilities: NativeCapabilityPolicy | Dict[str, Any] | None = None,
         scene_key: str = "",
         resource_limits: Dict[str, Any] = None,
     ) -> ContainerAgent:
@@ -524,6 +555,13 @@ class ContainerRuntime:
             backend=backend,
             skill_refs=list(skill_refs or []),
             allowed_tools=list(allowed_tools or []),
+            native_capabilities=(
+                native_capabilities
+                if isinstance(native_capabilities, NativeCapabilityPolicy)
+                else NativeCapabilityPolicy.from_dict(
+                    native_capabilities, backend=backend
+                )
+            ),
             scene_key=scene_key,
             container_id=container_id,
             container_name=container_name,
@@ -577,6 +615,9 @@ class ContainerRuntime:
                 request_context["skill_refs"] = list(assignment.skill_refs)
                 request_context["allowed_tools"] = list(
                     dict.fromkeys([*SYSTEM_TOOLS, *assignment.allowed_tools])
+                )
+                request_context["native_capabilities"] = (
+                    assignment.native_capabilities.to_dict()
                 )
                 request_context["scene_key"] = assignment.scene_key
 
@@ -813,6 +854,7 @@ class AgentManagement:
         backend: str = "openclaw",
         skill_refs: List[str] = None,
         allowed_tools: List[str] = None,
+        native_capabilities: NativeCapabilityPolicy | Dict[str, Any] | None = None,
         capability_scores: Dict[str, float] = None,
     ) -> Agent:
         agent = Agent(
@@ -823,6 +865,7 @@ class AgentManagement:
             backend=backend,
             skill_refs=skill_refs,
             allowed_tools=allowed_tools,
+            native_capabilities=native_capabilities,
             capability_scores=capability_scores,
         )
         AgentRegistry.register(agent)
@@ -838,6 +881,7 @@ class AgentManagement:
         backend: str = "openclaw",
         skill_refs: List[str] = None,
         allowed_tools: List[str] = None,
+        native_capabilities: NativeCapabilityPolicy | Dict[str, Any] | None = None,
         scene_key: str = "",
     ) -> ContainerAgent:
         agent = AgentRegistry.get(agent_id)
@@ -850,6 +894,7 @@ class AgentManagement:
                 backend=backend,
                 skill_refs=skill_refs,
                 allowed_tools=allowed_tools,
+                native_capabilities=native_capabilities,
             )
         assignment = self.runtime.assign_agent(
             agent_id=agent.agent_id,
@@ -859,6 +904,7 @@ class AgentManagement:
             backend=agent.backend,
             skill_refs=agent.skill_refs,
             allowed_tools=agent.allowed_tools,
+            native_capabilities=agent.native_capabilities,
             scene_key=scene_key,
         )
         agent.container_id = assignment.container_id or agent.container_id

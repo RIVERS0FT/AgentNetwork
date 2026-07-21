@@ -42,7 +42,7 @@ def collect_changes(base: str | None) -> tuple[set[str], set[str]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Require every Git change set to add or update a docs/*.md design record."
+        description="Require every Git change set to add or update an authoritative design record."
     )
     parser.add_argument(
         "--base",
@@ -61,11 +61,22 @@ def main() -> int:
         print("PASS: no changes detected.")
         return 0
 
+    record_roots = (
+        "docs/adr/",
+        "docs/design/",
+        "docs/requirements/",
+        "docs/records/",
+    )
     design_records = sorted(
-        path for path in record_paths if path.startswith("docs/") and path.lower().endswith(".md")
+        path
+        for path in record_paths
+        if path.lower().endswith(".md") and path.startswith(record_roots)
     )
     if not design_records:
-        print("FAIL: the change set has no added or updated docs/*.md design record.", file=sys.stderr)
+        print(
+            "FAIL: the change set has no added or updated authoritative design record.",
+            file=sys.stderr,
+        )
         print("Changed paths:", file=sys.stderr)
         for path in sorted(all_paths):
             print(f"  - {path}", file=sys.stderr)
