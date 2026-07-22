@@ -20,7 +20,7 @@
 
 ## ADR
 
-- [ADR 完整索引](adr/README.md)：`ADR-001`～`ADR-034` 的唯一编号、状态和替代关系。
+- [ADR 完整索引](adr/README.md)：`ADR-001`～`ADR-035` 的唯一编号、状态和替代关系。
 - [ADR-019：持续时间约束的事件驱动仿真](adr/ADR-019-持续时间约束的事件驱动仿真.md)
 - [ADR-020：统一文件管理入口](adr/ADR-020-统一文件管理入口.md)
 - [ADR-021：统一抓包生命周期入口](adr/ADR-021-统一抓包生命周期入口.md)
@@ -37,6 +37,7 @@
 - [ADR-032：后端原生能力统一授权与审计](adr/ADR-032-后端原生能力统一授权与审计.md)
 - [ADR-033：Dashboard 使用 SceneListItem 字段合同](adr/ADR-033-Dashboard使用SceneListItem字段合同.md)
 - [ADR-034：OpenClaw 网关使用固定版本 CLI 启动合同](adr/ADR-034-OpenClaw网关使用固定版本CLI启动合同.md)
+- [ADR-035：Agent 容器启动采用就绪屏障](adr/ADR-035-Agent容器启动采用就绪屏障.md)
 
 ## 详细设计
 

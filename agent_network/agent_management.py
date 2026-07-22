@@ -14,6 +14,7 @@ the selected backend adapter inside services/agent_server.py.
 import os
 import socket
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
@@ -574,6 +575,100 @@ class ContainerRuntime:
         self.agents[agent_id] = assignment
         self._set_status(assignment, status)
         return assignment
+
+    def _startup_exit_error(self, assignment: ContainerAgent) -> str:
+        if not self._docker_client or not assignment.container_name:
+            return ""
+        try:
+            container = self._docker_client.containers.get(
+                assignment.container_name
+            )
+            container.reload()
+            state = container.attrs.get("State", {})
+        except Exception:
+            return ""
+
+        status = str(state.get("Status") or "").lower()
+        if status not in {"dead", "exited"}:
+            return ""
+        exit_code = state.get("ExitCode")
+        detail = str(state.get("Error") or "").strip()
+        message = (
+            f"Agent container '{assignment.container_name}' exited before "
+            f"readiness (status={status}, exit_code={exit_code})"
+        )
+        if detail:
+            message += f": {detail}"
+        return message
+
+    def wait_for_agents_ready(
+        self,
+        assignments: List[ContainerAgent],
+        timeout_seconds: float = 60,
+        poll_interval_seconds: float = 0.5,
+        requests_module=requests,
+    ) -> List[Dict[str, str]]:
+        """Wait for every assigned Agent Server to accept status requests."""
+        ordered = [
+            assignment
+            for assignment in assignments
+            if assignment.url and assignment.status != "error"
+        ]
+        pending = {assignment.agent_id: assignment for assignment in ordered}
+        errors: Dict[str, str] = {}
+        last_errors: Dict[str, str] = {}
+        timeout_seconds = max(0.0, float(timeout_seconds))
+        poll_interval_seconds = max(0.01, float(poll_interval_seconds))
+        deadline = time.monotonic() + timeout_seconds
+
+        while pending:
+            for agent_id, assignment in list(pending.items()):
+                exit_error = self._startup_exit_error(assignment)
+                if exit_error:
+                    errors[agent_id] = exit_error
+                    pending.pop(agent_id, None)
+                    continue
+
+                remaining = max(0.0, deadline - time.monotonic())
+                try:
+                    response = requests_module.get(
+                        f"{assignment.url}/status",
+                        timeout=min(1.0, max(0.1, remaining)),
+                    )
+                    response.raise_for_status()
+                    pending.pop(agent_id, None)
+                except Exception as exc:
+                    last_errors[agent_id] = str(exc)
+
+            if not pending:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                for agent_id, assignment in pending.items():
+                    message = (
+                        "Agent server readiness timed out after "
+                        f"{timeout_seconds:g}s at {assignment.url}/status"
+                    )
+                    if last_errors.get(agent_id):
+                        message += f": {last_errors[agent_id]}"
+                    errors[agent_id] = message
+                break
+            time.sleep(min(poll_interval_seconds, remaining))
+
+        for assignment in ordered:
+            error = errors.get(assignment.agent_id)
+            if error:
+                assignment.assign_error = error
+                self._set_status(assignment, "error")
+
+        return [
+            {
+                "agent_id": assignment.agent_id,
+                "error": errors[assignment.agent_id],
+            }
+            for assignment in ordered
+            if assignment.agent_id in errors
+        ]
 
     def run_all(self, context: Dict = None) -> List[Dict]:
         from concurrent.futures import ThreadPoolExecutor, as_completed

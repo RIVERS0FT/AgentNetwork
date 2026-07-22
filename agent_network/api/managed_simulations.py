@@ -86,6 +86,7 @@ class SimulationRunRequest(BaseModel):
     seed: Optional[int] = None
     duration_seconds: int = Field(default=3600, ge=1, le=604800)
     agent_timeout_seconds: int = Field(default=300, ge=1, le=86400)
+    agent_startup_timeout_seconds: int = Field(default=60, ge=1, le=3600)
     idle_timeout_seconds: int = Field(default=5, ge=0, le=3600)
     graceful_stop_timeout_seconds: int = Field(default=30, ge=0, le=3600)
     network_mode: str = Field(default="a2a", pattern="^a2a$")
@@ -275,6 +276,7 @@ def _runtime_config(req: SimulationRunRequest) -> SimulationRuntimeConfig:
         {
             "duration_seconds": req.duration_seconds,
             "agent_timeout_seconds": req.agent_timeout_seconds,
+            "agent_startup_timeout_seconds": req.agent_startup_timeout_seconds,
             "idle_timeout_seconds": req.idle_timeout_seconds,
             "graceful_stop_timeout_seconds": req.graceful_stop_timeout_seconds,
             "network_mode": req.network_mode,

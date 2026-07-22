@@ -89,3 +89,16 @@ def test_container_runtime_enforces_simulation_resources_and_concurrency():
     assert 'kwargs["pids_limit"]' in RUNTIME_SOURCE
     assert "container.kill()" in RUNTIME_SOURCE
     assert "max_parallel_agents" in RUNTIME_SOURCE
+
+
+def test_agent_readiness_precedes_control_plane_configuration():
+    readiness = EXECUTION_SOURCE.index("runtime.wait_for_agents_ready(")
+    reset = EXECUTION_SOURCE.index('f"{assignment.url}/reset"')
+    configure = EXECUTION_SOURCE.index(
+        'f"{assignment.url}/communication/configure"'
+    )
+
+    assert readiness < reset < configure
+    assert "time.sleep(1)" not in EXECUTION_SOURCE
+    assert "agent_startup_timeout_seconds" in EXECUTION_SOURCE
+    assert "agent_startup_timeout_seconds" in API_SOURCE

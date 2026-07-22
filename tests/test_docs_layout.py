@@ -21,7 +21,7 @@ def test_adr_numbers_are_unique_contiguous_and_indexed():
     matches = [(path, pattern.match(path.name)) for path in files]
     assert all(match for _, match in matches)
     numbers = [int(match.group(1)) for _, match in matches]
-    assert numbers == list(range(1, 35))
+    assert numbers == list(range(1, 36))
     assert len(numbers) == len(set(numbers))
 
     index = (ADR_DIR / "README.md").read_text(encoding="utf-8")

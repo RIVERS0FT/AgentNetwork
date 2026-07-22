@@ -68,6 +68,7 @@ def test_configure_resolves_per_agent_resources_and_start_completes():
     config = SimulationRuntimeConfig.from_dict(
         {
             "duration_seconds": 10,
+            "agent_startup_timeout_seconds": 75,
             "resource_allocation": {
                 "default_agent": {"cpu_cores": 0.5, "memory_mb": 256},
                 "agent_overrides": {
@@ -82,6 +83,7 @@ def test_configure_resolves_per_agent_resources_and_start_completes():
 
     assert run.state == SimulationState.CONFIGURED
     assert run.seed == 7
+    assert run.runtime_config.agent_startup_timeout_seconds == 75
     assert run.scene_definition.scene_key == "demo"
     assert run.resource_plan["agents"]["agent_a"]["cpu_cores"] == 0.5
     assert run.resource_plan["agents"]["agent_b"]["memory_mb"] == 512
@@ -92,6 +94,11 @@ def test_configure_resolves_per_agent_resources_and_start_completes():
     assert run.state == SimulationState.COMPLETED
     assert run.stop_reason == "completed"
     assert run.control.terminal_event.is_set()
+
+
+def test_runtime_config_rejects_invalid_agent_startup_timeout():
+    with pytest.raises(ValueError):
+        SimulationRuntimeConfig(agent_startup_timeout_seconds=0)
 
 
 def test_configure_rejects_resource_override_for_unknown_agent():

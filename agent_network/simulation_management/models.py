@@ -95,6 +95,7 @@ class SimulationResourceAllocation:
 class SimulationRuntimeConfig:
     duration_seconds: int = 3600
     agent_timeout_seconds: int = 300
+    agent_startup_timeout_seconds: int = 60
     idle_timeout_seconds: int = 5
     graceful_stop_timeout_seconds: int = 30
     network_mode: str = "a2a"
@@ -107,6 +108,10 @@ class SimulationRuntimeConfig:
             raise ValueError("duration_seconds must be between 1 and 604800")
         if not 1 <= int(self.agent_timeout_seconds) <= 86400:
             raise ValueError("agent_timeout_seconds must be between 1 and 86400")
+        if not 1 <= int(self.agent_startup_timeout_seconds) <= 3600:
+            raise ValueError(
+                "agent_startup_timeout_seconds must be between 1 and 3600"
+            )
         if not 0 <= int(self.idle_timeout_seconds) <= 3600:
             raise ValueError("idle_timeout_seconds must be between 0 and 3600")
         if not 0 <= int(self.graceful_stop_timeout_seconds) <= 3600:
@@ -124,6 +129,9 @@ class SimulationRuntimeConfig:
         return cls(
             duration_seconds=int(value.get("duration_seconds", 3600)),
             agent_timeout_seconds=int(value.get("agent_timeout_seconds", 300)),
+            agent_startup_timeout_seconds=int(
+                value.get("agent_startup_timeout_seconds", 60)
+            ),
             idle_timeout_seconds=int(value.get("idle_timeout_seconds", 5)),
             graceful_stop_timeout_seconds=int(
                 value.get("graceful_stop_timeout_seconds", 30)

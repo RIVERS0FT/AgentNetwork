@@ -1,6 +1,5 @@
 import json
 import os
-import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -384,6 +383,19 @@ def run_simulation(
         for assignment, tasks in created_cas
         if assignment.status != "error"
     ]
+    readiness_errors = runtime.wait_for_agents_ready(
+        [assignment for assignment, _ in created_cas],
+        timeout_seconds=getattr(
+            runtime_config, "agent_startup_timeout_seconds", 60
+        ),
+        requests_module=requests_module,
+    )
+    assign_errors.extend(readiness_errors)
+    created_cas = [
+        (assignment, tasks)
+        for assignment, tasks in created_cas
+        if assignment.status != "error"
+    ]
     for assignment, _ in created_cas:
         try:
             requests_module.post(
@@ -392,7 +404,6 @@ def run_simulation(
             )
         except Exception:
             pass
-    time.sleep(1)
 
     agent_directory = {
         assignment.agent_id.lower(): assignment.url
@@ -474,6 +485,9 @@ def run_simulation(
             ),
             "agent_timeout_seconds": getattr(
                 runtime_config, "agent_timeout_seconds", 300
+            ),
+            "agent_startup_timeout_seconds": getattr(
+                runtime_config, "agent_startup_timeout_seconds", 60
             ),
             "idle_timeout_seconds": getattr(
                 runtime_config, "idle_timeout_seconds", 5
