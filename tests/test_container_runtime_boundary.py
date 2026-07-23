@@ -44,16 +44,77 @@ def test_dynamic_containers_receive_native_audit_security_environment():
         assert f'"{name}"' in source
 
 
-def test_container_runtime_converts_resource_limits_to_docker_options(monkeypatch):
+def test_container_runtime_converts_resource_limits_to_create_options(monkeypatch):
     runtime = _runtime(monkeypatch)
 
-    assert runtime._resource_kwargs(
+    assert runtime._create_resource_kwargs(
         {"cpu_cores": 1.5, "memory_mb": 768, "pids_limit": 96}
     ) == {
         "nano_cpus": 1_500_000_000,
         "mem_limit": "768m",
         "pids_limit": 96,
     }
+
+
+def test_container_runtime_converts_resource_limits_to_update_payload(monkeypatch):
+    runtime = _runtime(monkeypatch)
+
+    assert runtime._update_resource_payload(
+        {"cpu_cores": 1.5, "memory_mb": 768, "pids_limit": 96}
+    ) == {
+        "NanoCpus": 1_500_000_000,
+        "Memory": 768 * 1024 * 1024,
+        "PidsLimit": 96,
+    }
+
+
+def test_container_runtime_applies_limits_through_engine_update_api(monkeypatch):
+    runtime = _runtime(monkeypatch)
+    calls = {}
+
+    class FakeContainers:
+        @staticmethod
+        def get(name):
+            calls["container_name"] = name
+            return type("FakeContainer", (), {"id": "container-123"})()
+
+    class FakeApi:
+        @staticmethod
+        def _url(path, container_id):
+            calls["url_args"] = (path, container_id)
+            return f"/containers/{container_id}/update"
+
+        @staticmethod
+        def _post_json(url, data):
+            calls["post"] = (url, data)
+            return object()
+
+        @staticmethod
+        def _raise_for_status(response):
+            calls["response"] = response
+
+    runtime._docker_client = type(
+        "FakeDockerClient",
+        (),
+        {"containers": FakeContainers(), "api": FakeApi()},
+    )()
+
+    runtime.apply_resource_limits(
+        "ag-o10",
+        {"cpu_cores": 1.0, "memory_mb": 1024, "pids_limit": 128},
+    )
+
+    assert calls["container_name"] == "ag-o10"
+    assert calls["url_args"] == ("/containers/{0}/update", "container-123")
+    assert calls["post"] == (
+        "/containers/container-123/update",
+        {
+            "NanoCpus": 1_000_000_000,
+            "Memory": 1024 * 1024 * 1024,
+            "PidsLimit": 128,
+        },
+    )
+    assert "response" in calls
 
 
 def test_container_runtime_rejects_unknown_backend(monkeypatch):

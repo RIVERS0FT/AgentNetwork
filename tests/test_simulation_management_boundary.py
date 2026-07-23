@@ -84,9 +84,12 @@ def test_managed_api_does_not_read_or_patch_legacy_private_state():
 
 
 def test_container_runtime_enforces_simulation_resources_and_concurrency():
+    assert "_create_resource_kwargs" in RUNTIME_SOURCE
+    assert "_update_resource_payload" in RUNTIME_SOURCE
     assert 'kwargs["nano_cpus"]' in RUNTIME_SOURCE
-    assert 'kwargs["mem_limit"]' in RUNTIME_SOURCE
-    assert 'kwargs["pids_limit"]' in RUNTIME_SOURCE
+    assert 'payload["NanoCpus"]' in RUNTIME_SOURCE
+    assert 'payload["Memory"]' in RUNTIME_SOURCE
+    assert 'payload["PidsLimit"]' in RUNTIME_SOURCE
     assert "container.kill()" in RUNTIME_SOURCE
     assert "max_parallel_agents" in RUNTIME_SOURCE
 

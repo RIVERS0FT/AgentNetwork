@@ -364,7 +364,9 @@ class ContainerRuntime:
         return volumes
 
     @staticmethod
-    def _resource_kwargs(resource_limits: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _create_resource_kwargs(
+        resource_limits: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
         limits = resource_limits or {}
         kwargs: Dict[str, Any] = {}
         if limits.get("cpu_cores") is not None:
@@ -375,14 +377,38 @@ class ContainerRuntime:
             kwargs["pids_limit"] = int(limits["pids_limit"])
         return kwargs
 
+    @staticmethod
+    def _update_resource_payload(
+        resource_limits: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        limits = resource_limits or {}
+        payload: Dict[str, Any] = {}
+        if limits.get("cpu_cores") is not None:
+            payload["NanoCpus"] = int(
+                float(limits["cpu_cores"]) * 1_000_000_000
+            )
+        if limits.get("memory_mb") is not None:
+            payload["Memory"] = int(limits["memory_mb"]) * 1024 * 1024
+        if limits.get("pids_limit") is not None:
+            payload["PidsLimit"] = int(limits["pids_limit"])
+        return payload
+
     def apply_resource_limits(
         self, container_name: str, resource_limits: Dict[str, Any] = None
     ) -> None:
-        kwargs = self._resource_kwargs(resource_limits)
-        if not kwargs or not self._docker_client:
+        payload = self._update_resource_payload(resource_limits)
+        if not payload or not self._docker_client:
             return
         try:
-            self._docker_client.containers.get(container_name).update(**kwargs)
+            container = self._docker_client.containers.get(container_name)
+            # docker-py 7.1 omits NanoCpus and PidsLimit from update_container,
+            # although the Engine endpoint supports both fields.
+            api = self._docker_client.api
+            response = api._post_json(
+                api._url("/containers/{0}/update", container.id),
+                data=payload,
+            )
+            api._raise_for_status(response)
         except Exception as exc:
             raise RuntimeError(
                 f"could not apply resources to '{container_name}': {exc}"
@@ -488,7 +514,7 @@ class ContainerRuntime:
                 network=self.NETWORK_NAME,
                 cap_add=["NET_RAW", "NET_ADMIN"],
                 volumes=self._dynamic_volumes(),
-                **self._resource_kwargs(resource_limits),
+                **self._create_resource_kwargs(resource_limits),
             )
             self._used_containers.add(auto_name)
             print(
