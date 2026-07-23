@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 
@@ -9,6 +10,7 @@ _SCRIPT = Path(__file__).parents[1] / "scripts" / "migrate_scenes_v2.py"
 _SPEC = importlib.util.spec_from_file_location("migrate_scenes_v2", _SCRIPT)
 assert _SPEC and _SPEC.loader
 migration = importlib.util.module_from_spec(_SPEC)
+sys.modules[_SPEC.name] = migration
 _SPEC.loader.exec_module(migration)
 
 
