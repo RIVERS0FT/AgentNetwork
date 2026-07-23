@@ -1,137 +1,129 @@
-# Scenes — 剧本编译器
+# AgentNetwork 剧本目录合同
 
-`scenario.py` 将自然语言编译为多 Agent 仿真剧本。一键生成 5 个标准文件 + 合并包。
+每个可运行剧本使用独立目录，标准结构如下：
 
-## 用法
-
-```bash
-pip install httpx
-export ANTHROPIC_API_KEY="sk-..."    # DeepSeek API Key
-
-python scenes/scenario.py -i "<想法>" -d ./scenes/<场景名>
+```text
+scenes/<scene_key>/
+├── Agents.json
+├── topology.json
+├── env.py
+├── skills/
+│   ├── <skill_ref>.md
+│   └── <skill_ref>/SKILL.md
+├── tools/
+│   └── *.py
+└── panel.html            # 可选
 ```
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `-i` `--idea` | 场景概念描述 | 新能源项目并网审批示例 |
-| `-d` `--dir` | 输出目录 | `./scenarios/energy_project_v1` |
+基础示例位于 [`templates/basic`](templates/basic)。
 
-```bash
-python scenes/scenario.py \
-  -i "电信运营商招投标市场竞争：5家机构与3家运营商进行商务谈判" \
-  -d ./scenes/telecom_bidding_test
+## 文件职责
+
+| 文件 | 职责 |
+|---|---|
+| `Agents.json` | Agent 身份、后端、能力绑定和每个 Agent 的执行任务 |
+| `topology.json` | Agent 间通信权限及网络 profile |
+| `env.py` | 剧本元数据、全局规则、初始状态、共享数据和剧本级任务 |
+| `skills/` | Agent 可读取的 Skill 说明与配套资源 |
+| `tools/` | Tool Python 脚本；每个脚本可注册一个或多个 Tool |
+| `panel.html` | 可选的剧本可视化页面 |
+
+## `Agents.json`
+
+```json
+{
+  "agents": {
+    "planner": {
+      "name": "Planner",
+      "role": "规划负责人",
+      "background": "负责制定执行方案",
+      "core_goal": "输出可执行计划",
+      "backend": "openclaw",
+      "skill_refs": ["planning"],
+      "tool_refs": ["write_plan"],
+      "tasks": [
+        {
+          "task_id": "draft-plan",
+          "goal": "形成初版计划",
+          "input": {},
+          "skill_refs": ["planning"],
+          "tool_refs": ["write_plan"],
+          "depends_on": []
+        }
+      ]
+    }
+  }
+}
 ```
 
-## 生成流程
+任务所属 Agent 由外层 Agent ID 自动确定，不写 `agent_id`。任务只能引用该 Agent 已绑定的 Skill 和 Tool。
 
-```
-用户 idea
-  → scenario.py 调用 DeepSeek API (SYSTEM_PROMPT 铁律 1-10 + JSON Schema 约束)
-    → LLM 返回 5 模块大 JSON
-      → 多文件分发落盘
-```
+## `env.py`
 
-生成后微调：编写 `panel.html`、调整角色结构、扩展技能实现、适配 `get_panel_state()` 前端接口。
-
----
-
-## 输出文件
-
-### 标准包 (`<name>/`)
-
-| 文件 | 用途 |
-|------|------|
-| `meta_and_roles.json` | 元数据、终止条件、角色定义 (含 identity/core_goal/paradigm) |
-| `instances_and_skills.json` | 角色→技能绑定表 |
-| `network_topology.json` | 通信信道层：天然双向的 TopologyLink 列表 |
-| `business_topology.json` | 业务合约层：种子连线 + event_stream (NEGOTIATING→SIGNED→BREACH_FLASHING→TERMINATED) |
-| `skills.py` | 技能可执行代码 (SkillRegistry + 所有技能函数) |
-
-### 合并包 (`<name>_merged/`)
-
-| 文件 | 用途 |
-|------|------|
-| `skills.py` | 同标准包 (复制) |
-| `<name>_merged.json` | 四合一：roles + peers(从 edges 推导) + skills(从 instances 提取) + business_topology |
-
----
-
-## 数据字典
-
-### meta_and_roles.json
-
-| 路径 | 类型 | 说明 |
-|------|------|------|
-| `scenario_metadata.title` | string | 场景名 |
-| `scenario_metadata.global_rules` | string | 物理/业务规则 |
-| `scenario_metadata.max_rounds` | int | 硬上限 (3–30) |
-| `scenario_metadata.stalemate_rounds` | int | 僵局阈值 (2–10) |
-| `roles.{role_id}` | object | `{name, model_backbone, identity, core_goal, primary_interaction_paradigm}` |
-| `roles.{role_id}.model_backbone` | enum | `openclaw` / `claude-code` |
-| `roles.{role_id}.primary_interaction_paradigm` | enum | `INTERNAL_COLLABORATION` / `EXTERNAL_NEGOTIATION` / `ZERO_SUM_GAME` |
-
-### instances_and_skills.json
-
-| 路径 | 类型 | 说明 |
-|------|------|------|
-| `container_instances.{role_id}.skills[]` | string[] | 技能函数名，与 skills.py 注册名一致 |
-
-### network_topology.json
-
-| 路径 | 类型 | 说明 |
-|------|------|------|
-| `topology[]` | object[] | Agent 间天然双向的网络链路 |
-| `topology[].endpoint_a` | string | 链路端点 A |
-| `topology[].endpoint_b` | string | 链路端点 B |
-| `topology[].channel_id` | string | 唯一通道 ID |
-| `topology[].delay_ms` | number | 双向链路时延 |
-| `topology[].jitter_ms` | number | 双向链路抖动 |
-| `topology[].loss_pct` | number | 双向链路丢包率 |
-| `topology[].rate_mbit` | number | 双向链路带宽限制 |
-
-### business_topology.json
-
-| 路径 | 类型 | 说明 |
-|------|------|------|
-| `links[]` | object | `{source, target, status, value, desc}` — 初始种子，全部 NEGOTIATING |
-| `links[].status` | enum | `NEGOTIATING` → `SIGNED` → `BREACH_FLASHING` → `TERMINATED` |
-| `event_stream[]` | object | `{event_type, round, action, source, target, visual_effect, reason}` — 运行时动态追加 |
-
-### skills.py
-
-独立可运行的 Python 模块。每个函数接受 `**kwargs`，返回 `{"status", "result", "data"}`。
+`env.py` 是声明式数据文件，不是运行时脚本。平台只允许模块文档字符串和一次 `ENV` 字典赋值。
 
 ```python
-SkillRegistry.execute("submit_code", developer="dev_fe", repo="main", round=1)
-# → {"status": "success", "result": "code_submitted", "data": {...}}
+ENV = {
+    "metadata": {
+        "title": "基础剧本",
+        "description": "展示新剧本合同",
+    },
+    "environment": {
+        "global_rules": ["所有输出必须可审计"],
+        "initial_state": {"status": "ready"},
+        "shared_data": {},
+    },
+    "scene_tasks": [
+        {
+            "task_id": "finish-scene",
+            "goal": "完成剧本级验收",
+            "input": {},
+            "depends_on": ["draft-plan"],
+        }
+    ],
+}
 ```
 
-| 方法 | 说明 |
-|------|------|
-| `SkillRegistry.register(name, fn)` | 注册技能函数 |
-| `SkillRegistry.execute(name, **kwargs)` | 调用技能 |
-| `SkillRegistry.list_skills()` | 列出所有已注册技能名 |
+`scene_tasks` 是全局目标、阶段或验收任务，不直接绑定 Agent、Skill 或 Tool。它们与 Agent 任务共享任务 ID 命名空间和依赖图。
 
-### 合并 JSON
+## `topology.json`
 
-| 字段 | 来源 |
-|------|------|
-| `scenario_metadata` | meta_and_roles |
-| `topology` | network_topology |
-| `roles.{id}` (含 `peers[]` `skills[]`) | roles + topology 双向推导 + instances 提取 |
-| `business_topology` | business_topology.json |
-
----
-
-## 手工迭代模式
-
-LLM 生成的是**原型**。后续迭代链：
-
-```
-生成原型 → 写 panel.html → 调角色/拓扑 → 扩展 skills.py → 适配 get_panel_state()
-  → 验证合理性 (否则循环) → 小规模定稿
-    → 派生 {name}_scale/ (scale_config.json + 统计 skills.py)
-      → 微调大规模 → 完成
+```json
+{
+  "topology": [
+    {
+      "endpoint_a": "planner",
+      "endpoint_b": "reviewer",
+      "channel_id": "planner-reviewer",
+      "delay_ms": 10,
+      "jitter_ms": 1,
+      "loss_pct": 0,
+      "rate_mbit": 100
+    }
+  ]
+}
 ```
 
-各场景的详细字段定义见各自目录下的 `DATA_DICTIONARY.md`。API 规范见 [PANEL_API.md](PANEL_API.md)。
+链路天然双向。`endpoint_a` 和 `endpoint_b` 必须引用 `Agents.json` 中存在的 Agent。
+
+## Skill 与 Tool
+
+Skill 入口支持：
+
+- `skills/<skill_ref>.md`
+- `skills/<skill_ref>/SKILL.md`
+
+Tool 必须放在 `tools/` 下的 `.py` 文件中，并通过注册调用声明 Tool ID：
+
+```python
+def write_plan(**kwargs):
+    return kwargs
+
+ToolRegistry.register("write_plan", write_plan)
+```
+
+同一剧本内 Tool ID 必须唯一，注册函数必须定义在同一文件。
+
+## 安全约束
+
+`env.py` 不允许 import、函数调用、函数或类定义。平台使用 AST 和 `ast.literal_eval` 读取 `ENV`，上传和预览剧本时不会执行其中代码。

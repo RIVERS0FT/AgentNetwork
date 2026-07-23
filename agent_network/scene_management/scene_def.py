@@ -27,9 +27,9 @@ class AgentDef:
     """场景配置中的单个 Agent 定义。"""
 
     agent_id: str
-    role: str  # 直接保存角色 identity 内容
+    role: str
     name: str
-    background: str = ""  # 角色经历、组织环境与业务背景
+    background: str = ""
     core_goal: str = ""
     backend: str = "openclaw"
     skill_refs: List[str] = field(default_factory=list)
@@ -47,6 +47,7 @@ class SceneDefinition:
     scene_key: str = ""
     title: str = ""
     description: str = ""
+    environment: Dict[str, Any] = field(default_factory=dict)
     agents: List[AgentDef] = field(default_factory=list)
     skills: List[SkillDefinition] = field(default_factory=list)
     tools: List[ToolDefinition] = field(default_factory=list)
