@@ -1,0 +1,120 @@
+name: Fix scene v2 reading
+
+on:
+  push:
+    branches:
+      - agent/fix-scene-v2-reading
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  fix-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+
+      - name: Apply v2 reading fix
+        run: |
+          mkdir -p scene-v2-reading-output/logs
+          set -o pipefail
+          PYTHONPATH=. python scripts/_apply_scene_v2_reading_fix.py 2>&1 | tee scene-v2-reading-output/logs/apply.log
+
+      - name: Validate runtime has no v1 reader
+        run: |
+          set -o pipefail
+          PYTHONPATH=. python - <<'PY' 2>&1 | tee scene-v2-reading-output/logs/runtime-contract.log
+          from pathlib import Path
+
+          runtime_files = [
+              Path('agent_network/scene_management/scene_storage.py'),
+              Path('agent_network/scene_management/scene_manager.py'),
+              Path('agent_network/scene_management/__init__.py'),
+              Path('agent_network/api/simulations.py'),
+          ]
+          forbidden = (
+              'meta_and_roles.json',
+              'instances_and_skills.json',
+              'network_topology.json',
+              'SceneValidator',
+          )
+          for path in runtime_files:
+              text = path.read_text(encoding='utf-8')
+              found = [item for item in forbidden if item in text]
+              if found:
+                  raise SystemExit(f'{path}: forbidden v1 reader references: {found}')
+          if Path('agent_network/scene_management/validator.py').exists():
+              raise SystemExit('legacy validator.py still exists')
+          print('runtime v1 reader references removed')
+          PY
+
+      - name: Run scene reading tests
+        run: |
+          set -o pipefail
+          PYTHONPATH=. pytest -q \
+            tests/test_scene_v2_reading.py \
+            tests/test_scene_env_contract.py \
+            tests/test_scene_manager.py \
+            tests/test_scene_building_boundary.py \
+            tests/test_file_management_integrations.py \
+            tests/test_skill_storage.py \
+            tests/test_scene_v2_migration.py \
+            2>&1 | tee scene-v2-reading-output/logs/tests.log
+
+      - name: Validate repository scenes
+        run: |
+          set -o pipefail
+          PYTHONPATH=. python - <<'PY' 2>&1 | tee scene-v2-reading-output/logs/repository-scenes.log
+          from agent_network.scene_management import get_scene_storage
+
+          storage = get_scene_storage()
+          scenes = storage.list_scenes()
+          if not scenes:
+              raise SystemExit('no v2 scenes discovered')
+          for item in scenes:
+              definition = storage.build_definition(item['scene_key'])
+              assert definition.validation.schema_version == 'agentnetwork-scene.v2'
+          print(f"validated {len(scenes)} repository v2 scenes")
+          PY
+
+      - name: Compile and trace design
+        run: |
+          set -o pipefail
+          {
+            PYTHONPATH=. python -m compileall -q agent_network tests scripts
+            python scripts/check_design_traceability.py --base origin/main
+          } 2>&1 | tee scene-v2-reading-output/logs/compile-and-trace.log
+
+      - name: Prepare patched source artifact
+        if: always()
+        run: |
+          mkdir -p \
+            scene-v2-reading-output/agent_network/scene_management \
+            scene-v2-reading-output/agent_network/api
+          cp agent_network/scene_management/scene_storage.py scene-v2-reading-output/agent_network/scene_management/
+          cp agent_network/scene_management/scene_manager.py scene-v2-reading-output/agent_network/scene_management/
+          cp agent_network/scene_management/__init__.py scene-v2-reading-output/agent_network/scene_management/
+          cp agent_network/api/simulations.py scene-v2-reading-output/agent_network/api/
+          printf 'delete agent_network/scene_management/validator.py\n' > scene-v2-reading-output/DELETE.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scene-v2-reading-output
+          path: scene-v2-reading-output
+          retention-days: 3
