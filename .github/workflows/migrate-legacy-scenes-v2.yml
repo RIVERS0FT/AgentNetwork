@@ -43,9 +43,12 @@ jobs:
             2>&1 | tee migration-artifact/migration.log
 
       - name: Validate all v2 scenes
+        id: validate
         if: steps.migrate.outcome == 'success'
+        continue-on-error: true
         run: |
-          python - <<'PY'
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee migration-artifact/validation.log
           from pathlib import Path
 
           from agent_network.scene_management.validator_v2 import SceneValidatorV2
@@ -53,7 +56,8 @@ jobs:
 
           validator = SceneValidatorV2()
           failures = []
-          for scene in v2_scene_dirs(Path('scenes')):
+          scenes = v2_scene_dirs(Path('scenes'))
+          for scene in scenes:
               validated = validator.validate(
                   scene.relative_to(Path('scenes')).as_posix(),
                   scene,
@@ -66,15 +70,24 @@ jobs:
                       (scene.as_posix(), [issue.to_dict() for issue in validated.validation.issues])
                   )
           if failures:
-              raise SystemExit(repr(failures))
-          print(f'validated {len(v2_scene_dirs(Path("scenes")))} v2 scenes')
+              for scene, issues in failures:
+                  print(scene)
+                  for issue in issues:
+                      print(issue)
+              raise SystemExit(1)
+          print(f'validated {len(scenes)} v2 scenes')
           PY
 
       - name: Run migration tests
+        id: tests
         if: steps.migrate.outcome == 'success'
+        continue-on-error: true
         run: |
-          pytest -q tests/test_scene_v2_migration.py tests/test_scene_env_contract.py
-          python -m compileall -q scripts agent_network scenes
+          set -o pipefail
+          {
+            pytest -q tests/test_scene_v2_migration.py tests/test_scene_env_contract.py
+            python -m compileall -q scripts agent_network scenes
+          } 2>&1 | tee migration-artifact/tests.log
 
       - name: Prepare migration artifact
         if: always()
@@ -93,6 +106,9 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-      - name: Stop after migration failure
-        if: steps.migrate.outcome == 'failure'
+      - name: Fail when migration validation failed
+        if: >-
+          steps.migrate.outcome == 'failure' ||
+          steps.validate.outcome == 'failure' ||
+          steps.tests.outcome == 'failure'
         run: exit 1
