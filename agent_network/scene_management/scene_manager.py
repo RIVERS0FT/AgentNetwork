@@ -81,7 +81,11 @@ class SceneManager:
         return f"scene-{operation}-{uuid.uuid4().hex}"
 
     @staticmethod
-    def _error_result(operation: str, scene_key: str, exc: Exception) -> SceneBatchItemResult:
+    def _error_result(
+        operation: str,
+        scene_key: str,
+        exc: Exception,
+    ) -> SceneBatchItemResult:
         if isinstance(exc, ResourceNotFoundError):
             error_code = "scene_not_found"
         elif isinstance(exc, ResourceNotReadyError):
@@ -108,12 +112,13 @@ class SceneManager:
         agents = []
         for agent in definition.agents:
             value = asdict(agent)
-            value['native_capabilities'] = agent.native_capabilities.to_dict()
+            value["native_capabilities"] = agent.native_capabilities.to_dict()
             agents.append(value)
         return {
             "scene_key": definition.scene_key,
             "title": definition.title,
             "description": definition.description,
+            "environment": definition.environment,
             "agents": agents,
             "skills": [asdict(skill) for skill in definition.skills],
             "tools": [asdict(tool) for tool in definition.tools],
@@ -131,8 +136,18 @@ class SceneManager:
     def build_definition(self, scene_key: str) -> SceneDefinition:
         return self.storage.build_definition(scene_key)
 
-    def upload_one(self, *, filename: str, content: bytes, scene_key: str = "") -> dict[str, Any]:
-        return self.storage.import_archive(filename=filename, content=content, scene_key=scene_key)
+    def upload_one(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        scene_key: str = "",
+    ) -> dict[str, Any]:
+        return self.storage.import_archive(
+            filename=filename,
+            content=content,
+            scene_key=scene_key,
+        )
 
     def create_archive(self, scene_key: str):
         return self.storage.create_archive(scene_key)
@@ -211,8 +226,14 @@ class SceneManager:
                     )
                 )
             except Exception as exc:
-                results.append(self._error_result("upload", scene_key or filename, exc))
-        return SceneBatchResult(operation="upload", batch_id=batch_id, items=results)
+                results.append(
+                    self._error_result("upload", scene_key or filename, exc)
+                )
+        return SceneBatchResult(
+            operation="upload",
+            batch_id=batch_id,
+            items=results,
+        )
 
     def download_many(self, scene_keys: Iterable[str]) -> SceneBatchResult:
         batch_id = self._batch_id("download")
@@ -280,7 +301,10 @@ class SceneManager:
 
     def prepare_batch_download(self, resource_id: str):
         resource = self.files.get_resource(resource_id)
-        if resource.owner_type != "scene_batch" or resource.resource_type != "archive":
+        if (
+            resource.owner_type != "scene_batch"
+            or resource.resource_type != "archive"
+        ):
             raise ValueError("resource is not a scene batch archive")
         return self.files.prepare_download(resource_id)
 
@@ -331,7 +355,11 @@ class SceneManager:
             except Exception as exc:
                 results.append(self._error_result("delete", scene_key, exc))
 
-        return SceneBatchResult(operation="delete", batch_id=batch_id, items=results)
+        return SceneBatchResult(
+            operation="delete",
+            batch_id=batch_id,
+            items=results,
+        )
 
     def parse_many(self, scene_keys: Iterable[str]) -> SceneBatchResult:
         batch_id = self._batch_id("parse")
@@ -370,7 +398,11 @@ class SceneManager:
             except Exception as exc:
                 results.append(self._error_result("parse", scene_key, exc))
 
-        return SceneBatchResult(operation="parse", batch_id=batch_id, items=results)
+        return SceneBatchResult(
+            operation="parse",
+            batch_id=batch_id,
+            items=results,
+        )
 
 
 _default_scene_manager: Optional[SceneManager] = None
