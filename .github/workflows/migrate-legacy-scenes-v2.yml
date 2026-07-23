@@ -31,11 +31,31 @@ jobs:
           pip install -r requirements.txt pytest
 
       - name: Migrate repository scenes
+        id: migrate
+        continue-on-error: true
         run: |
+          mkdir -p docs/records
+          set -o pipefail
           python scripts/migrate_scenes_v2.py \
             --root scenes \
             --delete-legacy \
-            --report docs/records/实施记录-旧剧本迁移到v2.md
+            --report docs/records/实施记录-旧剧本迁移到v2.md \
+            2>&1 | tee docs/records/旧剧本迁移失败诊断.log
+
+      - name: Commit migration diagnostics
+        if: steps.migrate.outcome == 'failure'
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/records/旧剧本迁移失败诊断.log
+          git commit -m '记录旧剧本迁移失败原因'
+          git push origin HEAD:${TARGET_BRANCH}
+
+      - name: Stop after migration failure
+        if: steps.migrate.outcome == 'failure'
+        run: exit 1
 
       - name: Validate all v2 scenes
         run: |
