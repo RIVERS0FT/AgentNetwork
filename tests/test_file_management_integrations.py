@@ -14,9 +14,10 @@ def test_log_manager_uses_file_manager(tmp_path, monkeypatch):
 
 def _make_scene(root: Path, name='demo'):
     folder = root / name; folder.mkdir(parents=True)
-    (folder / 'meta_and_roles.json').write_text(json.dumps({'scenario_metadata': {'title': 'Demo'}, 'roles': {'A': {'name': 'A', 'identity': 'planner', 'core_goal': 'Complete the plan', 'model_backbone': 'openclaw'}}}))
-    (folder / 'instances_and_skills.json').write_text(json.dumps({'container_instances': {'A': {'skill_refs': [], 'tool_refs': [], 'tasks': ['go']}}}))
-    (folder / 'network_topology.json').write_text(json.dumps({'topology': []})); return folder
+    (folder / 'Agents.json').write_text(json.dumps({'agents': {'A': {'name': 'A', 'role': 'planner', 'background': '', 'core_goal': 'Complete the plan', 'backend': 'openclaw', 'skill_refs': [], 'tool_refs': [], 'tasks': [{'task_id': 'go', 'goal': 'go', 'input': {}, 'depends_on': []}]}}}))
+    (folder / 'topology.json').write_text(json.dumps({'topology': []}))
+    (folder / 'env.py').write_text("ENV = {'metadata': {'title': 'Demo', 'description': 'Demo scene'}, 'environment': {'global_rules': [], 'initial_state': {}, 'shared_data': {}}, 'scene_tasks': []}\n")
+    return folder
 
 
 def test_scene_storage_managed_lifecycle(tmp_path, monkeypatch):
@@ -24,5 +25,5 @@ def test_scene_storage_managed_lifecycle(tmp_path, monkeypatch):
     from agent_network.file_management import reset_file_manager
     reset_file_manager(); from agent_network.scene_management import SceneStorage
     _make_scene(tmp_path / 'scenes'); storage = SceneStorage(); assert storage.list_scenes()[0]['title'] == 'Demo'; assert storage.build_definition('demo').agents[0].tasks == ['go']; archive = storage.create_archive('demo')
-    with zipfile.ZipFile(storage.files.resolve_resource_path(archive.resource_id)) as bundle: assert 'demo/meta_and_roles.json' in bundle.namelist()
+    with zipfile.ZipFile(storage.files.resolve_resource_path(archive.resource_id)) as bundle: assert 'demo/Agents.json' in bundle.namelist(); assert 'demo/env.py' in bundle.namelist()
     storage.set_visibility('demo', False); assert storage.list_scenes() == []; storage.set_visibility('demo', True); storage.delete('demo'); assert storage.list_scenes() == []
