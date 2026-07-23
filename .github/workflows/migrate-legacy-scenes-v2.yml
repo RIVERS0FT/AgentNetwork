@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   migrate:
@@ -34,30 +34,16 @@ jobs:
         id: migrate
         continue-on-error: true
         run: |
-          mkdir -p docs/records
+          mkdir -p migration-artifact docs/records
           set -o pipefail
           python scripts/migrate_scenes_v2.py \
             --root scenes \
             --delete-legacy \
             --report docs/records/实施记录-旧剧本迁移到v2.md \
-            2>&1 | tee docs/records/旧剧本迁移失败诊断.log
-
-      - name: Commit migration diagnostics
-        if: steps.migrate.outcome == 'failure'
-        env:
-          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/records/旧剧本迁移失败诊断.log
-          git commit -m '记录旧剧本迁移失败原因'
-          git push origin HEAD:${TARGET_BRANCH}
-
-      - name: Stop after migration failure
-        if: steps.migrate.outcome == 'failure'
-        run: exit 1
+            2>&1 | tee migration-artifact/migration.log
 
       - name: Validate all v2 scenes
+        if: steps.migrate.outcome == 'success'
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -85,20 +71,28 @@ jobs:
           PY
 
       - name: Run migration tests
+        if: steps.migrate.outcome == 'success'
         run: |
           pytest -q tests/test_scene_v2_migration.py tests/test_scene_env_contract.py
           python -m compileall -q scripts agent_network scenes
 
-      - name: Commit generated migration
-        env:
-          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+      - name: Prepare migration artifact
+        if: always()
         run: |
-          if git diff --quiet && git diff --cached --quiet; then
-            echo 'No generated changes'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add scenes docs/records
-          git commit -m '迁移存量剧本到v2目录合同'
-          git push origin HEAD:${TARGET_BRANCH}
+          git status --short > migration-artifact/status.txt
+          git diff --binary > migration-artifact/migration.patch
+          cp -f docs/records/实施记录-旧剧本迁移到v2.md migration-artifact/ 2>/dev/null || true
+          tar -czf migration-artifact/scenes.tar.gz scenes
+
+      - name: Upload migration artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrated-scenes
+          path: migration-artifact/
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Stop after migration failure
+        if: steps.migrate.outcome == 'failure'
+        run: exit 1
