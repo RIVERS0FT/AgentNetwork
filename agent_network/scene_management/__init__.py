@@ -18,7 +18,6 @@ from .models import (
     ValidationIssue,
     ValidationResult,
 )
-from .validator import SceneValidator
 
 __all__ = [
     "AgentDef",
@@ -30,7 +29,6 @@ __all__ = [
     "SceneSummary",
     "SceneStorage",
     "SceneValidationError",
-    "SceneValidator",
     "SkillDefinition",
     "TaskDefinition",
     "ToolDefinition",
