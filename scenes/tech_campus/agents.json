@@ -1,54 +1,74 @@
 {
-  "agents": [
-    {
-      "agent_id": "dev_fe",
-      "role": "消费者BG研发部前端开发，负责手机/平板UI开发",
+  "agents": {
+    "DEV_FE": {
       "name": "前端开发工程师",
+      "role": "消费者BG研发部前端开发，负责手机/平板UI开发",
       "background": "",
       "core_goal": "在10轮内完成3个前端模块的代码提交并通过CI流水线",
       "backend": "openclaw",
       "skill_refs": [
         "submit_code"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "submit_code_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "dev_fe-primary",
+          "name": "完成前端开发工程师核心目标",
+          "goal": "在10轮内完成3个前端模块的代码提交并通过CI流水线",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "dev_be",
-      "role": "云计算与AI部后端开发，负责大模型推理服务API",
+    "DEV_BE": {
       "name": "后端开发工程师",
+      "role": "云计算与AI部后端开发，负责大模型推理服务API",
       "background": "",
       "core_goal": "在10轮内完成2个后端微服务的代码提交并通过CI",
       "backend": "openclaw",
       "skill_refs": [
         "submit_code"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "submit_code_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "dev_be-primary",
+          "name": "完成后端开发工程师核心目标",
+          "goal": "在10轮内完成2个后端微服务的代码提交并通过CI",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "dev_fw",
-      "role": "无线通信研发部固件开发，负责5G基站设备固件",
+    "DEV_FW": {
       "name": "嵌入式固件工程师",
+      "role": "无线通信研发部固件开发，负责5G基站设备固件",
       "background": "",
       "core_goal": "在10轮内修复3个固件bug并提交代码",
       "backend": "claude-code",
       "skill_refs": [
         "submit_code"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "submit_code_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "dev_fw-primary",
+          "name": "完成嵌入式固件工程师核心目标",
+          "goal": "在10轮内修复3个固件bug并提交代码",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "dev_ai",
-      "role": "云计算与AI部AI训练，负责大模型训练与推理",
+    "DEV_AI": {
       "name": "AI模型训练工程师",
+      "role": "云计算与AI部AI训练，负责大模型训练与推理",
       "background": "",
       "core_goal": "在10轮内完成1次模型训练任务并提交模型文件",
       "backend": "claude-code",
@@ -56,16 +76,23 @@
         "submit_model",
         "request_external_api"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "submit_model_tool",
         "request_external_api_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "dev_ai-primary",
+          "name": "完成AI模型训练工程师核心目标",
+          "goal": "在10轮内完成1次模型训练任务并提交模型文件",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "dev_ic",
-      "role": "芯片设计部IC设计，负责芯片仿真",
+    "DEV_IC": {
       "name": "IC设计工程师",
+      "role": "芯片设计部IC设计，负责芯片仿真",
       "background": "",
       "core_goal": "在10轮内通过外部EDA云仿真资源完成1次芯片仿真",
       "backend": "claude-code",
@@ -73,16 +100,23 @@
         "submit_design",
         "request_external_api"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "submit_design_tool",
         "request_external_api_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "dev_ic-primary",
+          "name": "完成IC设计工程师核心目标",
+          "goal": "在10轮内通过外部EDA云仿真资源完成1次芯片仿真",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "architect",
-      "role": "基础平台部架构师，负责整体技术架构审查",
+    "ARCHITECT": {
       "name": "技术架构师",
+      "role": "基础平台部架构师，负责整体技术架构审查",
       "background": "",
       "core_goal": "在10轮内审查5份设计文档并通知修改",
       "backend": "openclaw",
@@ -90,46 +124,67 @@
         "review_document",
         "notify_team"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "review_document_tool",
         "notify_team_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "architect-primary",
+          "name": "完成技术架构师核心目标",
+          "goal": "在10轮内审查5份设计文档并通知修改",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "pm",
-      "role": "消费者BG产品经理，负责产品需求定义",
+    "PM": {
       "name": "产品经理",
+      "role": "消费者BG产品经理，负责产品需求定义",
       "background": "",
       "core_goal": "在10轮内输出3份产品需求文档",
       "backend": "openclaw",
       "skill_refs": [
         "write_document"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "write_document_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "pm-primary",
+          "name": "完成产品经理核心目标",
+          "goal": "在10轮内输出3份产品需求文档",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "doc_writer",
-      "role": "基础平台部文档，负责技术文档编写",
+    "DOC_WRITER": {
       "name": "技术文档工程师",
+      "role": "基础平台部文档，负责技术文档编写",
       "background": "",
       "core_goal": "在10轮内完成4份文档的协作编辑",
       "backend": "openclaw",
       "skill_refs": [
         "write_document"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "write_document_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "doc_writer-primary",
+          "name": "完成技术文档工程师核心目标",
+          "goal": "在10轮内完成4份文档的协作编辑",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "qa",
-      "role": "智能制造部QA，负责产线软件测试",
+    "QA": {
       "name": "QA测试工程师",
+      "role": "智能制造部QA，负责产线软件测试",
       "background": "",
       "core_goal": "在10轮内执行3次自动化测试并报告结果",
       "backend": "openclaw",
@@ -137,16 +192,23 @@
         "run_test",
         "notify_team"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "run_test_tool",
         "notify_team_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "qa-primary",
+          "name": "完成QA测试工程师核心目标",
+          "goal": "在10轮内执行3次自动化测试并报告结果",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "repo_admin",
-      "role": "基础平台部仓库管理，维护Git/Registry",
+    "REPO_ADMIN": {
       "name": "内部代码仓库管理员",
+      "role": "基础平台部仓库管理，维护Git/Registry",
       "background": "",
       "core_goal": "在10轮内处理5次代码推送和2次镜像推送",
       "backend": "openclaw",
@@ -156,18 +218,25 @@
         "trigger_ci_cd",
         "notify_team"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "review_code_tool",
         "handle_push_tool",
         "trigger_ci_cd_tool",
         "notify_team_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "repo_admin-primary",
+          "name": "完成内部代码仓库管理员核心目标",
+          "goal": "在10轮内处理5次代码推送和2次镜像推送",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     },
-    {
-      "agent_id": "dev_ops",
-      "role": "基础平台部运维，负责CI/CD流水线和监控",
+    "DEV_OPS": {
       "name": "DevOps运维工程师",
+      "role": "基础平台部运维，负责CI/CD流水线和监控",
       "background": "",
       "core_goal": "在10轮内搭建并维护3条CI/CD流水线，故障恢复时间<5min",
       "backend": "openclaw",
@@ -175,11 +244,19 @@
         "trigger_ci_cd",
         "handle_push"
       ],
-      "allowed_tools": [
+      "tool_refs": [
         "trigger_ci_cd_tool",
         "handle_push_tool"
       ],
-      "tasks": []
+      "tasks": [
+        {
+          "task_id": "dev_ops-primary",
+          "name": "完成DevOps运维工程师核心目标",
+          "goal": "在10轮内搭建并维护3条CI/CD流水线，故障恢复时间<5min",
+          "input": {},
+          "depends_on": []
+        }
+      ]
     }
-  ]
+  }
 }
