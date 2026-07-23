@@ -3,13 +3,10 @@ name: Migrate legacy scenes to v2
 on:
   push:
     branches:
-      - agent/migrate-legacy-scenes-v2
-  pull_request:
-    branches:
-      - main
+      - agent/migrate-legacy-scenes-v2-run
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   migrate:
@@ -19,7 +16,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:
@@ -31,37 +27,27 @@ jobs:
           pip install -r requirements.txt pytest
 
       - name: Migrate repository scenes
-        id: migrate
-        continue-on-error: true
         run: |
-          mkdir -p migration-artifact docs/records
-          set -o pipefail
           PYTHONPATH=. python scripts/migrate_scenes_v2.py \
             --root scenes \
             --delete-legacy \
-            --report docs/records/实施记录-旧剧本迁移到v2.md \
-            2>&1 | tee migration-artifact/migration.log
+            --report docs/records/实施记录-旧剧本迁移到v2.md
 
       - name: Validate all v2 scenes
-        id: validate
-        if: steps.migrate.outcome == 'success'
-        continue-on-error: true
         run: |
-          set -o pipefail
-          PYTHONPATH=. python - <<'PY' 2>&1 | tee migration-artifact/validation.log
+          PYTHONPATH=. python - <<'PY'
           from pathlib import Path
 
           from agent_network.scene_management.validator_v2 import SceneValidatorV2
           from scripts.migrate_scenes_v2 import parse_env, read_json, v2_scene_dirs
 
           validator = SceneValidatorV2()
-          failures = []
           scenes = v2_scene_dirs(Path('scenes'))
+          failures = []
           for scene in scenes:
-              scene_root = scene.resolve()
               validated = validator.validate(
                   scene.relative_to(Path('scenes')).as_posix(),
-                  scene_root,
+                  scene.resolve(),
                   read_json(scene / 'Agents.json'),
                   parse_env(scene / 'env.py'),
                   read_json(scene / 'topology.json'),
@@ -71,45 +57,21 @@ jobs:
                       (scene.as_posix(), [issue.to_dict() for issue in validated.validation.issues])
                   )
           if failures:
-              for scene, issues in failures:
-                  print(scene)
-                  for issue in issues:
-                      print(issue)
-              raise SystemExit(1)
+              raise SystemExit(repr(failures))
           print(f'validated {len(scenes)} v2 scenes')
           PY
 
       - name: Run migration tests
-        id: tests
-        if: steps.migrate.outcome == 'success'
-        continue-on-error: true
         run: |
-          set -o pipefail
-          {
-            PYTHONPATH=. pytest -q tests/test_scene_v2_migration.py tests/test_scene_env_contract.py
-            PYTHONPATH=. python -m compileall -q scripts agent_network scenes
-          } 2>&1 | tee migration-artifact/tests.log
+          PYTHONPATH=. pytest -q \
+            tests/test_scene_v2_migration.py \
+            tests/test_scene_env_contract.py
+          PYTHONPATH=. python -m compileall -q scripts agent_network scenes
 
-      - name: Prepare migration artifact
-        if: always()
+      - name: Commit migrated scenes
         run: |
-          git status --short > migration-artifact/status.txt
-          git diff --binary > migration-artifact/migration.patch
-          cp -f docs/records/实施记录-旧剧本迁移到v2.md migration-artifact/ 2>/dev/null || true
-          tar -czf migration-artifact/scenes.tar.gz scenes
-
-      - name: Upload migration artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: migrated-scenes
-          path: migration-artifact/
-          if-no-files-found: error
-          retention-days: 3
-
-      - name: Fail when migration validation failed
-        if: >-
-          steps.migrate.outcome == 'failure' ||
-          steps.validate.outcome == 'failure' ||
-          steps.tests.outcome == 'failure'
-        run: exit 1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scenes docs/records
+          git commit -m '迁移存量剧本到v2目录合同'
+          git push origin HEAD:${GITHUB_REF_NAME}
