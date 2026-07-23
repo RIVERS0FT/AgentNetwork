@@ -235,6 +235,20 @@ class SimulationRun:
             now + timedelta(seconds=self.runtime_config.duration_seconds)
         ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
+    def elapsed_seconds(self) -> float:
+        if not self.started_at:
+            return 0.0
+        try:
+            started = datetime.fromisoformat(
+                self.started_at.replace("Z", "+00:00")
+            )
+            finished = datetime.fromisoformat(
+                (self.stopped_at or _now_iso()).replace("Z", "+00:00")
+            )
+        except ValueError:
+            return 0.0
+        return round(max(0.0, (finished - started).total_seconds()), 3)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "simulation_id": self.simulation_id,
@@ -251,6 +265,7 @@ class SimulationRun:
             "stop_reason": self.stop_reason,
             "error": self.error,
             "action_status": self.action_status,
+            "elapsed_seconds": self.elapsed_seconds(),
             "setup": self.setup,
             "result": self.result,
             "resource_plan": self.resource_plan,

@@ -1736,7 +1736,13 @@ async function runSelectedScene() {
     .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t.slice(0, 200)); }))
     .then(d => {
       if (d.error) { logEntry('scene', '容器: ' + d.error); return; }
-      logEntry('scene', '仿真完成: ' + (d.duration_seconds||0) + 's | ' + (d.agent_stats?.total_agents||0) + ' Agent');
+      const elapsedSeconds = Number(d.elapsed_seconds);
+      const elapsedText = Number.isFinite(elapsedSeconds)
+        ? elapsedSeconds.toFixed(1) + 's'
+        : '耗时未知';
+      const stopReason = d.stop_reason ? ' | ' + d.stop_reason : '';
+      logEntry('scene', '仿真完成: ' + elapsedText + ' | ' +
+        (d.agent_stats?.total_agents||0) + ' Agent' + stopReason);
       if (d.topology) { _topology = d.topology; }
       if (ws && ws.readyState === WebSocket.OPEN) ws.send('all');
     })

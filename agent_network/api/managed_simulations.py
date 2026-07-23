@@ -330,7 +330,12 @@ async def launch_simulation():
         )
     except SimulationManagerError as exc:
         raise _simulation_error(exc) from exc
-    return {**run.result, "simulation": run.to_dict()}
+    simulation = run.to_dict()
+    return {
+        **run.result,
+        "elapsed_seconds": simulation["elapsed_seconds"],
+        "simulation": simulation,
+    }
 
 
 @router.post("/simulations/{simulation_id}/start")

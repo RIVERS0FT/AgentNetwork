@@ -6,6 +6,7 @@ import pytest
 
 from agent_network.simulation_management import (
     SimulationManager,
+    SimulationRun,
     SimulationRuntimeConfig,
     SimulationState,
 )
@@ -224,3 +225,18 @@ def test_each_run_owns_non_serialized_execution_context():
     ]
     assert "scene_definition" not in first.to_dict()
     assert "execution_config" not in first.to_dict()
+
+
+def test_run_serializes_actual_elapsed_seconds():
+    run = SimulationRun(
+        scene="demo",
+        runtime_config=SimulationRuntimeConfig(),
+        seed=7,
+    )
+    run.started_at = "2026-07-23T00:52:45.356Z"
+    run.stopped_at = "2026-07-23T00:52:50.924Z"
+
+    serialized = run.to_dict()
+
+    assert serialized["elapsed_seconds"] == 5.568
+    assert serialized["runtime_config"]["duration_seconds"] == 3600

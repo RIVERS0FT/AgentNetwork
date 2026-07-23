@@ -102,3 +102,4 @@ def test_agent_readiness_precedes_control_plane_configuration():
     assert "time.sleep(1)" not in EXECUTION_SOURCE
     assert "agent_startup_timeout_seconds" in EXECUTION_SOURCE
     assert "agent_startup_timeout_seconds" in API_SOURCE
+    assert '"elapsed_seconds": simulation["elapsed_seconds"]' in API_SOURCE
