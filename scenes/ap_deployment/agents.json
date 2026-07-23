@@ -6,7 +6,7 @@
       "name": "AP规划师",
       "background": "",
       "core_goal": "在最少轮次内输出覆盖≥95%的AP部署方案，同时确保自身KPI通过率",
-      "backend": "openclaw",
+      "backend": "claude-code",
       "skill_refs": [
         "plan_next_ap",
         "confirm_ap",
@@ -91,7 +91,7 @@
       "name": "现场勘测员",
       "background": "",
       "core_goal": "最小化外勤出勤次数，同时维持勘测报告的表面完备性",
-      "backend": "openclaw",
+      "backend": "claude-code",
       "skill_refs": [
         "check_feasibility",
         "report_obstacles",
@@ -112,7 +112,7 @@
       "name": "网络架构师",
       "background": "",
       "core_goal": "维持技术权威形象，避免被拖入具体故障的归因链条",
-      "backend": "openclaw",
+      "backend": "claude-code",
       "skill_refs": [
         "validate_topology",
         "escalate_complaint",
@@ -154,7 +154,7 @@
       "name": "覆盖验证员",
       "background": "",
       "core_goal": "快速出具验证结论，避免被认定为项目阻塞点或质量问题归责方",
-      "backend": "openclaw",
+      "backend": "claude-code",
       "skill_refs": [
         "verify_coverage",
         "shift_responsibility",
@@ -175,7 +175,7 @@
       "name": "部署管理员",
       "background": "",
       "core_goal": "在交付截止日期前完成所有AP上架，部署步骤合规性可适当折中",
-      "backend": "openclaw",
+      "backend": "claude-code",
       "skill_refs": [
         "plan_deployment",
         "schedule_tasks",
@@ -221,7 +221,7 @@
       "name": "文档记录员",
       "background": "",
       "core_goal": "构建完整的个人免责证据链，选择性归档以维持信息中介的不可替代性",
-      "backend": "openclaw",
+      "backend": "claude-code",
       "skill_refs": [
         "record_decision",
         "archive_solution",

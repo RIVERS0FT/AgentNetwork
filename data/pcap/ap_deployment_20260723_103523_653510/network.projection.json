@@ -1,0 +1,12 @@
+{
+  "capture_id": "ap_deployment_20260723_103523_653510",
+  "errors": [],
+  "packets_already_present": 0,
+  "packets_written": 0,
+  "schema_version": "capture-projection.v1",
+  "session_id": "ap_deployment_20260723_103523_653510",
+  "skipped": false,
+  "source_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "sources": [],
+  "status": "complete"
+}
