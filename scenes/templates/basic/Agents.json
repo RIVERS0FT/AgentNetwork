@@ -1,0 +1,23 @@
+{
+  "agents": {
+    "planner": {
+      "name": "Planner",
+      "role": "规划负责人",
+      "background": "负责分析需求并制定执行方案",
+      "core_goal": "输出一份可执行且可审计的计划",
+      "backend": "openclaw",
+      "skill_refs": ["planning"],
+      "tool_refs": ["write_plan"],
+      "tasks": [
+        {
+          "task_id": "draft-plan",
+          "goal": "形成初版执行计划",
+          "input": {},
+          "skill_refs": ["planning"],
+          "tool_refs": ["write_plan"],
+          "depends_on": []
+        }
+      ]
+    }
+  }
+}

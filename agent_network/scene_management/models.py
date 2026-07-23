@@ -29,6 +29,7 @@ class TaskDefinition:
     skill_refs: list[str] = field(default_factory=list)
     tool_refs: list[str] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
+    scope: str = "agent"
 
 
 @dataclass(frozen=True)
